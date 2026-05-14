@@ -8,16 +8,6 @@ x-common-env: &common-env
   env_file:
     - .env
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Shared logging — json-file, 50 MB cap, 2 rotated files per service.
-# Applied to every application service; the log-cleaner truncates hourly.
-# ─────────────────────────────────────────────────────────────────────────────
-x-logging: &default-logging
-  driver: "json-file"
-  options:
-    max-size: "50m"
-    max-file: "2"
-
 services:
 
   # ───────────────────────────────────────────────────────────────────────────
@@ -39,7 +29,6 @@ services:
       TIGERDATA_URL: ${TIGERDATA_URL:-}
     volumes:
       - ./tick_data_collector:/app
-    logging: *default-logging
 
   # ───────────────────────────────────────────────────────────────────────────
   # Position manager — evaluates open positions every second, closes on TP/SL
@@ -53,7 +42,6 @@ services:
       TIGERDATA_URL: ${TIGERDATA_URL:-}
     volumes:
       - ./position_manager:/app
-    logging: *default-logging
 
   # Live: VAR2 only (POOL_TP_ONLY filter — backtest 79.5% WR / PF 5.25).
   # VAR1 (liquidity_scalper) and VAR3 (micro_scalper) dropped — backtests <70% WR.
@@ -68,7 +56,6 @@ services:
       TIGERDATA_URL: ${TIGERDATA_URL:-}
     volumes:
       - ./strategies:/app
-    logging: *default-logging
 
   # OOS-validated ICT/SMC suite (param-sweep + walk-forward + MC + hold-out).
   # Each variation runs a separate xauusd_runner process and dispatches to its
@@ -86,7 +73,6 @@ services:
       XAUUSD_POLL_SEC: "60"
     volumes:
       - ./strategies:/app
-    logging: *default-logging
 
   ict_s4_breaker:
     build: ./strategies
@@ -101,7 +87,6 @@ services:
       XAUUSD_POLL_SEC: "60"
     volumes:
       - ./strategies:/app
-    logging: *default-logging
 
   ict_s6_daily_crt:
     build: ./strategies
@@ -116,23 +101,4 @@ services:
       XAUUSD_POLL_SEC: "300"
     volumes:
       - ./strategies:/app
-    logging: *default-logging
 
-  # ───────────────────────────────────────────────────────────────────────────
-  # Log cleaner — truncates all container json-log files every hour.
-  # Mounts the Docker runtime log directory (works on Linux + Docker Desktop
-  # WSL2 because all containers share the same VM filesystem).
-  # ───────────────────────────────────────────────────────────────────────────
-  log-cleaner:
-    image: alpine:3
-    restart: always
-    volumes:
-      - /var/lib/docker/containers:/var/lib/docker/containers
-    command: >
-      sh -c "
-        while true; do
-          sleep 3600
-          find /var/lib/docker/containers -name '*-json.log' -exec truncate -s0 {} + 2>/dev/null || true
-          echo \"[log-cleaner] All container logs cleared at $$(date)\"
-        done
-      "
