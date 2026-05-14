@@ -11,13 +11,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-NAME     = os.getenv("NAME",     "Kronos")
-USER     = os.getenv("DB_USER",  "postgres")
-PASSWORD = os.getenv("PASSWORD", "kronos123")
-HOST     = os.getenv("HOST",     "127.0.0.1")
-PORT     = os.getenv("PORT",     "5432")
+NAME     = os.getenv("DB_NAME",     os.getenv("NAME",     "Kronos"))
+USER     = os.getenv("DB_USER",     "postgres")
+PASSWORD = os.getenv("DB_PASSWORD", os.getenv("PASSWORD", "kronos123"))
+HOST     = os.getenv("DB_HOST",     os.getenv("HOST",     "127.0.0.1"))
+PORT     = os.getenv("DB_PORT",     os.getenv("PORT",     "5432"))
 
-database_connection_string = f"postgresql://{USER}:{PASSWORD}@{HOST}:{PORT}/{NAME}"
+SSLMODE  = os.getenv("DB_SSLMODE", "require" if HOST.endswith("tsdb.cloud.timescale.com") else "prefer")
+database_connection_string = f"postgresql://{USER}:{PASSWORD}@{HOST}:{PORT}/{NAME}?sslmode={SSLMODE}"
 
 engine  = create_engine(database_connection_string, pool_size=60, max_overflow=10)
 Session = sessionmaker(bind=engine)
