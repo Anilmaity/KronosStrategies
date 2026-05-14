@@ -1,0 +1,8 @@
+psycopg2-binary
+requests
+python-dotenv
+redis
+numpy~=2.2.5
+pandas~=2.2.3
+pycryptodome~=3.22.0
+PyJWT~=2.10.1

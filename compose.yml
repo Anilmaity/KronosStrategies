@@ -1,0 +1,138 @@
+name: kronos
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared env block — keeps repeated keys DRY.
+# Services override or add to these via env_file / environment:.
+# ─────────────────────────────────────────────────────────────────────────────
+x-common-env: &common-env
+  env_file:
+    - .env
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared logging — json-file, 50 MB cap, 2 rotated files per service.
+# Applied to every application service; the log-cleaner truncates hourly.
+# ─────────────────────────────────────────────────────────────────────────────
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "50m"
+    max-file: "2"
+
+services:
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Infrastructure
+  # Note: both the TimescaleDB tick store (TIGERDATA_URL) and the Django
+  # backend database (HOST/PORT/NAME/USER/PASSWORD) live on TigerData Cloud.
+  # The local `tsdb` and `db` containers were retired once data was migrated;
+  # the stack now points exclusively at TigerData.
+  # ───────────────────────────────────────────────────────────────────────────
+  # ───────────────────────────────────────────────────────────────────────────
+  # Tick Data Collector — polls OANDA S5 candles → writes to TimescaleDB
+  # ───────────────────────────────────────────────────────────────────────────
+  tick_data_collector:
+    build: ./tick_data_collector
+    restart: always
+    env_file: .env
+    environment:
+      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+    volumes:
+      - ./tick_data_collector:/app
+    logging: *default-logging
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Position manager — evaluates open positions every second, closes on TP/SL
+  # ───────────────────────────────────────────────────────────────────────────
+  position_manager:
+    build: ./position_manager
+    restart: always
+    env_file: .env
+    environment:
+      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+    volumes:
+      - ./position_manager:/app
+    logging: *default-logging
+
+  # Live: VAR2 only (POOL_TP_ONLY filter — backtest 79.5% WR / PF 5.25).
+  # VAR1 (liquidity_scalper) and VAR3 (micro_scalper) dropped — backtests <70% WR.
+  # Their runner scripts remain in strategies/backtest/ for backtests.
+  liquidity_sweep:
+    build: ./strategies
+    restart: always
+    command: python liquidity_sweep.py
+    env_file: .env
+    environment:
+      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+    volumes:
+      - ./strategies:/app
+    logging: *default-logging
+
+  # OOS-validated ICT/SMC suite (param-sweep + walk-forward + MC + hold-out).
+  # Each variation runs a separate xauusd_runner process and dispatches to its
+  # strategy module via the XAUUSD_STRATEGY env var.
+  ict_s2_fvg:
+    build: ./strategies
+    restart: always
+    command: python xauusd_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      XAUUSD_STRATEGY: S2
+      XAUUSD_SYMBOL:   XAU_USD
+      XAUUSD_POLL_SEC: "60"
+    volumes:
+      - ./strategies:/app
+    logging: *default-logging
+
+  ict_s4_breaker:
+    build: ./strategies
+    restart: always
+    command: python xauusd_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      XAUUSD_STRATEGY: S4
+      XAUUSD_SYMBOL:   XAU_USD
+      XAUUSD_POLL_SEC: "60"
+    volumes:
+      - ./strategies:/app
+    logging: *default-logging
+
+  ict_s6_daily_crt:
+    build: ./strategies
+    restart: always
+    command: python xauusd_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      XAUUSD_STRATEGY: S6
+      XAUUSD_SYMBOL:   XAU_USD
+      XAUUSD_POLL_SEC: "300"
+    volumes:
+      - ./strategies:/app
+    logging: *default-logging
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Log cleaner — truncates all container json-log files every hour.
+  # Mounts the Docker runtime log directory (works on Linux + Docker Desktop
+  # WSL2 because all containers share the same VM filesystem).
+  # ───────────────────────────────────────────────────────────────────────────
+  log-cleaner:
+    image: alpine:3
+    restart: always
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers
+    command: >
+      sh -c "
+        while true; do
+          sleep 3600
+          find /var/lib/docker/containers -name '*-json.log' -exec truncate -s0 {} + 2>/dev/null || true
+          echo \"[log-cleaner] All container logs cleared at $$(date)\"
+        done
+      "
