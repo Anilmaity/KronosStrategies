@@ -16,6 +16,7 @@ from shared.models import (
     Position, Order, Trigger,
     UserStrategy, Strategy, CurrencyPair,
 )
+from shared.metaapi_client import place_market_order
 from strategy.ict_engine import EntrySignal
 
 log = logging.getLogger(__name__)
@@ -137,6 +138,22 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
         return False
 
     qty = ctx["quantity"]
+
+    # Fire MetaAPI market order FIRST. If broker rejects, we don't pollute the
+    # DB with phantom positions. On success we record the broker positionId on
+    # the Order so position_monitor / reconciliation can correlate.
+    broker_position_id = place_market_order(
+        side=signal.side,
+        symbol=symbol,
+        volume=qty,
+        stop_loss=signal.stop_loss,
+        take_profit=signal.take_profit,
+        entry_price=signal.entry_price,
+    )
+    if not broker_position_id:
+        log.warning("[ENTRY] MetaAPI rejected order — skipping DB write")
+        return False
+
     sess = Session()
     try:
         # ── 1. Position ───────────────────────────────────────────────────────
@@ -153,7 +170,7 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
             profit_loss_percentage=Decimal("0"),
             realized_profit_loss=Decimal("0"),
             user_strategy_id=ctx["user_strategy_id"],
-            currency_pair_id=ctx["currency_pair_id"],
+            currencypair_id=ctx["currency_pair_id"],
         )
         sess.add(position)
         sess.flush()  # populate position.id before FK references
@@ -170,6 +187,7 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
             order_type="MARKET",
             status="EXECUTED",
             reason=signal.reason,
+            broker_order_id=str(broker_position_id),
             position_id=position.id,
             user_broker_id=ctx["user_broker_id"],
         )

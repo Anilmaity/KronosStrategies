@@ -36,6 +36,13 @@ _SYMBOL_MAP = {
 
 _TIMEOUT = 15  # seconds
 
+# Per-symbol specification cache: {broker_symbol: {"stops_level_price": float, "tick_size": float}}
+_SPEC_CACHE: dict[str, dict] = {}
+
+# Safety fallback when the broker doesn't expose a stops level: never let
+# SL or TP sit closer than this many price units from entry.
+_DEFAULT_MIN_STOP_DISTANCE = 3.0  # XAUUSD: 3 dollars ≈ 30 pips
+
 
 def _headers() -> dict:
     return {"auth-token": _TOKEN, "Content-Type": "application/json"}
@@ -64,21 +71,88 @@ def _trading_url() -> str:
     return _TRADING_URL
 
 
+def _get_symbol_spec(broker_symbol: str) -> dict:
+    """Fetch and cache the broker's specification for a symbol.
+
+    Returns dict with keys:
+      stops_level_price: float — minimum SL/TP distance from market in price units
+      tick_size:         float — broker tickSize (informational)
+    Falls back to {_DEFAULT_MIN_STOP_DISTANCE, 0.01} on any error.
+    """
+    if broker_symbol in _SPEC_CACHE:
+        return _SPEC_CACHE[broker_symbol]
+
+    spec = {"stops_level_price": _DEFAULT_MIN_STOP_DISTANCE, "tick_size": 0.01}
+    if _DRY_RUN or not _TOKEN or not _ACCOUNT:
+        _SPEC_CACHE[broker_symbol] = spec
+        return spec
+
+    try:
+        url = f"{_trading_url()}/users/current/accounts/{_ACCOUNT}/symbols/{broker_symbol}/specification"
+        resp = requests.get(url, headers=_headers(), timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        tick_size   = float(data.get("tickSize", 0.01))
+        stops_level = int(data.get("stopsLevel", 0))
+        stops_price = stops_level * tick_size if stops_level > 0 else _DEFAULT_MIN_STOP_DISTANCE
+        spec = {"stops_level_price": stops_price, "tick_size": tick_size}
+        log.info("[MetaAPI] %s spec: tickSize=%s stopsLevel=%d → min_distance=%.2f",
+                 broker_symbol, tick_size, stops_level, stops_price)
+    except Exception:
+        log.exception("[MetaAPI] _get_symbol_spec failed for %s — using fallback %.2f",
+                      broker_symbol, _DEFAULT_MIN_STOP_DISTANCE)
+
+    _SPEC_CACHE[broker_symbol] = spec
+    return spec
+
+
+def _apply_stops_floor(side: str, entry_price: float, stop_loss: float, take_profit: float,
+                      min_distance: float) -> tuple[float, float, bool]:
+    """Widen SL/TP outward so each sits at least `min_distance` from entry.
+    Returns (new_sl, new_tp, was_adjusted)."""
+    adjusted = False
+    if side == "BUY":
+        if (entry_price - stop_loss) < min_distance:
+            stop_loss = round(entry_price - min_distance, 2); adjusted = True
+        if (take_profit - entry_price) < min_distance:
+            take_profit = round(entry_price + min_distance, 2); adjusted = True
+    else:  # SELL
+        if (stop_loss - entry_price) < min_distance:
+            stop_loss = round(entry_price + min_distance, 2); adjusted = True
+        if (entry_price - take_profit) < min_distance:
+            take_profit = round(entry_price - min_distance, 2); adjusted = True
+    return stop_loss, take_profit, adjusted
+
+
 def place_market_order(
     side: str,
     symbol: str,
     volume: float,
     stop_loss: float,
     take_profit: float,
+    entry_price: float | None = None,
 ) -> str | None:
     """
     Place a MARKET order with SL and TP.
+
+    If `entry_price` is provided, SL/TP are widened to honour the broker's
+    stops level (queried lazily from MetaAPI) so the order won't be rejected
+    with TRADE_RETCODE_INVALID_STOPS.
 
     Returns the MetaAPI positionId (broker ticket) on success, None on failure.
     On DRY_RUN returns the sentinel string 'dry-run'.
     """
     broker_symbol = _SYMBOL_MAP.get(symbol, symbol)
     action = "ORDER_TYPE_BUY" if side == "BUY" else "ORDER_TYPE_SELL"
+
+    # Honour the broker's stops level — widen SL/TP if too close to entry.
+    if entry_price is not None:
+        min_d = _get_symbol_spec(broker_symbol)["stops_level_price"]
+        new_sl, new_tp, adjusted = _apply_stops_floor(side, entry_price, stop_loss, take_profit, min_d)
+        if adjusted:
+            log.info("[MetaAPI] stops widened to broker floor (%.2f): SL %.2f→%.2f TP %.2f→%.2f",
+                     min_d, stop_loss, new_sl, take_profit, new_tp)
+        stop_loss, take_profit = new_sl, new_tp
 
     payload = {
         "actionType": action,
