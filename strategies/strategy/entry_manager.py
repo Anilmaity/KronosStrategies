@@ -22,13 +22,34 @@ log = logging.getLogger(__name__)
 SYMBOL = "XAU_USD"
 
 
+# Variation tag → DB Strategy.name. Runners pass `variation="VAR2"` etc; we use
+# this to select the correct Strategy row (each variation has its own
+# entry_quantity and its own deployed UserStrategy).
+_VARIATION_STRATEGY_NAME = {
+    "VAR1":           "Liquidity Scalper VAR1",
+    "VAR2":           "Liquidity Sweep VAR2",
+    "VAR3":           "Micro Scalper VAR3",
+    "ICT_S2_FVG":     "ICT FVG Fill (M15)",
+    "ICT_S4_BREAKER": "ICT Breaker Block (M15)",
+    "ICT_S6_DAILY_CRT": "ICT Daily CRT (D1)",
+    # Research-strategy variations (backtest_strategies/sNN_*.py). Name = NAME
+    # constant in the source module; description tracks the file.
+    "OB_MIT":      "Research OB_MIT",
+    "BB":          "Research BB",
+    "FVG_MID":     "Research FVG_MID",
+    "M90_FADE":    "Research M90_FADE",
+    "M90_BIAS":    "Research M90_BIAS",
+    "OB_MIT_BIAS": "Research OB_MIT_BIAS",
+}
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Context lookup
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _get_context(symbol: str = SYMBOL) -> dict | None:
+def _get_context(symbol: str = SYMBOL, variation: str | None = None) -> dict | None:
     """
-    Return the active trading context for the given symbol.
+    Return the active trading context for the given symbol + variation.
     Finds: UserStrategy (deployed + active) → Strategy → CurrencyPair.
     Returns dict with user_strategy_id, user_broker_id, currency_pair_id, quantity.
     """
@@ -39,13 +60,17 @@ def _get_context(symbol: str = SYMBOL) -> dict | None:
             log.warning("[CTX] CurrencyPair '%s' not found in DB", symbol)
             return None
 
-        strategy = (
-            sess.query(Strategy)
-            .filter_by(currencypair_id=cp.id, is_active=True)
-            .first()
-        )
+        q = sess.query(Strategy).filter_by(currencypair_id=cp.id, is_active=True)
+        if variation:
+            name = _VARIATION_STRATEGY_NAME.get(variation)
+            if not name:
+                log.warning("[CTX] Unknown variation tag '%s'", variation)
+                return None
+            q = q.filter_by(name=name)
+        strategy = q.first()
         if not strategy:
-            log.warning("[CTX] No active Strategy for symbol '%s'", symbol)
+            log.warning("[CTX] No active Strategy for symbol='%s' variation='%s'",
+                        symbol, variation)
             return None
 
         us = (
@@ -89,7 +114,7 @@ def _has_open_position(user_strategy_id: uuid.UUID) -> bool:
 # Entry placement
 # ──────────────────────────────────────────────────────────────────────────────
 
-def place_entry(signal: EntrySignal, symbol: str = SYMBOL) -> bool:
+def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None = None) -> bool:
     """
     Persist an entry into the DB:
       1. Position record
@@ -97,9 +122,13 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL) -> bool:
       3. STOPLOSS Trigger
       4. TARGET Trigger
 
+    `variation` selects which Strategy row (and therefore which UserStrategy /
+    entry_quantity) the trade belongs to. Required when multiple strategies
+    share a symbol — otherwise the first active strategy for the symbol wins.
+
     Returns True on success, False if skipped or failed.
     """
-    ctx = _get_context(symbol)
+    ctx = _get_context(symbol, variation=variation)
     if not ctx:
         return False
 

@@ -14,7 +14,7 @@ from __future__ import annotations
 import pandas as pd
 
 from backtest_strategies.base import Signal, StrategyConfig, htf_bias
-from strategies import s03_ob_mitigation
+from backtest_strategies import s03_ob_mitigation
 
 NAME = "OB_MIT_BIAS"
 CONFIG = StrategyConfig(

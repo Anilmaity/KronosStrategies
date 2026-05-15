@@ -27,8 +27,6 @@ services:
     environment:
       TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
-    volumes:
-      - ./tick_data_collector:/app
 
   # ───────────────────────────────────────────────────────────────────────────
   # Position manager — evaluates open positions every second, closes on TP/SL
@@ -40,12 +38,9 @@ services:
     environment:
       TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
-    volumes:
-      - ./position_manager:/app
 
-  # Live: VAR2 only (POOL_TP_ONLY filter — backtest 79.5% WR / PF 5.25).
-  # VAR1 (liquidity_scalper) and VAR3 (micro_scalper) dropped — backtests <70% WR.
-  # Their runner scripts remain in strategies/backtest/ for backtests.
+  # Liquidity sweep family. VAR2 backtested best (79.5% WR / PF 5.25); VAR1 and
+  # VAR3 backtested <70% WR but are run live per operator decision.
   liquidity_sweep:
     build: ./strategies
     restart: always
@@ -54,8 +49,26 @@ services:
     environment:
       TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
-    volumes:
-      - ./strategies:/app
+
+  liquidity_scalper:
+    build: ./strategies
+    restart: always
+    command: python liquidity_scalper.py
+    env_file: .env
+    environment:
+      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      XAUUSD_SYMBOL: XAU_USD
+
+  micro_scalper:
+    build: ./strategies
+    restart: always
+    command: python micro_scalper.py
+    env_file: .env
+    environment:
+      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      XAUUSD_SYMBOL: XAU_USD
 
   # OOS-validated ICT/SMC suite (param-sweep + walk-forward + MC + hold-out).
   # Each variation runs a separate xauusd_runner process and dispatches to its
@@ -71,8 +84,6 @@ services:
       XAUUSD_STRATEGY: S2
       XAUUSD_SYMBOL:   XAU_USD
       XAUUSD_POLL_SEC: "60"
-    volumes:
-      - ./strategies:/app
 
   ict_s4_breaker:
     build: ./strategies
@@ -85,8 +96,6 @@ services:
       XAUUSD_STRATEGY: S4
       XAUUSD_SYMBOL:   XAU_USD
       XAUUSD_POLL_SEC: "60"
-    volumes:
-      - ./strategies:/app
 
   ict_s6_daily_crt:
     build: ./strategies
@@ -99,6 +108,71 @@ services:
       XAUUSD_STRATEGY: S6
       XAUUSD_SYMBOL:   XAU_USD
       XAUUSD_POLL_SEC: "300"
-    volumes:
-      - ./strategies:/app
 
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Research strategies (backtest_strategies/sNN_*.py). Generic
+  # research_runner.py dispatches to each via RESEARCH_STRATEGY env var.
+  # These are research-only — not OOS-validated. See backtest results in
+  # strategies/backtest/results/ before tuning entry quantities.
+  # ───────────────────────────────────────────────────────────────────────────
+
+  research_ob_mit:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: s03_ob_mitigation
+
+  research_bb:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: s04_breaker_block
+
+  research_fvg_mid:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: s06_fvg_midpoint
+
+  research_m90_fade:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: s10_90min_fade
+
+  research_m90_bias:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: s12_m90_fade_bias
+
+  research_ob_mit_bias:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: s14_ob_mit_bias

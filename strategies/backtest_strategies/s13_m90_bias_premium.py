@@ -20,7 +20,7 @@ from __future__ import annotations
 import pandas as pd
 
 from backtest_strategies.base import Signal, StrategyConfig, htf_bias
-from strategies import s10_90min_fade
+from backtest_strategies import s10_90min_fade
 
 NAME = "M90_LDN_BIAS"
 CONFIG = StrategyConfig(
