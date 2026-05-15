@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from shared.tsdb_reader import fetch_latest_ltp
 from shared.models import Session, Position, Trigger, Order, UserStrategy, CurrencyPair
+from shared.market_timing import is_market_closed_utc
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Config
@@ -189,13 +190,20 @@ def run():
 
     while True:
         try:
-            price = fetch_latest_ltp(SYMBOL)
-
-            if price is not None:
-                _update_currency_ltp(price)
-                _check_triggers(price)
+            if is_market_closed_utc():
+                log.debug("[MONITOR] Market closed — skipping tick")
             else:
-                log.debug("[MONITOR] No LTP available — skipping tick")
+                try:
+                    price = fetch_latest_ltp(SYMBOL)
+                except Exception:
+                    log.exception("[MONITOR] fetch_latest_ltp failed")
+                    price = None
+
+                if price is not None:
+                    _update_currency_ltp(price)
+                    _check_triggers(price)
+                else:
+                    log.debug("[MONITOR] No LTP available — skipping tick")
 
         except KeyboardInterrupt:
             log.info("=== Position Monitor stopped by user ===")
@@ -203,7 +211,11 @@ def run():
         except Exception:
             log.exception("[MONITOR FATAL] Unexpected error — continuing")
 
-        time.sleep(POLL_INTERVAL)
+        try:
+            time.sleep(POLL_INTERVAL)
+        except KeyboardInterrupt:
+            log.info("=== Position Monitor stopped by user ===")
+            break
 
 
 if __name__ == "__main__":

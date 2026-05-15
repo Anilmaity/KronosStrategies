@@ -83,46 +83,64 @@ def main():
         while True:
             loop_start = time.monotonic()
 
-            # 🔒 Market closed check
-            if not(is_market_closed_utc()):
-                log.info("Market Live -")
-
-                candle = fetcher.fetch_latest_candle()
-
-                if candle is None:
-                    log.warning("No complete candle available")
-
-                elif candle["time"] == last_candle_time:
-                    log.debug("Duplicate candle — waiting")
-
-                else:
-                    ticks = split_candles(candle)
+            try:
+                # 🔒 Market closed check (weekends + 21:00–22:00 UTC daily maintenance)
+                if not is_market_closed_utc():
+                    log.info("Market Live -")
 
                     try:
-                        insert_ticks(conn, ticks, INSTRUMENT)
+                        candle = fetcher.fetch_latest_candle()
+                    except Exception as exc:
+                        log.error("Fetch candle failed: %s", exc)
+                        candle = None
 
-                        log.info(
-                            "Wrote candle=%s O=%s H=%s L=%s C=%s",
-                            candle["time"],
-                            candle["open"], candle["high"],
-                            candle["low"],  candle["close"],
-                        )
+                    if candle is None:
+                        log.warning("No complete candle available")
 
-                        last_candle_time = candle["time"]
+                    elif candle["time"] == last_candle_time:
+                        log.debug("Duplicate candle — waiting")
 
-                    except psycopg2.Error as exc:
-                        log.error("DB insert failed: %s", exc)
+                    else:
                         try:
-                            conn.rollback()
-                        except Exception:
-                            pass
+                            ticks = split_candles(candle)
+                        except Exception as exc:
+                            log.error("split_candles failed: %s", exc)
+                            ticks = None
 
-                        if conn.closed:
-                            log.warning("Reconnecting DB...")
-                            conn = connect_db()
+                        if ticks:
+                            try:
+                                insert_ticks(conn, ticks, INSTRUMENT)
 
-            else:
-                log.info("Market Closed — skipping API call")
+                                log.info(
+                                    "Wrote candle=%s O=%s H=%s L=%s C=%s",
+                                    candle["time"],
+                                    candle["open"], candle["high"],
+                                    candle["low"],  candle["close"],
+                                )
+
+                                last_candle_time = candle["time"]
+
+                            except psycopg2.Error as exc:
+                                log.error("DB insert failed: %s", exc)
+                                try:
+                                    conn.rollback()
+                                except Exception:
+                                    pass
+
+                                if conn.closed:
+                                    log.warning("Reconnecting DB...")
+                                    try:
+                                        conn = connect_db()
+                                    except Exception as recon_exc:
+                                        log.error("DB reconnect failed: %s", recon_exc)
+                            except Exception:
+                                log.exception("Unexpected DB insert error")
+
+                else:
+                    log.info("Market Closed — skipping API call")
+
+            except Exception:
+                log.exception("Unexpected error in main loop — continuing")
 
             # ⏱ Sleep control
             elapsed = time.monotonic() - loop_start

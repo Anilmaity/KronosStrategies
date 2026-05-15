@@ -33,6 +33,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from shared.tsdb_reader import fetch_candles
+from shared.market_timing import is_market_closed_utc
 from strategy.ict_engine import EntrySignal
 from strategy.entry_manager import place_entry
 
@@ -190,13 +191,21 @@ def main():
     detector = make_detector()
     while True:
         try:
-            tick(detector)
+            if is_market_closed_utc():
+                log.debug("market closed — skipping tick")
+            else:
+                tick(detector)
         except KeyboardInterrupt:
             log.info("shutdown")
             return
         except Exception:
             log.exception("tick failed (continuing)")
-        time.sleep(POLL_INTERVAL)
+
+        try:
+            time.sleep(POLL_INTERVAL)
+        except KeyboardInterrupt:
+            log.info("shutdown")
+            return
 
 
 if __name__ == "__main__":

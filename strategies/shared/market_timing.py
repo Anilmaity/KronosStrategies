@@ -10,23 +10,15 @@ def is_market_closed_utc() -> bool:
         (covers all of Saturday and Sunday in IST)
     """
     now = datetime.now(timezone.utc)
-    weekday = now.weekday()  # Monday=0 .. Sunday=6
+    weekday = now.weekday()
     t = now.time()
 
-    # Daily maintenance window: 21:00–22:00 UTC == 02:30–03:30 IST
     if dtime(21, 0) <= t < dtime(22, 0):
         return True
-
-    # Friday after 21:00 UTC
     if weekday == 4 and t >= dtime(21, 0):
         return True
-
-    # Saturday — full day closed
     if weekday == 5:
         return True
-
-    # Sunday — closed until 22:00 UTC (market reopens for Asian session)
     if weekday == 6 and t < dtime(22, 0):
         return True
-
     return False
