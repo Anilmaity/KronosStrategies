@@ -137,26 +137,6 @@ services:
       TIGERDATA_URL: ${TIGERDATA_URL:-}
       RESEARCH_STRATEGY: s04_breaker_block
 
-  research_fvg_mid:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: s06_fvg_midpoint
-
-  research_m90_fade:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: s10_90min_fade
-
   research_m90_bias:
     build: ./strategies
     restart: always
@@ -176,3 +156,13 @@ services:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
       RESEARCH_STRATEGY: s14_ob_mit_bias
+
+  research_m90_ny_buy:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: s11_m90_fade_ny
