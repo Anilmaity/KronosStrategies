@@ -76,9 +76,33 @@ def main(commit: bool) -> int:
             print("\n[DRY RUN] Re-run with --commit to actually delete the above rows.")
             return 0
 
-        print("\n[COMMIT] Deleting strategy rows (cascade)…")
-        for s in strategies:
-            sess.delete(s)
+        # Explicit ordered DELETE — the DB column apis_userstrategy.strategy_id
+        # is NOT NULL (despite the ORM saying nullable=True), so SQLAlchemy's
+        # default relationship cascade (SET NULL) fails. Bulk-delete in FK
+        # dependency order instead, inside one transaction.
+        print("\n[COMMIT] Deleting in dependency order…")
+        strat_ids = [s.id for s in strategies]
+        us_ids = [u.id for u in sess.query(UserStrategy.id)
+                                    .filter(UserStrategy.strategy_id.in_(strat_ids)).all()]
+        pos_ids = ([p.id for p in sess.query(Position.id)
+                                       .filter(Position.user_strategy_id.in_(us_ids)).all()]
+                   if us_ids else [])
+
+        def _delete(model, col, ids, label):
+            if not ids:
+                print(f"  - {label}: 0 (skip)")
+                return
+            n = sess.query(model).filter(col.in_(ids)).delete(synchronize_session=False)
+            print(f"  - {label}: {n} deleted")
+
+        _delete(Order,        Order.position_id,         pos_ids,  "apis_order")
+        _delete(Trigger,      Trigger.position_id,       pos_ids,  "apis_trigger")
+        _delete(Position,     Position.id,               pos_ids,  "apis_position")
+        _delete(UserStrategy, UserStrategy.id,           us_ids,   "apis_userstrategy")
+        _delete(Signal,       Signal.strategy_id,        strat_ids,"apis_signal")
+        _delete(Action,       Action.strategy_id,        strat_ids,"apis_action")
+        _delete(Strategy,     Strategy.id,               strat_ids,"apis_strategy")
+
         sess.commit()
         print("[DONE] Deletion committed.")
         return 0
