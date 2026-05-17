@@ -41,6 +41,8 @@ _VARIATION_STRATEGY_NAME = {
     "M90_FADE":    "Research M90_FADE",
     "M90_BIAS":    "Research M90_BIAS",
     "OB_MIT_BIAS": "Research OB_MIT_BIAS",
+    # Concept-strategy variations (concept_strategies/cNN_*.py).
+    "C03_FVG_FILL": "Concept C03_FVG_FILL",
 }
 
 

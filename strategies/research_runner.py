@@ -9,6 +9,8 @@ Generic 1m-driven live runner for any strategy module under
     get_signal(w1m, w5m, w15m, now_utc) -> Signal | None
 
 Dispatch:  RESEARCH_STRATEGY=s01_ote_fib  → loads backtest_strategies.s01_ote_fib
+           RESEARCH_STRATEGY=c03_fvg_fill → loads concept_strategies.c03_fvg_fill
+(module name starting with 'c' resolves to concept_strategies; otherwise backtest_strategies.)
 
 Per tick (5s default):
   - Fetch 1m / 5m / 15m candles from tsdb
@@ -67,7 +69,8 @@ def main():
     if not MODULE:
         sys.exit("RESEARCH_STRATEGY env var required (e.g., s01_ote_fib)")
 
-    mod = importlib.import_module(f"backtest_strategies.{MODULE}")
+    pkg = "concept_strategies" if MODULE.lower().startswith("c") else "backtest_strategies"
+    mod = importlib.import_module(f"{pkg}.{MODULE}")
     name = mod.NAME
     cfg = mod.CONFIG
     get_signal = mod.get_signal
