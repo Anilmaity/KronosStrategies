@@ -25,7 +25,7 @@ _TF_ALIAS = {
 
 _DEFAULT_DIR = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "..", "..", "..", "Extras_Script", "Tick_Data_Generator", "cache_data",
+    "..", "..", ".history_data",
 ))
 
 
@@ -41,14 +41,17 @@ def _flatten(payload) -> Iterable[dict]:
 
 
 def load_ticks(symbol: str = "XAU_USD", cache_dir: str | None = None) -> pd.DataFrame:
-    """Load every cached tick for a symbol into a single DataFrame [time, price] sorted asc."""
+    """Load every cached tick for a symbol into a single DataFrame [time, price] sorted asc.
+
+    Memory-efficient: builds typed arrays per file rather than a giant list of dicts.
+    """
     cache_dir = cache_dir or _DEFAULT_DIR
     folder = os.path.join(cache_dir, symbol)
     files = sorted(glob.glob(os.path.join(folder, "*.json")))
     if not files:
         return pd.DataFrame(columns=["time", "price"])
 
-    rows: list[dict] = []
+    parts: list[pd.DataFrame] = []
     for fp in files:
         try:
             with open(fp, "r") as fh:
@@ -56,16 +59,30 @@ def load_ticks(symbol: str = "XAU_USD", cache_dir: str | None = None) -> pd.Data
         except Exception as exc:
             print(f"[cache_loader] skipping {os.path.basename(fp)}: {exc}")
             continue
-        rows.extend(_flatten(data))
+        times: list[str] = []
+        prices: list[float] = []
+        for rec in _flatten(data):
+            t = rec.get("time")
+            p = rec.get("price")
+            if t is None or p is None:
+                continue
+            times.append(t)
+            prices.append(p)
+        if not times:
+            continue
+        df = pd.DataFrame({
+            "time":  pd.to_datetime(times, utc=True, errors="coerce"),
+            "price": pd.to_numeric(prices, errors="coerce", downcast="float"),
+        })
+        df = df.dropna(subset=["time", "price"])
+        parts.append(df)
 
-    if not rows:
+    if not parts:
         return pd.DataFrame(columns=["time", "price"])
 
-    df = pd.DataFrame(rows)
-    df["time"]  = pd.to_datetime(df["time"], utc=True, errors="coerce")
-    df["price"] = pd.to_numeric(df["price"], errors="coerce")
-    df = df.dropna(subset=["time", "price"]).sort_values("time").reset_index(drop=True)
-    return df
+    out = pd.concat(parts, ignore_index=True, copy=False)
+    out = out.sort_values("time").reset_index(drop=True)
+    return out
 
 
 def resample(ticks: pd.DataFrame, tf: str) -> pd.DataFrame:

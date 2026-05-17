@@ -3,11 +3,11 @@ xauusd_runner.py
 ----------------
 Parametric live runner for the OOS-validated XAUUSD ICT strategies.
 
-Dispatch is controlled by env var XAUUSD_STRATEGY ∈ {S2, S4, S6}:
+Dispatch is controlled by env var XAUUSD_STRATEGY ∈ {S2, S4}:
 
   S2 -> ICT FVG Fill (M15)       buf=0.3
   S4 -> ICT Breaker Block (M15)  buf=0.3
-  S6 -> ICT Daily CRT (D1)       buf=0.0
+  (S6 ICT Daily CRT retired 2026-05-18 — sample too small.)
 
 Pipeline:
   - Poll TSDB via tsdb_reader.fetch_candles for the strategy's timeframe.
@@ -40,7 +40,6 @@ from strategy.entry_manager import place_entry
 from xauusd_strategies.engine import atr as compute_atr
 from xauusd_strategies import s02_fvg_fill as s02
 from xauusd_strategies import s04_breaker as s04
-from xauusd_strategies import s06_daily_crt as s06
 
 
 logging.basicConfig(
@@ -71,13 +70,7 @@ CONFIGS = {
         "variation": "ICT_S4_BREAKER",
         "valid_bars": 96,
     },
-    "S6": {
-        "tf_tsdb": "1d",
-        "n_days":  365,
-        "kwargs":  {**s06.DEFAULTS, "stop_buffer_atr": 0.0},
-        "variation": "ICT_S6_DAILY_CRT",
-        "valid_bars": 1,
-    },
+    # S6 (ICT Daily CRT) retired 2026-05-18 — see git history for details.
 }
 
 
@@ -109,8 +102,6 @@ def make_detector():
         return s02.make_detector(**cfg["kwargs"])
     if STRATEGY == "S4":
         return s04.make_detector(**cfg["kwargs"])
-    if STRATEGY == "S6":
-        return s06.make_detector(**cfg["kwargs"])
     raise ValueError(f"Unknown strategy: {STRATEGY}")
 
 

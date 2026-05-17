@@ -27,12 +27,12 @@ SYMBOL = "XAU_USD"
 # this to select the correct Strategy row (each variation has its own
 # entry_quantity and its own deployed UserStrategy).
 _VARIATION_STRATEGY_NAME = {
-    "VAR1":           "Liquidity Scalper VAR1",
+    # VAR1 (Liquidity Scalper) retired 2026-05-18 — unprofitable in 16mo backtest.
     "VAR2":           "Liquidity Sweep VAR2",
     "VAR3":           "Micro Scalper VAR3",
     "ICT_S2_FVG":     "ICT FVG Fill (M15)",
     "ICT_S4_BREAKER": "ICT Breaker Block (M15)",
-    "ICT_S6_DAILY_CRT": "ICT Daily CRT (D1)",
+    # ICT_S6_DAILY_CRT retired 2026-05-18 — 71 trades over 16mo, sample too small.
     # Research-strategy variations (backtest_strategies/sNN_*.py). Name = NAME
     # constant in the source module; description tracks the file.
     "OB_MIT":      "Research OB_MIT",

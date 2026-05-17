@@ -39,8 +39,10 @@ services:
       TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
 
-  # Liquidity sweep family. VAR2 backtested best (79.5% WR / PF 5.25); VAR1 and
-  # VAR3 backtested <70% WR but are run live per operator decision.
+  # Liquidity sweep family. VAR2 backtested best (79.5% WR / PF 5.25); VAR3
+  # backtested <70% WR but is run live per operator decision. VAR1
+  # (liquidity_scalper) retired 2026-05-18 — backtested -582 pts over 16mo
+  # across 7,337 trades; runner moved to strategies/_archive/.
   liquidity_sweep:
     build: ./strategies
     restart: always
@@ -49,16 +51,6 @@ services:
     environment:
       TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
-
-  liquidity_scalper:
-    build: ./strategies
-    restart: always
-    command: python liquidity_scalper.py
-    env_file: .env
-    environment:
-      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      XAUUSD_SYMBOL: XAU_USD
 
   micro_scalper:
     build: ./strategies
@@ -97,17 +89,9 @@ services:
       XAUUSD_SYMBOL:   XAU_USD
       XAUUSD_POLL_SEC: "60"
 
-  ict_s6_daily_crt:
-    build: ./strategies
-    restart: always
-    command: python xauusd_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      XAUUSD_STRATEGY: S6
-      XAUUSD_SYMBOL:   XAU_USD
-      XAUUSD_POLL_SEC: "300"
+  # ict_s6_daily_crt retired 2026-05-18 — only 71 trades over 16mo (~1/week),
+  # +42 pts marginal P&L; sample too small to validate. xauusd_strategies/s06_daily_crt.py
+  # moved to _archive/.
 
 
   # ───────────────────────────────────────────────────────────────────────────

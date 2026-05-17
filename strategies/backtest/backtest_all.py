@@ -20,7 +20,7 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from shared.tsdb_reader import fetch_candles
-from strategies import STRATEGIES
+from backtest_strategies import STRATEGIES
 from backtest_strategies.base import Signal, StrategyConfig, in_session
 
 BACKTEST_DAYS = 30
@@ -53,22 +53,40 @@ def _to_utc(ts):
     return ts.replace(tzinfo=timezone.utc) if ts.tzinfo is None else ts
 
 
-def _simulate_exit(direction, entry_px, tp, sl, future):
-    for _, row in future.iterrows():
-        if direction == "BUY":
-            if row["low"] <= sl:  return "SL", sl, row["time"]
-            if row["high"] >= tp: return "TP", tp, row["time"]
-        else:
-            if row["high"] >= sl: return "SL", sl, row["time"]
-            if row["low"] <= tp:  return "TP", tp, row["time"]
-    if future.empty:
+def _simulate_exit_np(direction, entry_px, tp, sl,
+                      highs, lows, closes, times, start_idx):
+    """Vectorized exit search using pre-extracted numpy arrays."""
+    import numpy as np
+    n = highs.shape[0]
+    if start_idx >= n:
         return "OPEN", entry_px, datetime.now(timezone.utc)
-    last = future.iloc[-1]
-    return "OPEN", float(last["close"]), last["time"]
+
+    if direction == "BUY":
+        sl_hits = lows[start_idx:]  <= sl
+        tp_hits = highs[start_idx:] >= tp
+    else:
+        sl_hits = highs[start_idx:] >= sl
+        tp_hits = lows[start_idx:]  <= tp
+
+    sl_idx = sl_hits.argmax() if sl_hits.any() else -1
+    tp_idx = tp_hits.argmax() if tp_hits.any() else -1
+
+    if sl_idx == -1 and tp_idx == -1:
+        return "OPEN", float(closes[-1]), times[-1]
+    if sl_idx == -1:
+        return "TP", tp, times[start_idx + tp_idx]
+    if tp_idx == -1:
+        return "SL", sl, times[start_idx + sl_idx]
+    if sl_idx <= tp_idx:
+        return "SL", sl, times[start_idx + sl_idx]
+    return "TP", tp, times[start_idx + tp_idx]
 
 
-def replay(candles_1m: pd.DataFrame, candles_5m: pd.DataFrame, candles_15m: pd.DataFrame):
-    """Walk-forward replay across all registered strategies."""
+def replay(candles_1m: pd.DataFrame, candles_5m: pd.DataFrame, candles_15m: pd.DataFrame,
+           strategies: list | None = None, label: str = ""):
+    """Walk-forward replay across registered strategies (defaults to all)."""
+    if strategies is None:
+        strategies = STRATEGIES
     candles_5m  = candles_5m.reset_index(drop=True)
     candles_15m = candles_15m.reset_index(drop=True)
     times_5m   = candles_5m["time"]
@@ -77,8 +95,25 @@ def replay(candles_1m: pd.DataFrame, candles_5m: pd.DataFrame, candles_15m: pd.D
     trades: list[Trade] = []
     last_entry_t: dict[str, datetime] = {}
 
+    # Pre-extract numpy arrays for fast vectorized exit simulation
+    import numpy as np
+    import time as _t
+    arr_high   = candles_1m["high"].to_numpy(dtype=np.float64)
+    arr_low    = candles_1m["low"].to_numpy(dtype=np.float64)
+    arr_close  = candles_1m["close"].to_numpy(dtype=np.float64)
+    arr_time   = candles_1m["time"].to_numpy()
+
     n = len(candles_1m)
+    _t0 = _t.time()
+    _log_every = 10000
     for i in range(max(WIN_1M, 30), n - 1):
+        if i % _log_every == 0:
+            pct = 100.0 * i / n
+            elapsed = _t.time() - _t0
+            rate = i / elapsed if elapsed > 0 else 0
+            eta = (n - i) / rate if rate > 0 else 0
+            tag = f"[{label}]" if label else "[replay]"
+            print(f"  {tag} {i:>7d}/{n} ({pct:5.1f}%) trades={len(trades):,} elapsed={elapsed:.0f}s eta={eta:.0f}s", flush=True)
         candle = candles_1m.iloc[i]
         t      = candle["time"]
         tdt    = _to_utc(t)
@@ -91,9 +126,7 @@ def replay(candles_1m: pd.DataFrame, candles_5m: pd.DataFrame, candles_15m: pd.D
         idx_15m = times_15m.searchsorted(t, side="right")
         w15m = candles_15m.iloc[max(0, idx_15m - WIN_15M):idx_15m]
 
-        future = candles_1m.iloc[i + 1:]
-
-        for strat in STRATEGIES:
+        for strat in strategies:
             cfg: StrategyConfig = strat.CONFIG
             name = strat.NAME
 
@@ -122,8 +155,9 @@ def replay(candles_1m: pd.DataFrame, candles_5m: pd.DataFrame, candles_15m: pd.D
             if sig.side == "SELL" and not (sig.stop_loss > sig.entry_price > sig.take_profit):
                 continue
 
-            outcome, exit_px, exit_t = _simulate_exit(
-                sig.side, sig.entry_price, sig.take_profit, sig.stop_loss, future
+            outcome, exit_px, exit_t = _simulate_exit_np(
+                sig.side, sig.entry_price, sig.take_profit, sig.stop_loss,
+                arr_high, arr_low, arr_close, arr_time, i + 1,
             )
 
             if sig.side == "BUY":
@@ -202,7 +236,7 @@ def save_csv(trades: list[Trade], filepath: str):
         for t in trades:
             writer.writerow([t.strategy, t.entry_t, t.side, t.entry_px, t.sl, t.tp,
                              t.exit_px, t.exit_t, t.outcome, t.pnl_pts, t.reason])
-    print(f"[CSV] Saved {len(trades)} trades → {filepath}")
+    print(f"[CSV] Saved {len(trades)} trades -> {filepath}")
 
 
 def main():

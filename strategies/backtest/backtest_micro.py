@@ -237,7 +237,7 @@ def save_csv(trades: list[MicroTrade], filepath: str):
         writer.writerow(field_names)
         for t in trades:
             writer.writerow(astuple(t))
-    print(f"[CSV] Saved {len(trades)} trades → {filepath}")
+    print(f"[CSV] Saved {len(trades)} trades -> {filepath}")
 
 
 def main():

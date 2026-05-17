@@ -351,4 +351,4 @@ def save_csv(trades: list[TradeRecord], filepath: str) -> None:
         writer.writerow(field_names)
         for t in trades:
             writer.writerow(astuple(t))
-    print(f"[CSV] Saved {len(trades)} trades → {filepath}")
+    print(f"[CSV] Saved {len(trades)} trades -> {filepath}")
