@@ -349,3 +349,36 @@ class Order(BaseModel):
 
     def __repr__(self):
         return self.symbol + " " + self.condition
+
+
+class BacktestReport(BaseModel):
+    __tablename__ = f"{APP_PREFIX}_backtestreport"
+
+    run_label       = Column(String(200), nullable=False)
+    period_start    = Column(Date)
+    period_end      = Column(Date)
+    trades          = Column(Integer, default=0, nullable=False)
+    wins            = Column(Integer, default=0, nullable=False)
+    losses          = Column(Integer, default=0, nullable=False)
+    win_rate_pct    = Column(Numeric(8, 4))
+    pnl_pts         = Column(Numeric(18, 4))
+    max_dd_pts      = Column(Numeric(18, 4))
+    avg_win_pts     = Column(Numeric(18, 4))
+    avg_loss_pts    = Column(Numeric(18, 4))
+    profit_factor   = Column(Numeric(12, 4))
+    expectancy_pts  = Column(Numeric(18, 6))
+    sharpe_daily    = Column(Numeric(12, 4))
+    source_csv      = Column(String(500))
+    params_snapshot = Column(JSON, default={})
+    notes           = Column(String)
+
+    strategy_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey(f"{APP_PREFIX}_strategy.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    apis_strategy = relationship("Strategy")
+
+    def __repr__(self):
+        return f"{self.run_label}:{self.strategy_id}"
