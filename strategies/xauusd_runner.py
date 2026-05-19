@@ -3,10 +3,10 @@ xauusd_runner.py
 ----------------
 Parametric live runner for the OOS-validated XAUUSD ICT strategies.
 
-Dispatch is controlled by env var XAUUSD_STRATEGY ∈ {S2, S4}:
+Dispatch is controlled by env var XAUUSD_STRATEGY ∈ {S4}:
 
-  S2 -> ICT FVG Fill (M15)       buf=0.3
   S4 -> ICT Breaker Block (M15)  buf=0.3
+  (S2 ICT FVG Fill retired 2026-05-19 — UserStrategy removed from DB.)
   (S6 ICT Daily CRT retired 2026-05-18 — sample too small.)
 
 Pipeline:
@@ -38,7 +38,6 @@ from strategy.ict_engine import EntrySignal
 from strategy.entry_manager import place_entry
 
 from xauusd_strategies.engine import atr as compute_atr
-from xauusd_strategies import s02_fvg_fill as s02
 from xauusd_strategies import s04_breaker as s04
 
 
@@ -56,13 +55,6 @@ POLL_INTERVAL = int(os.getenv("XAUUSD_POLL_SEC", "60"))
 
 # Per-strategy config. The variation tag must match entry_manager._VARIATION_STRATEGY_NAME.
 CONFIGS = {
-    "S2": {
-        "tf_tsdb": "15m",
-        "n_days":  60,
-        "kwargs":  {**s02.DEFAULTS, "stop_buffer_atr": 0.3},
-        "variation": "ICT_S2_FVG",
-        "valid_bars": 96,
-    },
     "S4": {
         "tf_tsdb": "15m",
         "n_days":  60,
@@ -91,15 +83,11 @@ def to_indexed_df(candles: pd.DataFrame) -> pd.DataFrame:
 
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
     """Per-strategy feature build."""
-    if STRATEGY == "S2":
-        return s02.build_features(df, s02.DEFAULTS["h4_ema"])
-    return df  # S4, S6 use raw OHLC
+    return df  # S4 uses raw OHLC
 
 
 def make_detector():
     cfg = CONFIGS[STRATEGY]
-    if STRATEGY == "S2":
-        return s02.make_detector(**cfg["kwargs"])
     if STRATEGY == "S4":
         return s04.make_detector(**cfg["kwargs"])
     raise ValueError(f"Unknown strategy: {STRATEGY}")

@@ -15,6 +15,7 @@ from shared.models import (
     Session,
     Position, Order, Trigger,
     UserStrategy, Strategy, CurrencyPair,
+    StrategySignal,
 )
 from shared.metaapi_client import place_market_order
 from strategy.ict_engine import EntrySignal
@@ -28,9 +29,9 @@ SYMBOL = "XAU_USD"
 # entry_quantity and its own deployed UserStrategy).
 _VARIATION_STRATEGY_NAME = {
     # VAR1 (Liquidity Scalper) retired 2026-05-18 — unprofitable in 16mo backtest.
-    "VAR2":           "Liquidity Sweep VAR2",
+    # VAR2 (Liquidity Sweep) retired 2026-05-19 — UserStrategy removed from DB.
     "VAR3":           "Micro Scalper VAR3",
-    "ICT_S2_FVG":     "ICT FVG Fill (M15)",
+    # ICT_S2_FVG retired 2026-05-19 — UserStrategy removed from DB.
     "ICT_S4_BREAKER": "ICT Breaker Block (M15)",
     # ICT_S6_DAILY_CRT retired 2026-05-18 — 71 trades over 16mo, sample too small.
     # Research-strategy variations (backtest_strategies/sNN_*.py). Name = NAME
@@ -88,11 +89,62 @@ def _get_context(symbol: str = SYMBOL, variation: str | None = None) -> dict | N
         qty = float(strategy.entry_quantity) * int(us.multiplyer)
 
         return {
+            "strategy_id": strategy.id,
             "user_strategy_id": us.id,
             "user_broker_id": us.user_broker_id,
             "currency_pair_id": cp.id,
             "quantity": qty,
         }
+    finally:
+        sess.close()
+
+
+def _log_signal_fired(strategy_id, symbol, signal: EntrySignal) -> uuid.UUID | None:
+    """Write a StrategySignal(status='FIRED') row and return its id.
+    Failures here must not abort entry — logged and swallowed.
+    """
+    sess = Session()
+    try:
+        row = StrategySignal(
+            id=uuid.uuid4(),
+            strategy_id=strategy_id,
+            symbol=symbol,
+            side=signal.side,
+            entry_price=Decimal(str(signal.entry_price)),
+            stop_loss=Decimal(str(signal.stop_loss)) if signal.stop_loss is not None else None,
+            take_profit=Decimal(str(signal.take_profit)) if signal.take_profit is not None else None,
+            reason=signal.reason,
+            status="FIRED",
+        )
+        sess.add(row)
+        sess.commit()
+        return row.id
+    except Exception:
+        sess.rollback()
+        log.exception("[SIGNAL] Failed to log FIRED signal — continuing")
+        return None
+    finally:
+        sess.close()
+
+
+def _update_signal_status(signal_log_id, status, *, rejection_reason=None, position_id=None):
+    """Update an existing StrategySignal row's status and related fields."""
+    if signal_log_id is None:
+        return
+    sess = Session()
+    try:
+        row = sess.query(StrategySignal).filter_by(id=signal_log_id).first()
+        if row is None:
+            return
+        row.status = status
+        if rejection_reason is not None:
+            row.rejection_reason = rejection_reason[:500]
+        if position_id is not None:
+            row.position_id = position_id
+        sess.commit()
+    except Exception:
+        sess.rollback()
+        log.exception("[SIGNAL] Failed to update signal status — continuing")
     finally:
         sess.close()
 
@@ -133,9 +185,15 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
     """
     ctx = _get_context(symbol, variation=variation)
     if not ctx:
+        # No strategy_id known -> can't log; the misconfiguration is the bug.
         return False
 
+    # Persist the signal as FIRED before anything else can fail.
+    signal_log_id = _log_signal_fired(ctx["strategy_id"], symbol, signal)
+
     if _has_open_position(ctx["user_strategy_id"]):
+        _update_signal_status(signal_log_id, "REJECTED",
+                              rejection_reason="open_position_cap")
         log.info("[ENTRY] Position already open — skipping new entry")
         return False
 
@@ -153,6 +211,8 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
         entry_price=signal.entry_price,
     )
     if not broker_position_id:
+        _update_signal_status(signal_log_id, "REJECTED",
+                              rejection_reason="metaapi_rejection")
         log.warning("[ENTRY] MetaAPI rejected order — skipping DB write")
         return False
 
@@ -232,6 +292,8 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
 
         sess.commit()
 
+        _update_signal_status(signal_log_id, "PLACED", position_id=position.id)
+
         log.info(
             "[ENTRY] %s %s qty=%.2f @ %.2f | SL=%.2f TP=%.2f | %s | pos_id=%s",
             signal.side, symbol, qty,
@@ -240,9 +302,11 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
         )
         return True
 
-    except Exception:
+    except Exception as e:
         sess.rollback()
         log.exception("[ENTRY] Failed to persist entry signal")
+        _update_signal_status(signal_log_id, "REJECTED",
+                              rejection_reason=f"db_error: {type(e).__name__}: {e}")
         return False
     finally:
         sess.close()

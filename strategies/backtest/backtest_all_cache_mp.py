@@ -29,7 +29,7 @@ def _worker(args):
     """Run replay() for one strategy in a child process."""
     strat_name, parquet_dir = args
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-    import pandas as _pdremove for
+    import pandas as _pd
     from backtest_strategies import STRATEGIES as _ALL
     from backtest.backtest_all import replay as _replay
 

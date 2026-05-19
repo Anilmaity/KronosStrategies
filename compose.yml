@@ -39,18 +39,9 @@ services:
       TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
 
-  # Liquidity sweep family. VAR2 backtested best (79.5% WR / PF 5.25); VAR3
-  # backtested <70% WR but is run live per operator decision. VAR1
-  # (liquidity_scalper) retired 2026-05-18 — backtested -582 pts over 16mo
-  # across 7,337 trades; runner moved to strategies/_archive/.
-  liquidity_sweep:
-    build: ./strategies
-    restart: always
-    command: python liquidity_sweep.py
-    env_file: .env
-    environment:
-      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
+  # Liquidity sweep family. VAR1 retired 2026-05-18 (-582 pts / 7,337 trades).
+  # VAR2 retired 2026-05-19 — UserStrategy removed from DB; runner archived.
+  # Only VAR3 remains live.
 
   micro_scalper:
     build: ./strategies
@@ -65,17 +56,8 @@ services:
   # OOS-validated ICT/SMC suite (param-sweep + walk-forward + MC + hold-out).
   # Each variation runs a separate xauusd_runner process and dispatches to its
   # strategy module via the XAUUSD_STRATEGY env var.
-  ict_s2_fvg:
-    build: ./strategies
-    restart: always
-    command: python xauusd_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      XAUUSD_STRATEGY: S2
-      XAUUSD_SYMBOL:   XAU_USD
-      XAUUSD_POLL_SEC: "60"
+  # ict_s2_fvg retired 2026-05-19 — UserStrategy removed from DB; runner archived
+  # to xauusd_strategies/_archive/s02_fvg_fill.py.
 
   ict_s4_breaker:
     build: ./strategies
@@ -150,3 +132,15 @@ services:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
       RESEARCH_STRATEGY: s11_m90_fade_ny
+
+  # Concept strategies (concept_strategies/cNN_*.py). C03_FVG_FILL promoted
+  # live 2026-05-18 — top performer of 20-concept build (2026-05-17 batch).
+  concept_c03_fvg_fill:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: c03_fvg_fill
