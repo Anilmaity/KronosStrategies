@@ -5,3 +5,4 @@ numpy
 requests
 python-dotenv
 pytz
+yfinance>=0.2.40

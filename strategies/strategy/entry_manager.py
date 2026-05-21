@@ -44,6 +44,15 @@ _VARIATION_STRATEGY_NAME = {
     "OB_MIT_BIAS": "Research OB_MIT_BIAS",
     # Concept-strategy variations (concept_strategies/cNN_*.py).
     "C03_FVG_FILL": "Concept C03_FVG_FILL",
+    # Kronos v3 port (XAU/USD scalping suite) with v15e production gates --
+    # TNX |z_20d| >= 0.5 + event-window E3 (+/-2h major events).
+    # SH (momo short) was dropped from deployment per v15e
+    # (anti-predictive depth + DD penalty).
+    "KRONOS_S02_STOCH":      "Kronos S02 Stoch Revert",
+    "KRONOS_S05_THREEBAR":   "Kronos S05 Threebar Pull",
+    "KRONOS_S06_SWEEP":      "Kronos S06 Session Sweep",
+    "KRONOS_S07_CRT":        "Kronos S07 CRT",
+    "KRONOS_S14_M5_STRETCH": "Kronos S14 M5 EMA Stretch",
 }
 
 

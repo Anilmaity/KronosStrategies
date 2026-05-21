@@ -25,8 +25,20 @@ services:
     restart: always
     env_file: .env
     environment:
-      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      TSDB_TARGET:      ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL:    ${TIGERDATA_URL:-}
+      OANDA_INSTRUMENT: XAU_USD
+
+  # Same image, second instance polling XAG_USD (silver). Writes to the same
+  # ltp hypertable, distinguished by the `symbol` column.
+  tick_data_collector_xagusd:
+    build: ./tick_data_collector
+    restart: always
+    env_file: .env
+    environment:
+      TSDB_TARGET:      ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL:    ${TIGERDATA_URL:-}
+      OANDA_INSTRUMENT: XAG_USD
 
   # ───────────────────────────────────────────────────────────────────────────
   # Position manager — evaluates open positions every second, closes on TP/SL
@@ -144,3 +156,63 @@ services:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
       RESEARCH_STRATEGY: c03_fvg_fill
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Kronos v3 port (XAU/USD scalping suite) — 16mo tick backtest.
+  # Each strategy ships with the v15e production gates baked into get_signal:
+  #   • TNX |z_20d| >= 0.5            (shared/macro_gate.py, fails open)
+  #   • Event-window E3 (+/-2h major events; shared/event_gate.py, fails open)
+  # Expected in-band perf (per TradingSkills EXP_V15E_FINAL_REPORT.md):
+  #   78.3% OOS win-day @ 5.02 tpd, DD 94, +2418 pts / 78 fire-days.
+  # SH (momo short) NOT deployed -- v15e dropped it (anti-predictive + DD).
+  # ───────────────────────────────────────────────────────────────────────────
+
+  kronos_s02:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: kronos_s02_stoch_revert
+
+  kronos_s05:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: kronos_s05_threebar_pull
+
+  kronos_s06:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: kronos_s06_session_sweep
+
+  kronos_s07:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: kronos_s07_crt
+
+  kronos_s14:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: kronos_s14_m5_ema_stretch
