@@ -207,6 +207,18 @@ def is_news_window(
     if not event_list:
         return False
 
+    # --- tz-naive guard on event timestamps --------------------------------
+    for event_ts in event_list:
+        if not isinstance(event_ts, pd.Timestamp):
+            event_ts = pd.Timestamp(event_ts)
+        if event_ts.tzinfo is None:
+            raise ValueError(
+                "is_news_window requires event times to be tz-aware UTC; "
+                f"got tz-naive event_ts={event_ts!r}. "
+                "Localise with pd.Timestamp(..., tz='UTC') or "
+                ".tz_localize('UTC')."
+            )
+
     # --- check window membership ------------------------------------------
     lb = pd.Timedelta(minutes=lookback_min)
     la = pd.Timedelta(minutes=lookahead_min)

@@ -182,6 +182,48 @@ class TestIsNewsWindowTzNaive:
 
 
 # ===========================================================================
+# is_news_window — tz-naive event timestamps raise ValueError
+# ===========================================================================
+
+class TestIsNewsWindowTzNaiveEvents:
+    """Events containing tz-naive timestamps should raise ValueError, not a
+    cryptic TypeError from deep inside the comparison."""
+
+    def test_tz_naive_event_in_list_raises_value_error(self):
+        ts = _utc(_EVENT_TIME)
+        naive_event = pd.Timestamp("2026-02-01 13:30:00")  # no tz
+        assert naive_event.tzinfo is None, "Sanity: should be tz-naive"
+        with pytest.raises(ValueError, match="tz-aware"):
+            is_news_window(ts, [naive_event])
+
+    def test_tz_naive_event_in_series_raises_value_error(self):
+        ts = _utc(_EVENT_TIME)
+        naive_series = pd.Series([pd.Timestamp("2026-02-01 13:30:00")])  # no tz
+        with pytest.raises(ValueError, match="tz-aware"):
+            is_news_window(ts, naive_series)
+
+    def test_tz_naive_event_in_dataframe_raises_value_error(self):
+        ts = _utc(_EVENT_TIME)
+        naive_df = pd.DataFrame({"time": [pd.Timestamp("2026-02-01 13:30:00")]})
+        with pytest.raises(ValueError, match="tz-aware"):
+            is_news_window(ts, naive_df)
+
+
+# ===========================================================================
+# is_news_window — DataFrame missing 'time' column raises ValueError
+# ===========================================================================
+
+class TestIsNewsWindowMissingColumn:
+    """A DataFrame passed without a 'time' column must raise a clear ValueError."""
+
+    def test_dataframe_without_time_column_raises_value_error(self):
+        df = pd.DataFrame({"timestamp": [_utc(_EVENT_TIME)]})  # wrong column name
+        ts = _utc(_EVENT_TIME)
+        with pytest.raises(ValueError, match="'time' column"):
+            is_news_window(ts, df)
+
+
+# ===========================================================================
 # load_forexfactory_csv
 # ===========================================================================
 
