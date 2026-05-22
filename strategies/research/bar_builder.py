@@ -13,9 +13,6 @@ Broker daily-rollover handling (e.g. 5 PM NY anchor) is out of scope.
 """
 from __future__ import annotations
 
-import sys
-import os
-
 import pandas as pd
 
 # ---------------------------------------------------------------------------
@@ -85,6 +82,14 @@ def build_bars(
     if ticks is None or ticks.empty:
         return pd.DataFrame(columns=_OUTPUT_COLS)
 
+    # Guard: reject tz-naive input before pandas raises a cryptic internal error
+    if ticks["time"].dt.tz is None:
+        raise ValueError(
+            "build_bars: input 'time' column must be tz-aware UTC. "
+            "Received tz-naive timestamps. "
+            "Convert with: ticks['time'] = pd.to_datetime(ticks['time'], utc=True)"
+        )
+
     df = ticks.copy()
 
     # -----------------------------------------------------------------------
@@ -136,6 +141,9 @@ def build_bars(
 # Step-3 real-data sanity (not a pytest test)
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    import sys
+    import os
+
     _here      = os.path.dirname(os.path.abspath(__file__))
     _repo_root = os.path.normpath(os.path.join(_here, "..", ".."))
     if _repo_root not in sys.path:

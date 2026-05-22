@@ -219,15 +219,15 @@ def test_unknown_tf_raises_value_error():
 
 
 def test_all_valid_tfs_accepted():
-    """All VALID_TFS strings must be accepted without error."""
+    """All VALID_TFS strings must be accepted without error and return non-empty output."""
     times  = [f"2026-01-05 09:{m:02d}:00" for m in range(60)]
     prices = [2700.00 + m * 0.01 for m in range(60)]
     ticks  = _ticks(times, prices)
 
     for tf in VALID_TFS:
         bars = build_bars(ticks, tf)
-        assert not bars.empty or bars.columns.tolist() != [], (
-            f"tf={tf} returned unexpected result"
+        assert not bars.empty, (
+            f"tf={tf} returned an empty DataFrame for non-empty input"
         )
 
 
@@ -318,3 +318,84 @@ def test_no_phantom_bars_in_gaps():
 
     # Only 2 bars should exist; empty bars in the gap must be dropped
     assert len(bars) == 2, f"Expected 2 bars (no phantom bars), got {len(bars)}"
+
+
+# ---------------------------------------------------------------------------
+# 11. tz-naive input raises ValueError
+# ---------------------------------------------------------------------------
+
+def test_tz_naive_input_raises_value_error():
+    """tz-naive 'time' column must raise a clear ValueError, not a cryptic pandas error."""
+    times  = ["2026-01-05 09:00:00", "2026-01-05 09:01:00"]
+    prices = [2700.00, 2700.10]
+    # Deliberately build tz-naive timestamps (no utc=True)
+    ticks = pd.DataFrame({
+        "time":  pd.to_datetime(times),   # tz-naive
+        "price": prices,
+    })
+
+    with pytest.raises(ValueError, match="tz-aware UTC"):
+        build_bars(ticks, "1m")
+
+
+# ---------------------------------------------------------------------------
+# 12. Higher-timeframe anchoring: 4h and 1d bars on UTC boundaries
+# ---------------------------------------------------------------------------
+
+def _ticks_range(start: str, end: str, freq: str, base_price: float = 2700.0) -> pd.DataFrame:
+    """Generate one tick per ``freq`` from ``start`` to ``end`` (exclusive), tz-aware UTC."""
+    idx = pd.date_range(start=start, end=end, freq=freq, tz="UTC", inclusive="left")
+    prices = [base_price + i * 0.01 for i in range(len(idx))]
+    return pd.DataFrame({"time": idx, "price": prices})
+
+
+def test_two_4h_bars_anchored_to_utc():
+    """
+    8 hours of ticks (one per minute) → exactly two 4h bars whose open labels
+    are UTC 00:00 and 04:00 respectively.
+
+    This is a regression guard for the UTC-midnight anchor used by pandas
+    resample on 4h data.
+    """
+    # 2026-01-05 00:00 UTC → 2026-01-05 08:00 UTC  (480 ticks, one per minute)
+    ticks = _ticks_range("2026-01-05 00:00", "2026-01-05 08:00", "1min")
+
+    bars = build_bars(ticks, "4h")
+
+    assert len(bars) == 2, f"Expected 2 4h bars, got {len(bars)}"
+
+    # Bar labels are tz-naive UTC wall-clock
+    t0 = pd.Timestamp("2026-01-05 00:00:00")
+    t1 = pd.Timestamp("2026-01-05 04:00:00")
+
+    assert bars.iloc[0]["time"] == t0, (
+        f"First 4h bar should open at 00:00 UTC, got {bars.iloc[0]['time']}"
+    )
+    assert bars.iloc[1]["time"] == t1, (
+        f"Second 4h bar should open at 04:00 UTC, got {bars.iloc[1]['time']}"
+    )
+
+
+def test_two_1d_bars_anchored_to_utc_midnight():
+    """
+    Two calendar days of ticks (one per hour) → exactly two 1d bars whose open
+    labels are UTC midnight of each respective day.
+
+    Regression guard for the UTC-midnight anchor on daily aggregation.
+    """
+    # 2026-01-05 00:00 UTC → 2026-01-07 00:00 UTC  (48 ticks, one per hour)
+    ticks = _ticks_range("2026-01-05 00:00", "2026-01-07 00:00", "1h")
+
+    bars = build_bars(ticks, "1d")
+
+    assert len(bars) == 2, f"Expected 2 1d bars, got {len(bars)}"
+
+    t0 = pd.Timestamp("2026-01-05 00:00:00")
+    t1 = pd.Timestamp("2026-01-06 00:00:00")
+
+    assert bars.iloc[0]["time"] == t0, (
+        f"First 1d bar should open at 2026-01-05 00:00 UTC, got {bars.iloc[0]['time']}"
+    )
+    assert bars.iloc[1]["time"] == t1, (
+        f"Second 1d bar should open at 2026-01-06 00:00 UTC, got {bars.iloc[1]['time']}"
+    )
