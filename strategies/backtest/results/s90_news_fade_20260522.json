@@ -1,0 +1,41 @@
+{
+  "family": "D_NewsFade",
+  "params": {
+    "lookback_bars": 36,
+    "sl_buffer": 1.0,
+    "min_rr": 1.0,
+    "min_spike": 5.0,
+    "max_hold_bars": 24,
+    "event_source": "event_gate._build_event_table (importance>=3, FOMC/CPI/NFP/PCE)"
+  },
+  "n_trades": 9,
+  "winrate": 0.3333,
+  "expectancy_R": -0.3618,
+  "avg_win_R": 1.1656,
+  "avg_loss_R": -1.1255,
+  "profit_factor": 0.5178,
+  "max_dd_R": 5.2086,
+  "trades_per_day": 0.0305,
+  "by_hour": {
+    "12": {
+      "trades": 4,
+      "winrate": 0.25
+    },
+    "13": {
+      "trades": 2,
+      "winrate": 0.5
+    },
+    "18": {
+      "trades": 1,
+      "winrate": 0.0
+    },
+    "22": {
+      "trades": 1,
+      "winrate": 1.0
+    },
+    "23": {
+      "trades": 1,
+      "winrate": 0.0
+    }
+  }
+}
