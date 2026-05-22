@@ -1,0 +1,54 @@
+{
+  "family": "B_KillzoneOTE",
+  "params": {
+    "tf": "5m",
+    "htf_tf": "1h",
+    "half_spread": 0.15,
+    "slip": 0.05,
+    "session_windows": {
+      "london": "08:00-10:00 UTC",
+      "ny": "13:30-15:30 UTC"
+    },
+    "sl_rule": "swing_origin - 0.50",
+    "tp_rule": "swing_extreme (0% retracement level)",
+    "ote_zone": "62%-79% Fibonacci retracement",
+    "min_rr": 1.5,
+    "max_hold_bars": 36,
+    "htf_lookback": 10,
+    "sl_buffer": 0.5
+  },
+  "n_trades": 52,
+  "winrate": 0.4615,
+  "expectancy_R": 0.4418,
+  "avg_win_R": 2.0785,
+  "avg_loss_R": -0.9611,
+  "profit_factor": 1.8536,
+  "max_dd_R": 14.7405,
+  "trades_per_day": 0.1818,
+  "by_hour": {
+    "8": {
+      "trades": 11,
+      "winrate": 0.9090909090909091
+    },
+    "9": {
+      "trades": 9,
+      "winrate": 1.0
+    },
+    "10": {
+      "trades": 1,
+      "winrate": 1.0
+    },
+    "13": {
+      "trades": 6,
+      "winrate": 0.0
+    },
+    "14": {
+      "trades": 20,
+      "winrate": 0.2
+    },
+    "15": {
+      "trades": 5,
+      "winrate": 0.0
+    }
+  }
+}
