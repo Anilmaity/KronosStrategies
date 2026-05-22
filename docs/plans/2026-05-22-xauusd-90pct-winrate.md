@@ -34,10 +34,20 @@ If the data says 90% is unattainable while keeping expectancy positive and trade
 
 ## 3. Acceptance criteria (definition of done)
 
+> **Revised 2026-05-22 (user decision).** Phase B (Tasks 5a–5g) showed that on the available
+> data, winrate and trade frequency trade off **inversely**: the only family reaching ≥5 trades/day
+> (inverse_fvg) sits at ~43% winrate, while the only ≥90%-winrate pocket (killzone-OTE, London slice)
+> runs at ~0.18 trades/day — and confluence stacking only *reduces* frequency further. The original
+> 5–20 trades/day floor was therefore **jointly unattainable** with ≥90% WR and ≥+0.4R. The user has
+> elected to **keep the 90% winrate target and relax the frequency floor** (Option 1). Criterion 2 below
+> is amended accordingly; all other criteria are unchanged.
+
 The strategy ships only when **all** of these hold on a held-out **3-month OOS window**:
 
 1. Winrate ≥ 90% (with 95% Wilson-CI lower bound ≥ 85%).
-2. Trade count between **5 and 20 per trading day** on average (London + NY only).
+2. ~~Trade count between **5 and 20 per trading day**~~ → **REVISED 2026-05-22:** trade count in
+   **[1, 3] per trading day** on average (London + NY only) is acceptable. Lift toward 3+/day where
+   confluence allows, but **do not sacrifice winrate to chase volume**.
 3. Expectancy ≥ **+0.4R** per trade.
 4. Max consecutive losers ≤ 3.
 5. Max daily drawdown ≤ 1.5% of account.
