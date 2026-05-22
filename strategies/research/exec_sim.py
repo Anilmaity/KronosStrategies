@@ -137,6 +137,16 @@ def simulate_trade(
     tp = signal.tp
 
     # -----------------------------------------------------------------------
+    # Guard: bars must be non-empty and entry_index must be in range
+    # -----------------------------------------------------------------------
+    if len(bars) == 0:
+        raise ValueError("bars DataFrame is empty; cannot simulate a trade.")
+    if entry_idx < 0 or entry_idx >= len(bars):
+        raise ValueError(
+            f"entry_index {entry_idx} out of range for {len(bars)} bars"
+        )
+
+    # -----------------------------------------------------------------------
     # Validate direction
     # -----------------------------------------------------------------------
     if direction not in ("BUY", "SELL"):
@@ -260,7 +270,13 @@ def simulate_trade(
         pnl_price    = entry_fill - exit_fill
         risk_per_unit = sl - entry_fill
 
-    # risk_per_unit should be > 0 by construction (validated signal + adverse entry fill)
+    # Explicit invariant: risk_per_unit must be > 0.
+    # Degenerate signals (e.g. sl == entry fill) would produce inf/NaN R; raise early.
+    if risk_per_unit <= 0:
+        raise ValueError(
+            f"risk_per_unit={risk_per_unit} must be > 0 (entry_fill={entry_fill}, sl={sl}). "
+            "Check that the signal passed validation."
+        )
     r_multiple = pnl_price / risk_per_unit
 
     # -----------------------------------------------------------------------

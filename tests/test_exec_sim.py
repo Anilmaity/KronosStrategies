@@ -44,8 +44,8 @@ from strategies.research.exec_sim import Signal, TradeResult, simulate_trade, si
 # Helpers
 # ---------------------------------------------------------------------------
 
-HS = 0.15   # default half_spread
-SL_DEF = 0.05  # default slip
+HS = 0.15       # default half_spread
+SLIP_DEF = 0.05  # default slip
 
 
 def _make_bars(rows: list[dict]) -> pd.DataFrame:
@@ -96,7 +96,7 @@ def test_buy_hits_tp_exact_fills():
     result = simulate_trade(bars, sig)
 
     # Entry fill
-    expected_entry = 2700.00 + HS + SL_DEF    # 2700.20
+    expected_entry = 2700.00 + HS + SLIP_DEF    # 2700.20
     assert result.entry_price == pytest.approx(expected_entry, abs=1e-9)
 
     # Exit: BUY TP fill = tp - half_spread
@@ -140,11 +140,11 @@ def test_buy_hits_sl_exact_fills_and_loss_worse_than_minus1r():
     sig = Signal(direction="BUY", entry_index=0, sl=sl, tp=tp)
     result = simulate_trade(bars, sig)
 
-    expected_entry = 2700.00 + HS + SL_DEF    # 2700.20
+    expected_entry = 2700.00 + HS + SLIP_DEF    # 2700.20
     assert result.entry_price == pytest.approx(expected_entry, abs=1e-9)
 
     # BUY SL fill = sl - half_spread - slip
-    expected_exit = sl - HS - SL_DEF          # 2698.80
+    expected_exit = sl - HS - SLIP_DEF          # 2698.80
     assert result.exit_price == pytest.approx(expected_exit, abs=1e-9)
 
     assert result.exit_reason == "SL"
@@ -191,7 +191,7 @@ def test_sell_hits_tp_exact_fills():
     result = simulate_trade(bars, sig)
 
     # SELL entry fill = O - half_spread - slip
-    expected_entry = 2700.00 - HS - SL_DEF    # 2699.80
+    expected_entry = 2700.00 - HS - SLIP_DEF    # 2699.80
     assert result.entry_price == pytest.approx(expected_entry, abs=1e-9)
 
     # SELL TP fill = tp + half_spread
@@ -232,11 +232,11 @@ def test_sell_hits_sl_exact_fills():
     sig = Signal(direction="SELL", entry_index=0, sl=sl, tp=tp)
     result = simulate_trade(bars, sig)
 
-    expected_entry = 2700.00 - HS - SL_DEF    # 2699.80
+    expected_entry = 2700.00 - HS - SLIP_DEF    # 2699.80
     assert result.entry_price == pytest.approx(expected_entry, abs=1e-9)
 
     # SELL SL fill = sl + half_spread + slip
-    expected_exit = sl + HS + SL_DEF          # 2701.70
+    expected_exit = sl + HS + SLIP_DEF          # 2701.70
     assert result.exit_price == pytest.approx(expected_exit, abs=1e-9)
 
     assert result.exit_reason == "SL"
@@ -278,8 +278,8 @@ def test_same_bar_sl_and_tp_hit_resolves_sl():
     )
     assert result.exit_index == 0
 
-    expected_entry = 2700.00 + HS + SL_DEF    # 2700.20
-    expected_exit  = sl - HS - SL_DEF         # 2698.80
+    expected_entry = 2700.00 + HS + SLIP_DEF    # 2700.20
+    expected_exit  = sl - HS - SLIP_DEF         # 2698.80
     assert result.entry_price == pytest.approx(expected_entry, abs=1e-9)
     assert result.exit_price  == pytest.approx(expected_exit,  abs=1e-9)
 
@@ -304,8 +304,8 @@ def test_same_bar_sl_and_tp_hit_sell_resolves_sl():
     assert result.exit_reason == "SL"
     assert result.exit_index == 0
 
-    expected_entry = 2700.00 - HS - SL_DEF    # 2699.80
-    expected_exit  = sl + HS + SL_DEF         # 2701.70
+    expected_entry = 2700.00 - HS - SLIP_DEF    # 2699.80
+    expected_exit  = sl + HS + SLIP_DEF         # 2701.70
     assert result.entry_price == pytest.approx(expected_entry, abs=1e-9)
     assert result.exit_price  == pytest.approx(expected_exit,  abs=1e-9)
 
@@ -331,8 +331,8 @@ def test_entry_bar_triggers_sl_buy():
     assert result.exit_index == 0
     assert result.bars_held == 1  # only the entry bar
 
-    expected_entry = 2700.00 + HS + SL_DEF
-    expected_exit  = sl - HS - SL_DEF
+    expected_entry = 2700.00 + HS + SLIP_DEF
+    expected_exit  = sl - HS - SLIP_DEF
     assert result.entry_price == pytest.approx(expected_entry, abs=1e-9)
     assert result.exit_price  == pytest.approx(expected_exit,  abs=1e-9)
 
@@ -352,8 +352,8 @@ def test_entry_bar_triggers_sl_sell():
     assert result.exit_reason == "SL"
     assert result.exit_index == 0
 
-    expected_entry = 2700.00 - HS - SL_DEF
-    expected_exit  = sl + HS + SL_DEF
+    expected_entry = 2700.00 - HS - SLIP_DEF
+    expected_exit  = sl + HS + SLIP_DEF
     assert result.entry_price == pytest.approx(expected_entry, abs=1e-9)
     assert result.exit_price  == pytest.approx(expected_exit,  abs=1e-9)
 
@@ -383,10 +383,10 @@ def test_timeout_exit_buy():
 
     # TIMEOUT fill: close of exit bar - half_spread - slip
     close_1 = 2700.60
-    expected_exit = close_1 - HS - SL_DEF     # 2700.40
+    expected_exit = close_1 - HS - SLIP_DEF     # 2700.40
     assert result.exit_price == pytest.approx(expected_exit, abs=1e-9)
 
-    expected_entry = 2700.00 + HS + SL_DEF    # 2700.20
+    expected_entry = 2700.00 + HS + SLIP_DEF    # 2700.20
     expected_pnl = expected_exit - expected_entry
     assert result.pnl_price == pytest.approx(expected_pnl, abs=1e-9)
 
@@ -413,10 +413,10 @@ def test_timeout_exit_sell():
     assert result.exit_index == 1
 
     close_1 = 2699.50
-    expected_exit = close_1 + HS + SL_DEF     # 2699.70
+    expected_exit = close_1 + HS + SLIP_DEF     # 2699.70
     assert result.exit_price == pytest.approx(expected_exit, abs=1e-9)
 
-    expected_entry = 2700.00 - HS - SL_DEF    # 2699.80
+    expected_entry = 2700.00 - HS - SLIP_DEF    # 2699.80
     expected_pnl = expected_entry - expected_exit  # 2699.80 - 2699.70 = 0.10
     assert result.pnl_price == pytest.approx(expected_pnl, abs=1e-9)
 
@@ -446,7 +446,7 @@ def test_eod_exit_buy():
     assert result.exit_index == 1  # last bar
 
     close_last = 2700.60
-    expected_exit = close_last - HS - SL_DEF
+    expected_exit = close_last - HS - SLIP_DEF
     assert result.exit_price == pytest.approx(expected_exit, abs=1e-9)
 
 
@@ -469,7 +469,7 @@ def test_eod_exit_sell():
     assert result.exit_index == 1
 
     close_last = 2699.60
-    expected_exit = close_last + HS + SL_DEF
+    expected_exit = close_last + HS + SLIP_DEF
     assert result.exit_price == pytest.approx(expected_exit, abs=1e-9)
 
 
@@ -557,7 +557,7 @@ def test_custom_half_spread_and_slip():
     assert result.exit_reason == "TP"
 
     # Verify different from defaults
-    default_result = simulate_trade(bars, sig, half_spread=HS, slip=SL_DEF)
+    default_result = simulate_trade(bars, sig, half_spread=HS, slip=SLIP_DEF)
     assert result.entry_price != default_result.entry_price
 
 
@@ -673,7 +673,7 @@ def test_entry_index_mid_series():
     assert result.exit_index == 3
     assert result.exit_reason == "TP"
 
-    expected_entry = 2700.00 + HS + SL_DEF
+    expected_entry = 2700.00 + HS + SLIP_DEF
     expected_exit  = tp - HS
     assert result.entry_price == pytest.approx(expected_entry, abs=1e-9)
     assert result.exit_price  == pytest.approx(expected_exit,  abs=1e-9)
@@ -829,5 +829,112 @@ def test_max_hold_bars_one_timeout():
     assert result.bars_held == 1
 
     close_0 = 2700.40
-    expected_exit = close_0 - HS - SL_DEF
+    expected_exit = close_0 - HS - SLIP_DEF
     assert result.exit_price == pytest.approx(expected_exit, abs=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# 18. Timeout-precedence: TP on the LAST allowed bar beats TIMEOUT
+# ---------------------------------------------------------------------------
+
+def test_timeout_precedence_tp_on_last_bar_buy():
+    """
+    BUY, max_hold_bars=2 → allowed bars are index 0 and 1 (entry+0, entry+1).
+    Bar 1 (the LAST allowed bar) triggers TP.
+    Must record exit_reason="TP" and exit_index=1, NOT "TIMEOUT".
+
+    This guards against a refactor that records TIMEOUT before checking TP/SL
+    on the final scanned bar.
+
+    Bar layout (mid prices):
+      bar 0 (entry): O=2700.00  H=2700.80  L=2699.60  C=2700.50  — no TP/SL
+      bar 1 (last allowed): O=2700.50  H=2701.20  L=2700.20  C=2701.00
+                            high(2701.20) >= tp(2701.00): TP triggered
+                            low(2700.20)  > sl(2699.00):  SL not triggered
+    """
+    sl = 2699.00
+    tp = 2701.00
+    bars = _make_bars([
+        {"time": "2026-01-05 09:00", "open": 2700.00, "high": 2700.80, "low": 2699.60, "close": 2700.50},
+        {"time": "2026-01-05 10:00", "open": 2700.50, "high": 2701.20, "low": 2700.20, "close": 2701.00},
+        {"time": "2026-01-05 11:00", "open": 2701.00, "high": 2701.50, "low": 2700.80, "close": 2701.20},
+    ])
+    sig = Signal(direction="BUY", entry_index=0, sl=sl, tp=tp)
+    result = simulate_trade(bars, sig, max_hold_bars=2)
+
+    assert result.exit_reason == "TP", (
+        f"Expected TP on last allowed bar (index 1), got {result.exit_reason!r}. "
+        "Refactor may be recording TIMEOUT before checking TP/SL on final bar."
+    )
+    assert result.exit_index == 1
+
+    expected_entry = 2700.00 + HS + SLIP_DEF   # 2700.20
+    expected_exit  = tp - HS                   # 2700.85
+    assert result.entry_price == pytest.approx(expected_entry, abs=1e-9)
+    assert result.exit_price  == pytest.approx(expected_exit,  abs=1e-9)
+
+
+def test_timeout_precedence_tp_on_last_bar_sell():
+    """
+    SELL mirror of test_timeout_precedence_tp_on_last_bar_buy.
+    max_hold_bars=2; bar 1 (last allowed) triggers TP for a SELL trade.
+    Must record exit_reason="TP" and exit_index=1, NOT "TIMEOUT".
+
+    Bar layout (mid prices):
+      bar 0 (entry): O=2700.00  H=2700.40  L=2699.60  C=2699.80  — no TP/SL
+      bar 1 (last allowed): O=2699.80  H=2700.10  L=2698.80  C=2699.00
+                            low(2698.80) <= tp(2699.00): TP triggered
+                            high(2700.10) < sl(2701.50):  SL not triggered
+    """
+    sl = 2701.50
+    tp = 2699.00
+    bars = _make_bars([
+        {"time": "2026-01-05 09:00", "open": 2700.00, "high": 2700.40, "low": 2699.60, "close": 2699.80},
+        {"time": "2026-01-05 10:00", "open": 2699.80, "high": 2700.10, "low": 2698.80, "close": 2699.00},
+        {"time": "2026-01-05 11:00", "open": 2699.00, "high": 2699.50, "low": 2698.50, "close": 2698.80},
+    ])
+    sig = Signal(direction="SELL", entry_index=0, sl=sl, tp=tp)
+    result = simulate_trade(bars, sig, max_hold_bars=2)
+
+    assert result.exit_reason == "TP", (
+        f"Expected TP on last allowed bar (index 1), got {result.exit_reason!r}. "
+        "Refactor may be recording TIMEOUT before checking TP/SL on final bar."
+    )
+    assert result.exit_index == 1
+
+    expected_entry = 2700.00 - HS - SLIP_DEF   # 2699.80
+    expected_exit  = tp + HS                   # 2699.15
+    assert result.entry_price == pytest.approx(expected_entry, abs=1e-9)
+    assert result.exit_price  == pytest.approx(expected_exit,  abs=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# 19. entry_index out-of-range → ValueError
+# ---------------------------------------------------------------------------
+
+def test_entry_index_negative_raises():
+    """Negative entry_index must raise ValueError with a descriptive message."""
+    bars = _make_bars([
+        {"time": "2026-01-05 09:00", "open": 2700.00, "high": 2701.00, "low": 2699.00, "close": 2700.50},
+    ])
+    sig = Signal(direction="BUY", entry_index=-1, sl=2699.00, tp=2702.00)
+    with pytest.raises(ValueError, match=r"entry_index"):
+        simulate_trade(bars, sig)
+
+
+def test_entry_index_at_len_raises():
+    """entry_index == len(bars) must raise ValueError (off-by-one guard)."""
+    bars = _make_bars([
+        {"time": "2026-01-05 09:00", "open": 2700.00, "high": 2701.00, "low": 2699.00, "close": 2700.50},
+    ])
+    sig = Signal(direction="BUY", entry_index=1, sl=2699.00, tp=2702.00)
+    with pytest.raises(ValueError, match=r"entry_index"):
+        simulate_trade(bars, sig)
+
+
+def test_empty_bars_raises():
+    """Empty bars DataFrame must raise ValueError before any index access."""
+    bars = _make_bars([])
+    sig = Signal(direction="BUY", entry_index=0, sl=2699.00, tp=2702.00)
+    with pytest.raises(ValueError, match=r"(?i)empty"):
+        simulate_trade(bars, sig)
