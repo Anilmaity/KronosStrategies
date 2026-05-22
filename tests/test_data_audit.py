@@ -209,9 +209,63 @@ def test_gaps_by_month_key_present():
     assert "gaps_by_month" in result, "gaps_by_month key missing from result"
 
 
-def test_gap_also_captured_in_function_signature_without_symbol():
-    """audit_ticks can be called with start,end positional when symbol omitted?
-    Actually spec requires symbol — just test call with all positional args."""
-    df = _ticks(["2026-01-05 08:00:00"])
-    result = audit_ticks("XAU_USD", "2026-01-05 00:00:00", "2026-01-06 00:00:00", ticks=df)
-    assert result["rows"] == 1
+# ---------------------------------------------------------------------------
+# 10. Positive NY-block gap detection
+# ---------------------------------------------------------------------------
+
+def test_five_minute_gap_inside_ny():
+    """A 5-min gap wholly inside NY session (12:00–16:00 UTC) on a weekday
+    must be detected and counted as ≈ 5.0 minutes.
+
+    Guards against an off-by-one in _SESSIONS that silently disables NY
+    detection (e.g. if the NY entry were accidentally removed or mis-typed).
+    """
+    # 12:00 → 13:00 (every 10s), jump to 13:05, then continue to 14:00
+    before = pd.date_range("2026-01-05 12:00:00", "2026-01-05 13:00:00",
+                           freq="10s", tz="UTC")
+    after  = pd.date_range("2026-01-05 13:05:00", "2026-01-05 14:00:00",
+                           freq="10s", tz="UTC")
+    times = list(before.strftime("%Y-%m-%d %H:%M:%S")) + \
+            list(after.strftime("%Y-%m-%d %H:%M:%S"))
+    df = _ticks(times)
+    result = audit_ticks(
+        "XAU_USD", "2026-01-05 00:00:00", "2026-01-05 23:59:59", ticks=df
+    )
+    # Gap = 13:00 → 13:05 = 5 minutes; both endpoints in NY 12–16 block
+    assert result["gaps_minutes"] == pytest.approx(5.0, abs=0.02)
+    assert len(result["gap_list"]) == 1
+    assert result["gap_list"][0][2] == pytest.approx(5.0, abs=0.02)
+
+
+# ---------------------------------------------------------------------------
+# 11. Boundary: exactly 60 s does NOT count; 61 s DOES count
+# ---------------------------------------------------------------------------
+
+def test_exactly_60s_gap_not_counted():
+    """A gap of exactly 60 seconds (== threshold) inside a session must NOT
+    be counted (threshold is strictly > 60 s)."""
+    times = [
+        "2026-01-05 08:00:00",  # London block
+        "2026-01-05 08:01:00",  # exactly 60 s later — NOT a qualifying gap
+    ]
+    df = _ticks(times)
+    result = audit_ticks(
+        "XAU_USD", "2026-01-05 00:00:00", "2026-01-05 23:59:59", ticks=df
+    )
+    assert result["gaps_minutes"] == pytest.approx(0.0, abs=1e-6)
+    assert result["gap_list"] == []
+
+
+def test_61s_gap_counted():
+    """A gap of 61 seconds (just over threshold) inside a session block IS
+    counted, and contributes ≈ 61/60 ≈ 1.017 minutes."""
+    t0 = pd.Timestamp("2026-01-05 08:00:00", tz="UTC")
+    t1 = t0 + pd.Timedelta(seconds=61)
+    df = _ticks([t0.strftime("%Y-%m-%d %H:%M:%S"),
+                 t1.strftime("%Y-%m-%d %H:%M:%S")])
+    result = audit_ticks(
+        "XAU_USD", "2026-01-05 00:00:00", "2026-01-05 23:59:59", ticks=df
+    )
+    expected_minutes = 61.0 / 60.0
+    assert result["gaps_minutes"] == pytest.approx(expected_minutes, abs=1e-6)
+    assert len(result["gap_list"]) == 1

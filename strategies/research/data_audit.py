@@ -11,9 +11,10 @@ A "gap" is the interval between two consecutive ticks that are:
   - Both on the same calendar date (UTC)
   - Both on a weekday (Mon–Fri)
   - Both within the SAME named session block (London OR NY)
-  - The gap duration > 60 seconds
+  - The gap duration > _GAP_THRESHOLD_SECONDS (60 seconds)
 
-The full gap duration (in minutes) is summed — not just the excess over 60s.
+The full gap duration (in minutes) is summed — not just the excess over the
+threshold.
 """
 from __future__ import annotations
 
@@ -31,6 +32,9 @@ _SESSIONS: list[tuple[int, int]] = [
     (7, 11),   # London
     (12, 16),  # New York
 ]
+
+# Minimum inter-tick gap (exclusive) that qualifies as a data gap.
+_GAP_THRESHOLD_SECONDS: int = 60
 
 
 def _session_block(ts: pd.Timestamp) -> int | None:
@@ -127,7 +131,6 @@ def audit_ticks(
     gap_list: list[tuple[pd.Timestamp, pd.Timestamp, float]] = []
     gaps_by_month: dict[str, float] = {}
 
-    times = window["time"].values  # numpy datetime64[ns] array for speed
     times_ts = window["time"]      # pandas Series of Timestamps
 
     for i in range(1, rows):
@@ -135,7 +138,7 @@ def audit_ticks(
         t_curr = times_ts.iloc[i]
 
         gap_seconds = (t_curr - t_prev).total_seconds()
-        if gap_seconds <= 60:
+        if gap_seconds <= _GAP_THRESHOLD_SECONDS:
             continue  # not a qualifying gap
 
         # Both ticks must be on the same calendar date (UTC)
@@ -161,7 +164,7 @@ def audit_ticks(
         month_key = t_prev.strftime("%Y-%m")
         gaps_by_month[month_key] = gaps_by_month.get(month_key, 0.0) + gap_minutes
 
-    total_gaps_minutes = sum(g[2] for g in gap_list)
+    total_gaps_minutes = sum(gaps_by_month.values())
 
     return {
         "rows":            rows,
