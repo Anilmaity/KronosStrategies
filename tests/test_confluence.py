@@ -630,6 +630,19 @@ class TestAggregators:
         ctx = self._ctx_with_volume_spike()
         assert count_met([], ctx) == 0
 
+    def test_all_met_raises_when_dxy_included(self):
+        """all_met raises ConfluenceUnavailable even when all other detectors are True.
+
+        Documents the footgun: including ``dxy_inverse_correlation_holding`` in a
+        confluence list will always explode at evaluation time, regardless of how
+        many other confluences are satisfied. dxy is excluded from SEARCHABLE so
+        automated tuning never hits this path.
+        """
+        ctx = self._ctx_with_volume_spike()
+        # volume_anomaly is True for this context; dxy always raises
+        with pytest.raises(ConfluenceUnavailable):
+            all_met(["volume_anomaly", "dxy_inverse_correlation_holding"], ctx)
+
 
 # ---------------------------------------------------------------------------
 # 9. No-look-ahead invariant
@@ -713,5 +726,40 @@ class TestNoLookAhead:
         bars_extended = self._append_future_bar(bars)
         ctx_ext = ConfluenceContext(bars=bars_extended, idx=4, direction="BUY", lookback=20)
         result_after = ob_present(ctx_ext)
+
+        assert result_before == result_after
+
+    def test_htf_bias_no_lookahead(self):
+        """Appending a future LTF bar (and a future HTF bar timestamped >= bars.time[idx])
+        must NOT change htf_bias's result at idx=4.
+
+        The future HTF bar is timestamped AFTER bars.time[idx=4], so htf_bias must
+        filter it out via its ``time < entry_time`` guard and produce the same result.
+        """
+        bars = self._base_bars()
+        # Build 3 HTF bars all before bars.time[idx=4] = 2026-01-13 08:20
+        htf = _make_htf_bars([
+            {"open": 2600, "high": 2610, "low": 2595, "close": 2600},  # 2026-01-12 00:00
+            {"open": 2600, "high": 2615, "low": 2598, "close": 2608},  # 2026-01-12 04:00
+            {"open": 2608, "high": 2620, "low": 2605, "close": 2618},  # 2026-01-12 08:00
+        ], base_time="2026-01-12 00:00:00")
+
+        ctx = ConfluenceContext(bars=bars, idx=4, direction="BUY", htf_bars=htf, lookback=2)
+        result_before = htf_bias(ctx)
+
+        # Append a future LTF bar
+        bars_extended = self._append_future_bar(bars)
+
+        # Append a future HTF bar timestamped AFTER bars.time[idx=4] = 2026-01-13 08:20
+        future_htf_bar = pd.DataFrame([{
+            "time":   _ts("2026-01-13 12:00:00"),
+            "open":   2618.0, "high": 2660.0, "low": 2615.0, "close": 2658.0,
+            "volume": 1000.0, "spread": 0.30,
+        }])
+        htf_extended = pd.concat([htf, future_htf_bar], ignore_index=True)
+
+        ctx_ext = ConfluenceContext(bars=bars_extended, idx=4, direction="BUY",
+                                    htf_bars=htf_extended, lookback=2)
+        result_after = htf_bias(ctx_ext)
 
         assert result_before == result_after

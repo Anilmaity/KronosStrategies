@@ -194,13 +194,17 @@ def liquidity_sweep(ctx: ConfluenceContext) -> bool:
 
     if ctx.direction == "BUY":
         for j in range(1, n):
-            prior_swing_low = lows[:j].min()
-            if lows[j] < prior_swing_low and closes[j] > prior_swing_low:
+            # Running minimum of all lows before bar j in the window (not a
+            # structural swing low — just the lowest low seen so far).
+            prior_running_min = lows[:j].min()
+            if lows[j] < prior_running_min and closes[j] > prior_running_min:
                 return True
     else:  # SELL
         for j in range(1, n):
-            prior_swing_high = highs[:j].max()
-            if highs[j] > prior_swing_high and closes[j] < prior_swing_high:
+            # Running maximum of all highs before bar j in the window (not a
+            # structural swing high — just the highest high seen so far).
+            prior_running_max = highs[:j].max()
+            if highs[j] > prior_running_max and closes[j] < prior_running_max:
                 return True
 
     return False
@@ -243,17 +247,23 @@ def fvg_present(ctx: ConfluenceContext) -> bool:
 
 
 def ob_present(ctx: ConfluenceContext) -> bool:
-    """Return True iff a directionally-aligned Order Block exists within lookback.
+    """Return True iff ANY directionally-aligned Order Block exists within the lookback window.
 
     Simplified OB definition (documented, defensible, tunable by Task 7):
 
-    Bullish OB (BUY): the last bearish candle (close < open) that is immediately
-    followed by a bullish candle (close > open) within bars[max(0,idx-lookback)..idx].
-    This represents the final institutional accumulation candle before an up-move.
+    Bullish OB (BUY): search bars[max(0,idx-lookback)..idx] for ANY bearish candle
+    (close < open) that is immediately followed by a bullish candle (close > open).
+    Returns True if at least one such pair exists anywhere in the window.
+    This pattern marks an institutional accumulation candle preceding an up-move.
 
-    Bearish OB (SELL): the last bullish candle (close > open) that is immediately
-    followed by a bearish candle (close < open) within the same window.
-    This represents the final institutional distribution candle before a down-move.
+    Bearish OB (SELL): search bars[max(0,idx-lookback)..idx] for ANY bullish candle
+    (close > open) that is immediately followed by a bearish candle (close < open).
+    Returns True if at least one such pair exists anywhere in the window.
+    This pattern marks an institutional distribution candle preceding a down-move.
+
+    Note: the loop scans ALL pairs in the window and sets found=True whenever a
+    qualifying pair is encountered (found is never reset). The name ``ob_present``
+    reflects this "any aligned OB in the lookback" semantic — NOT "the last OB".
 
     Only bars[0..idx] are read. Returns False when fewer than 2 bars in window.
     """
