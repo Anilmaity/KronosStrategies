@@ -1,0 +1,69 @@
+{
+  "family": "F \u2014 Breaker Block Reclaim",
+  "params": {
+    "tf": "15m",
+    "half_spread": 0.15,
+    "slip": 0.05,
+    "session_windows": [
+      [
+        7,
+        11
+      ],
+      [
+        12,
+        16
+      ]
+    ],
+    "sl_rule": "ob_low - stop_buffer (BUY) / ob_high + stop_buffer (SELL)",
+    "tp_rule": "2.0R from entry",
+    "max_hold_bars": 48,
+    "stop_buffer": 0.3,
+    "min_rr": 1.5,
+    "displace_atr_mult": 1.2,
+    "swing_lookback": 5,
+    "ob_search_bars": 10,
+    "max_breaker_age": 80
+  },
+  "n_trades": 501,
+  "winrate": 0.3094,
+  "expectancy_R": -0.2212,
+  "avg_win_R": 1.7392,
+  "avg_loss_R": -1.0994,
+  "profit_factor": 0.7087,
+  "max_dd_R": 110.8049,
+  "trades_per_day": 1.2131,
+  "by_hour": {
+    "7": {
+      "trades": 104,
+      "winrate": 0.3942
+    },
+    "8": {
+      "trades": 63,
+      "winrate": 0.3651
+    },
+    "9": {
+      "trades": 34,
+      "winrate": 0.2059
+    },
+    "10": {
+      "trades": 44,
+      "winrate": 0.2273
+    },
+    "12": {
+      "trades": 63,
+      "winrate": 0.3333
+    },
+    "13": {
+      "trades": 63,
+      "winrate": 0.2698
+    },
+    "14": {
+      "trades": 75,
+      "winrate": 0.2533
+    },
+    "15": {
+      "trades": 55,
+      "winrate": 0.3091
+    }
+  }
+}
