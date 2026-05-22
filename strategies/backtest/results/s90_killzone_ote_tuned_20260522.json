@@ -1,0 +1,181 @@
+{
+  "base_n": 52,
+  "gate_met": false,
+  "chosen_stack": [
+    "liquidity_sweep"
+  ],
+  "params": {
+    "tf": "5m",
+    "htf_tf": "1h",
+    "half_spread": 0.15,
+    "slip": 0.05,
+    "session_windows": {
+      "london": "08:00-10:00 UTC",
+      "ny": "13:30-15:30 UTC"
+    },
+    "ote_zone": "62%-79% Fibonacci retracement",
+    "max_hold_bars": 36
+  },
+  "n_trades": 42,
+  "winrate": 0.4762,
+  "wilson_lb": 0.3336,
+  "expectancy_R": 0.5545,
+  "avg_win_R": 2.1894,
+  "avg_loss_R": -0.9318,
+  "profit_factor": 2.1361,
+  "max_consec_losers": 12,
+  "max_dd_R": 11.4607,
+  "trades_per_day": 0.1469,
+  "by_hour": {
+    "8": {
+      "trades": 11,
+      "winrate": 0.9091
+    },
+    "9": {
+      "trades": 6,
+      "winrate": 1.0
+    },
+    "10": {
+      "trades": 1,
+      "winrate": 1.0
+    },
+    "13": {
+      "trades": 4,
+      "winrate": 0.0
+    },
+    "14": {
+      "trades": 15,
+      "winrate": 0.2
+    },
+    "15": {
+      "trades": 5,
+      "winrate": 0.0
+    }
+  },
+  "top_candidates": [
+    {
+      "stack": [
+        "htf_bias"
+      ],
+      "n_trades": 26,
+      "winrate": 0.5769,
+      "wilson_lb": 0.3895,
+      "expectancy_R": 0.7061,
+      "trades_per_day": 0.0909,
+      "meets_gate": false
+    },
+    {
+      "stack": [
+        "htf_bias",
+        "session_killzone"
+      ],
+      "n_trades": 26,
+      "winrate": 0.5769,
+      "wilson_lb": 0.3895,
+      "expectancy_R": 0.7061,
+      "trades_per_day": 0.0909,
+      "meets_gate": false
+    },
+    {
+      "stack": [
+        "htf_bias",
+        "ob_present"
+      ],
+      "n_trades": 26,
+      "winrate": 0.5769,
+      "wilson_lb": 0.3895,
+      "expectancy_R": 0.7061,
+      "trades_per_day": 0.0909,
+      "meets_gate": false
+    },
+    {
+      "stack": [
+        "htf_bias",
+        "session_killzone",
+        "ob_present"
+      ],
+      "n_trades": 26,
+      "winrate": 0.5769,
+      "wilson_lb": 0.3895,
+      "expectancy_R": 0.7061,
+      "trades_per_day": 0.0909,
+      "meets_gate": false
+    },
+    {
+      "stack": [
+        "htf_bias",
+        "fvg_present"
+      ],
+      "n_trades": 11,
+      "winrate": 0.5455,
+      "wilson_lb": 0.2801,
+      "expectancy_R": 0.6333,
+      "trades_per_day": 0.0385,
+      "meets_gate": false
+    },
+    {
+      "stack": [
+        "htf_bias",
+        "session_killzone",
+        "fvg_present"
+      ],
+      "n_trades": 11,
+      "winrate": 0.5455,
+      "wilson_lb": 0.2801,
+      "expectancy_R": 0.6333,
+      "trades_per_day": 0.0385,
+      "meets_gate": false
+    },
+    {
+      "stack": [
+        "htf_bias",
+        "fvg_present",
+        "ob_present"
+      ],
+      "n_trades": 11,
+      "winrate": 0.5455,
+      "wilson_lb": 0.2801,
+      "expectancy_R": 0.6333,
+      "trades_per_day": 0.0385,
+      "meets_gate": false
+    },
+    {
+      "stack": [
+        "htf_bias",
+        "liquidity_sweep"
+      ],
+      "n_trades": 22,
+      "winrate": 0.5,
+      "wilson_lb": 0.3072,
+      "expectancy_R": 0.5574,
+      "trades_per_day": 0.0769,
+      "meets_gate": false
+    },
+    {
+      "stack": [
+        "htf_bias",
+        "session_killzone",
+        "liquidity_sweep"
+      ],
+      "n_trades": 22,
+      "winrate": 0.5,
+      "wilson_lb": 0.3072,
+      "expectancy_R": 0.5574,
+      "trades_per_day": 0.0769,
+      "meets_gate": false
+    },
+    {
+      "stack": [
+        "htf_bias",
+        "liquidity_sweep",
+        "ob_present"
+      ],
+      "n_trades": 22,
+      "winrate": 0.5,
+      "wilson_lb": 0.3072,
+      "expectancy_R": 0.5574,
+      "trades_per_day": 0.0769,
+      "meets_gate": false
+    }
+  ]
+}
