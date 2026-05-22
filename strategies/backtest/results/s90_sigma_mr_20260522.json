@@ -1,0 +1,77 @@
+{
+  "family": "E_sigma_mr",
+  "params": {
+    "tf": "5m",
+    "atr_len": 20,
+    "sigma_mult": 3.0,
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 0.5,
+    "half_spread": 0.15,
+    "slip": 0.05,
+    "session_windows": [
+      [
+        7,
+        11
+      ],
+      [
+        12,
+        16
+      ]
+    ],
+    "sl_rule": "entry_open + sl_atr_mult * ATR(k)",
+    "tp_rule": "entry_open - tp_atr_mult * ATR(k)  [toward reversion]",
+    "max_hold_bars": 12,
+    "move_measure": "high-low range of spike bar",
+    "atr_type": "Wilder smoothed (alpha=1/atr_len), lagged one bar"
+  },
+  "n_trades": 271,
+  "winrate": 0.6679,
+  "expectancy_R": -0.1819,
+  "avg_win_R": 0.2461,
+  "avg_loss_R": -1.0427,
+  "profit_factor": 0.4746,
+  "max_dd_R": 48.8306,
+  "trades_per_day": 0.6594,
+  "by_hour": {
+    "7": {
+      "trades": 17,
+      "winrate": 0.7059
+    },
+    "8": {
+      "trades": 21,
+      "winrate": 0.8095
+    },
+    "9": {
+      "trades": 13,
+      "winrate": 0.6923
+    },
+    "10": {
+      "trades": 15,
+      "winrate": 0.7333
+    },
+    "11": {
+      "trades": 2,
+      "winrate": 0.5
+    },
+    "12": {
+      "trades": 60,
+      "winrate": 0.65
+    },
+    "13": {
+      "trades": 72,
+      "winrate": 0.6806
+    },
+    "14": {
+      "trades": 44,
+      "winrate": 0.6818
+    },
+    "15": {
+      "trades": 24,
+      "winrate": 0.4583
+    },
+    "16": {
+      "trades": 3,
+      "winrate": 0.6667
+    }
+  }
+}
