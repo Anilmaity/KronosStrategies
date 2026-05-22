@@ -1,0 +1,43 @@
+{
+  "family": "C \u2014 Asia Range Break-and-Retest",
+  "params": {
+    "timeframe": "5m",
+    "asia_session_utc": "00:00\u201305:55",
+    "london_session_utc": "07:00\u201310:55",
+    "sl_buffer": 0.5,
+    "min_rr": 1.5,
+    "max_hold_bars": 48,
+    "half_spread": 0.15,
+    "slip": 0.05
+  },
+  "n_trades": 140,
+  "winrate": 0.3214,
+  "expectancy_R": -0.0508,
+  "avg_win_R": 1.8236,
+  "avg_loss_R": -0.9388,
+  "profit_factor": 0.9202,
+  "max_dd_R": 23.8485,
+  "trades_per_day": 0.4757,
+  "by_hour": {
+    "7": {
+      "trades": 57,
+      "winrate": 0.2807
+    },
+    "8": {
+      "trades": 35,
+      "winrate": 0.3714
+    },
+    "9": {
+      "trades": 29,
+      "winrate": 0.3793
+    },
+    "10": {
+      "trades": 18,
+      "winrate": 0.2778
+    },
+    "11": {
+      "trades": 1,
+      "winrate": 0.0
+    }
+  }
+}
