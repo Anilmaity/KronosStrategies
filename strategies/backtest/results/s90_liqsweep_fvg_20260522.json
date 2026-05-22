@@ -1,0 +1,65 @@
+{
+  "family": "A_liqsweep_fvg",
+  "params": {
+    "tf": "5m",
+    "htf": "4h",
+    "half_spread": 0.15,
+    "slip": 0.05,
+    "session_windows": [
+      "London 07-11 UTC",
+      "NY 12-16 UTC"
+    ],
+    "sl_rule": "swept_extreme + 0.50 buffer",
+    "tp_rule": "opposite session extreme",
+    "min_rr": 1.0,
+    "fvg_lookback": 10,
+    "fvg_proximity": 5.0,
+    "max_hold_bars": 48
+  },
+  "n_trades": 209,
+  "winrate": 0.3588516746411483,
+  "expectancy_R": 0.1756414318621931,
+  "avg_win_R": 2.4580970769665336,
+  "avg_loss_R": -1.101852399352923,
+  "profit_factor": 1.2486251367131689,
+  "max_dd_R": 30.21185395840272,
+  "trades_per_day": 0.7307692307692307,
+  "by_hour": {
+    "7": {
+      "trades": 61,
+      "winrate": 0.3770491803278688
+    },
+    "8": {
+      "trades": 24,
+      "winrate": 0.4166666666666667
+    },
+    "9": {
+      "trades": 12,
+      "winrate": 0.75
+    },
+    "10": {
+      "trades": 5,
+      "winrate": 0.0
+    },
+    "12": {
+      "trades": 75,
+      "winrate": 0.25333333333333335
+    },
+    "13": {
+      "trades": 21,
+      "winrate": 0.47619047619047616
+    },
+    "14": {
+      "trades": 9,
+      "winrate": 0.4444444444444444
+    },
+    "15": {
+      "trades": 1,
+      "winrate": 0.0
+    },
+    "16": {
+      "trades": 1,
+      "winrate": 0.0
+    }
+  }
+}
