@@ -42,7 +42,8 @@ strategies are untouched until they pick up the new code on redeploy.
 
 ## 2. Go-live runbook
 
-> **Pre-req:** `position_monitor` must be running — it's what fires SL/TP **and**
+> **Pre-req:** the `position_manager` service (which runs `position_monitor.py`)
+> must be running — it's what fires SL/TP **and**
 > the new TIME_EXIT. SL/TP are also attached at the broker (backstop); TIME_EXIT
 > is **only** enforced by the monitor.
 
@@ -55,7 +56,7 @@ python -m db.deploy_combined_v2
 # 2. (RECOMMENDED) smoke-test first — logs the exact orders, places NONE.
 #    Edit compose.yml: uncomment  DRY_RUN: "true"  under kronos_combined_v2, then:
 cd C:\Projects\PycharmProjects\personal\KronosStrategies
-docker compose up -d --build kronos_combined_v2 position_monitor
+docker compose up -d --build kronos_combined_v2 position_manager
 docker compose logs -f kronos_combined_v2     # watch [CV2 FIRE] + [DRY_RUN] lines
 
 # 3. Go live (real money):
@@ -63,7 +64,7 @@ cd C:\Projects\PycharmProjects\personal\KronosStrategies\strategies
 python -m db.deploy_combined_v2 --commit        # writes Strategy + deployed UserStrategy
 # re-comment DRY_RUN in compose.yml, then:
 cd C:\Projects\PycharmProjects\personal\KronosStrategies
-docker compose up -d --build kronos_combined_v2 position_monitor
+docker compose up -d --build kronos_combined_v2 position_manager
 ```
 
 Sizing is **0.01 lot/leg** (`entry_quantity=0.01`, `multiplyer=1`); the book holds

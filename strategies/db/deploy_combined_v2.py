@@ -12,7 +12,7 @@ Inserts (idempotently):
 
 This is the REAL-MONEY ENABLE step. It is dry-run by default (prints the plan,
 writes nothing). Re-run with --commit to persist. After committing, start the
-runner:  docker compose up -d kronos_combined_v2   (and ensure position_monitor
+runner:  docker compose up -d kronos_combined_v2   (and ensure the position_manager service
 is running for the SL/TP/TIME_EXIT triggers).
 
 Run:
@@ -151,7 +151,7 @@ def main(commit: bool) -> int:
         if commit:
             sess.commit()
             print("\nCOMMITTED — Combined Suite v2 is now LIVE-ENABLED in the DB.")
-            print("Next: docker compose up -d kronos_combined_v2  (and position_monitor).")
+            print("Next: docker compose up -d kronos_combined_v2  (and position_manager).")
         else:
             sess.rollback()
             print("\nDRY-RUN (no writes). Re-run with --commit to go live.")

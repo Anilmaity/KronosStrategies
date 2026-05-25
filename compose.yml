@@ -51,69 +51,12 @@ services:
       TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
 
-  # Liquidity sweep family. VAR1 retired 2026-05-18 (-582 pts / 7,337 trades).
-  # VAR2 retired 2026-05-19 — UserStrategy removed from DB; runner archived.
-  # Only VAR3 remains live.
-
-  micro_scalper:
-    build: ./strategies
-    restart: always
-    command: python micro_scalper.py
-    env_file: .env
-    environment:
-      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      XAUUSD_SYMBOL: XAU_USD
-
-  # OOS-validated ICT/SMC suite (param-sweep + walk-forward + MC + hold-out).
-  # Each variation runs a separate xauusd_runner process and dispatches to its
-  # strategy module via the XAUUSD_STRATEGY env var.
-  # ict_s2_fvg retired 2026-05-19 — UserStrategy removed from DB; runner archived
-  # to xauusd_strategies/_archive/s02_fvg_fill.py.
-
-  ict_s4_breaker:
-    build: ./strategies
-    restart: always
-    command: python xauusd_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      XAUUSD_STRATEGY: S4
-      XAUUSD_SYMBOL:   XAU_USD
-      XAUUSD_POLL_SEC: "60"
-
-  # ict_s6_daily_crt retired 2026-05-18 — only 71 trades over 16mo (~1/week),
-  # +42 pts marginal P&L; sample too small to validate. xauusd_strategies/s06_daily_crt.py
-  # moved to _archive/.
-
-
   # ───────────────────────────────────────────────────────────────────────────
   # Research strategies (backtest_strategies/sNN_*.py). Generic
   # research_runner.py dispatches to each via RESEARCH_STRATEGY env var.
   # These are research-only — not OOS-validated. See backtest results in
   # strategies/backtest/results/ before tuning entry quantities.
   # ───────────────────────────────────────────────────────────────────────────
-
-  research_ob_mit:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: s03_ob_mitigation
-
-  research_bb:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: s04_breaker_block
 
   research_m90_bias:
     build: ./strategies
@@ -135,16 +78,6 @@ services:
       TIGERDATA_URL: ${TIGERDATA_URL:-}
       RESEARCH_STRATEGY: s14_ob_mit_bias
 
-  research_m90_ny_buy:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: s11_m90_fade_ny
-
   # Concept strategies (concept_strategies/cNN_*.py). C03_FVG_FILL promoted
   # live 2026-05-18 — top performer of 20-concept build (2026-05-17 batch).
   concept_c03_fvg_fill:
@@ -158,74 +91,16 @@ services:
       RESEARCH_STRATEGY: c03_fvg_fill
 
   # ───────────────────────────────────────────────────────────────────────────
-  # Kronos v3 port (XAU/USD scalping suite) — 16mo tick backtest.
-  # Each strategy ships with the v15e production gates baked into get_signal:
-  #   • TNX |z_20d| >= 0.5            (shared/macro_gate.py, fails open)
-  #   • Event-window E3 (+/-2h major events; shared/event_gate.py, fails open)
-  # Expected in-band perf (per TradingSkills EXP_V15E_FINAL_REPORT.md):
-  #   78.3% OOS win-day @ 5.02 tpd, DD 94, +2418 pts / 78 fire-days.
-  # SH (momo short) NOT deployed -- v15e dropped it (anti-predictive + DD).
-  # ───────────────────────────────────────────────────────────────────────────
-
-  kronos_s02:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: kronos_s02_stoch_revert
-
-  kronos_s05:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: kronos_s05_threebar_pull
-
-  kronos_s06:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: kronos_s06_session_sweep
-
-  kronos_s07:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: kronos_s07_crt
-
-  kronos_s14:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: kronos_s14_m5_ema_stretch
-
-  # ───────────────────────────────────────────────────────────────────────────
   # Combined Suite v2 — the WHOLE two-sided XAU/USD book as ONE strategy.
   #   MR base (S02/S05/S06/S07/S14, reused legs) + long fades (E1/E2/E3) +
   #   bear-day short fades (SE1/SE2); BOS daily-bias gate; per-leg ATR exits +
   #   max-holds (via the new Signal.max_hold_min -> TIME_EXIT trigger); holds
   #   several legs open at once (CONFIG.max_concurrent_positions=12).
+  #   The MR legs (S02/S05/S06/S07/S14) are now traded ONLY via this combined
+  #   strategy — the standalone kronos_s02/s05/s06/s07/s14 services were removed
+  #   2026-05-25 (their DB strategies were deleted) to avoid double-firing.
   # NOTE the enlarged windows/fetch-depth: the MR legs need 205 M15/M5 bars, so
-  #   the default WIN_15M=100 would keep them silent (this also under-feeds the
-  #   standalone kronos_s02/s05/s14 services above — consider adding the same).
+  #   the default WIN_15M=100 would keep them silent.
   # SAFETY: set DRY_RUN: "true" here to smoke-test (logs orders, places NONE).
   # ───────────────────────────────────────────────────────────────────────────
   kronos_combined_v2:
