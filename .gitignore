@@ -1,0 +1,4 @@
+# Scratch / ad-hoc read-only helper scripts — not part of the deployed system.
+# Already-tracked files here (place_test_order.py, dummy_trade_m90_fade.py)
+# stay tracked; this just stops new ad-hoc helpers from being committed.
+strategies/_scratch/
