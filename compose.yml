@@ -216,3 +216,29 @@ services:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
       RESEARCH_STRATEGY: kronos_s14_m5_ema_stretch
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Combined Suite v2 — the WHOLE two-sided XAU/USD book as ONE strategy.
+  #   MR base (S02/S05/S06/S07/S14, reused legs) + long fades (E1/E2/E3) +
+  #   bear-day short fades (SE1/SE2); BOS daily-bias gate; per-leg ATR exits +
+  #   max-holds (via the new Signal.max_hold_min -> TIME_EXIT trigger); holds
+  #   several legs open at once (CONFIG.max_concurrent_positions=12).
+  # NOTE the enlarged windows/fetch-depth: the MR legs need 205 M15/M5 bars, so
+  #   the default WIN_15M=100 would keep them silent (this also under-feeds the
+  #   standalone kronos_s02/s05/s14 services above — consider adding the same).
+  # SAFETY: set DRY_RUN: "true" here to smoke-test (logs orders, places NONE).
+  # ───────────────────────────────────────────────────────────────────────────
+  kronos_combined_v2:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: kronos_combined_v2
+      RESEARCH_WIN_15M: "260"
+      RESEARCH_WIN_5M:  "260"
+      RESEARCH_DAYS_15M: "7"
+      RESEARCH_DAYS_5M:  "4"
+      # DRY_RUN: "true"   # uncomment to smoke-test without placing real orders

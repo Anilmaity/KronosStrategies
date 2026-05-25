@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shared.tsdb_reader import fetch_latest_ltp
 from shared.models import Session, Position, Trigger, Order, UserStrategy, CurrencyPair
 from shared.market_timing import is_market_closed_utc
+from shared.metaapi_client import close_position_by_id
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Config
@@ -122,14 +123,44 @@ def _check_triggers(current_price: float) -> None:
             )
 
             for trigger in pending:
-                if not _trigger_fired(trigger, current_price):
-                    continue
-
-                log.info(
-                    "[TRIGGER] %s fired | price=%.2f trigger_price=%.2f | pos=%s",
-                    trigger.trigger_type, current_price,
-                    float(trigger.trigger_price), pos.id,
+                # TIME_EXIT triggers are tagged CUSTOM + order_type="TIME_EXIT"
+                # and carry an absolute UNIX expiry epoch in trigger_price (NOT a
+                # price). They MUST be evaluated on wall-clock, never via the
+                # price comparison below (an epoch ~1.7e9 would otherwise fire a
+                # price<=epoch trigger instantly). See entry_manager.place_entry.
+                is_time_exit = (
+                    trigger.trigger_type == "CUSTOM"
+                    and (trigger.order_type or "") == "TIME_EXIT"
                 )
+                if is_time_exit:
+                    if time.time() < float(trigger.trigger_price):
+                        continue
+                    label = "TIME_EXIT"
+                    log.info("[TRIGGER] TIME_EXIT fired | held past max-hold | pos=%s", pos.id)
+                    # Unlike SL/TP (attached at the broker, auto-closed there),
+                    # a time-exit has NO broker-side equivalent. Actively close
+                    # the MetaAPI position; otherwise the DB flattens but the real
+                    # position rides on to its attached SL/TP.
+                    entry_order = (
+                        sess.query(Order)
+                        .filter_by(position_id=pos.id, condition="ENTRY")
+                        .first()
+                    )
+                    broker_pid = entry_order.broker_order_id if entry_order else None
+                    closed_ok = close_position_by_id(broker_pid) if broker_pid else False
+                    if not closed_ok:
+                        log.warning(
+                            "[TIME_EXIT] broker close not confirmed for pos=%s "
+                            "(broker_pid=%s) — recording DB close anyway; broker "
+                            "SL/TP remain attached as a backstop", pos.id, broker_pid)
+                else:
+                    if not _trigger_fired(trigger, current_price):
+                        continue
+                    label = trigger.trigger_type
+                    log.info(
+                        "[TRIGGER] %s fired | price=%.2f trigger_price=%.2f | pos=%s",
+                        label, current_price, float(trigger.trigger_price), pos.id,
+                    )
 
                 # Mark this trigger as triggered
                 trigger.status = "TRIGGERED"
@@ -141,13 +172,13 @@ def _check_triggers(current_price: float) -> None:
                     id=uuid.uuid4(),
                     symbol=SYMBOL,
                     price=Decimal(str(current_price)),
-                    condition=trigger.trigger_type,
+                    condition=label,
                     side=trigger.side,
                     quantity=trigger.quantity,
                     amount=Decimal(str(round(current_price * close_qty, 2))),
                     order_type="MARKET",
                     status="EXECUTED",
-                    reason=trigger.trigger_type,
+                    reason=label,
                     position_id=pos.id,
                     user_broker_id=user_broker_id,
                 )

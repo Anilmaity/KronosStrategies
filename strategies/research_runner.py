@@ -41,6 +41,13 @@ POLL_INTERVAL  = int(os.getenv("RESEARCH_POLL_SEC", "5"))
 WIN_1M         = int(os.getenv("RESEARCH_WIN_1M",  "60"))
 WIN_5M         = int(os.getenv("RESEARCH_WIN_5M",  "80"))
 WIN_15M        = int(os.getenv("RESEARCH_WIN_15M", "100"))
+# How many days of candles to pull (defaults preserve prior behaviour). A
+# strategy whose legs need a long lookback (e.g. kronos_combined_v2's MR legs
+# need 205 M15/M5 bars) raises these so the tail() window can actually fill,
+# including across weekend gaps.
+DAYS_1M        = int(os.getenv("RESEARCH_DAYS_1M",  "1"))
+DAYS_5M        = int(os.getenv("RESEARCH_DAYS_5M",  "2"))
+DAYS_15M       = int(os.getenv("RESEARCH_DAYS_15M", "3"))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -89,9 +96,9 @@ def main():
                 time.sleep(POLL_INTERVAL)
                 continue
 
-            c1m  = fetch_candles("1m",  days=1, symbol=SYMBOL)
-            c5m  = fetch_candles("5m",  days=2, symbol=SYMBOL)
-            c15m = fetch_candles("15m", days=3, symbol=SYMBOL)
+            c1m  = fetch_candles("1m",  days=DAYS_1M,  symbol=SYMBOL)
+            c5m  = fetch_candles("5m",  days=DAYS_5M,  symbol=SYMBOL)
+            c15m = fetch_candles("15m", days=DAYS_15M, symbol=SYMBOL)
 
             if c1m.empty or not _is_new_1m(c1m):
                 time.sleep(POLL_INTERVAL)
@@ -129,12 +136,17 @@ def main():
                 reason=sig.reason,
                 zone_low=float(sig.entry_price),
                 zone_high=float(sig.entry_price),
+                max_hold_min=getattr(sig, "max_hold_min", None),
             )
             log.info(
-                "[%s SIGNAL] %s @ %.2f | SL=%.2f TP=%.2f | %s",
-                name, sig.side, sig.entry_price, sig.stop_loss, sig.take_profit, sig.reason,
+                "[%s SIGNAL] %s @ %.2f | SL=%.2f TP=%.2f | maxhold=%s | %s",
+                name, sig.side, sig.entry_price, sig.stop_loss, sig.take_profit,
+                getattr(sig, "max_hold_min", None), sig.reason,
             )
-            placed = place_entry(entry, symbol=SYMBOL, variation=name)
+            placed = place_entry(
+                entry, symbol=SYMBOL, variation=name,
+                max_concurrent=getattr(cfg, "max_concurrent_positions", 1),
+            )
             if placed:
                 _last_entry_ts = now_utc
                 log.info("[%s ORDER] Placed | cooldown=%ds", name, cfg.cooldown_s)

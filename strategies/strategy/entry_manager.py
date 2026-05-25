@@ -53,6 +53,11 @@ _VARIATION_STRATEGY_NAME = {
     "KRONOS_S06_SWEEP":      "Kronos S06 Session Sweep",
     "KRONOS_S07_CRT":        "Kronos S07 CRT",
     "KRONOS_S14_M5_STRETCH": "Kronos S14 M5 EMA Stretch",
+    # Combined Suite v2 — the whole two-sided XAU/USD scalping book as ONE
+    # strategy (multi-leg, concurrent positions via max_concurrent_positions,
+    # per-leg time-exit via Signal.max_hold_min). Ported from TradingSkills
+    # backtest/combined_suite_v2.py.
+    "KRONOS_COMBINED_V2":    "Kronos Combined Suite v2",
 }
 
 
@@ -160,6 +165,11 @@ def _update_signal_status(signal_log_id, status, *, rejection_reason=None, posit
 
 def _has_open_position(user_strategy_id: uuid.UUID) -> bool:
     """Return True if there is already an open (quantity > 0) position."""
+    return _open_position_count(user_strategy_id) > 0
+
+
+def _open_position_count(user_strategy_id: uuid.UUID) -> int:
+    """Number of currently-open (quantity > 0) positions for this UserStrategy."""
     sess = Session()
     try:
         return (
@@ -168,8 +178,8 @@ def _has_open_position(user_strategy_id: uuid.UUID) -> bool:
                 Position.user_strategy_id == user_strategy_id,
                 Position.quantity > 0,
             )
-            .first()
-        ) is not None
+            .count()
+        )
     finally:
         sess.close()
 
@@ -178,17 +188,23 @@ def _has_open_position(user_strategy_id: uuid.UUID) -> bool:
 # Entry placement
 # ──────────────────────────────────────────────────────────────────────────────
 
-def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None = None) -> bool:
+def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None = None,
+                max_concurrent: int = 1) -> bool:
     """
     Persist an entry into the DB:
       1. Position record
       2. ENTRY Order
       3. STOPLOSS Trigger
       4. TARGET Trigger
+      5. (optional) TIME_EXIT trigger when signal.max_hold_min is set
 
     `variation` selects which Strategy row (and therefore which UserStrategy /
     entry_quantity) the trade belongs to. Required when multiple strategies
     share a symbol — otherwise the first active strategy for the symbol wins.
+
+    `max_concurrent` caps how many positions this UserStrategy may hold open at
+    once (default 1 = legacy single-position behaviour). A portfolio strategy
+    passes its CONFIG.max_concurrent_positions so several legs run concurrently.
 
     Returns True on success, False if skipped or failed.
     """
@@ -200,10 +216,12 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
     # Persist the signal as FIRED before anything else can fail.
     signal_log_id = _log_signal_fired(ctx["strategy_id"], symbol, signal)
 
-    if _has_open_position(ctx["user_strategy_id"]):
+    open_n = _open_position_count(ctx["user_strategy_id"])
+    if open_n >= max(1, int(max_concurrent)):
         _update_signal_status(signal_log_id, "REJECTED",
                               rejection_reason="open_position_cap")
-        log.info("[ENTRY] Position already open — skipping new entry")
+        log.info("[ENTRY] Concurrency cap reached (%d/%d open) — skipping new entry",
+                 open_n, max_concurrent)
         return False
 
     qty = ctx["quantity"]
@@ -298,6 +316,29 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
             position_id=position.id,
         )
         sess.add(tp_trigger)
+
+        # ── 5. TIME_EXIT Trigger (optional per-leg max-hold) ──────────────────
+        # The Trigger.trigger_type enum has no TIMEOUT value, so we reuse CUSTOM
+        # and tag it order_type="TIME_EXIT". trigger_price holds the absolute
+        # UNIX expiry epoch (seconds) — NOT a price. position_monitor must
+        # special-case TIME_EXIT (fire on wall-clock), never on price.
+        max_hold_min = getattr(signal, "max_hold_min", None)
+        if max_hold_min:
+            import time as _time
+            expiry_epoch = _time.time() + float(max_hold_min) * 60.0
+            time_trigger = Trigger(
+                id=uuid.uuid4(),
+                symbol=symbol,
+                trigger_price=Decimal(str(round(expiry_epoch, 2))),  # epoch, not price
+                order_type="TIME_EXIT",
+                side=close_side,
+                greater_than=False,        # unused for TIME_EXIT; monitor ignores it
+                quantity=Decimal(str(qty)),
+                trigger_type="CUSTOM",
+                status="PENDING",
+                position_id=position.id,
+            )
+            sess.add(time_trigger)
 
         sess.commit()
 

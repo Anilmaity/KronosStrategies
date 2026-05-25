@@ -26,6 +26,10 @@ class Signal:
     stop_loss: float
     take_profit: float
     reason: str          # short label for trade-log
+    # Optional time-exit in MINUTES. None => exit only on SL/TP/manual (legacy
+    # behaviour). When set, place_entry creates a CUSTOM/TIME_EXIT trigger and
+    # position_monitor closes the position once that many minutes elapse.
+    max_hold_min: float | None = None
 
 
 @dataclass(frozen=True)
@@ -36,6 +40,10 @@ class StrategyConfig:
     # session_filter:  if set, only signals within this UTC hour range are kept
     session_start_hour: int | None = 7
     session_end_hour:   int | None = 16
+    # How many positions this ONE strategy may hold open at once. Default 1
+    # preserves the legacy one-position-per-strategy cap; a portfolio strategy
+    # (e.g. KRONOS_COMBINED_V2) raises it so several legs run concurrently.
+    max_concurrent_positions: int = 1
 
 
 def in_session(now_utc: datetime, cfg: StrategyConfig) -> bool:

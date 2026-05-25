@@ -31,6 +31,7 @@ class EntrySignal:
     reason: str        # 'FVG_RETEST' | 'OB_RETEST'
     zone_low: float
     zone_high: float
+    max_hold_min: float | None = None   # optional time-exit (minutes); see base.Signal
 
 
 @dataclass
