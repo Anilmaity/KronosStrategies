@@ -39,6 +39,14 @@ _TIMEOUT = 15
 
 _SYMBOL_MAP = {"XAUUSD": "XAUUSD", "XAU_USD": "XAUUSD"}
 
+# Broker "stops level" — the minimum distance SL/TP may sit from the reference
+# price. An order whose SL/TP is closer is rejected (TRADE_RETCODE_INVALID_STOPS),
+# and in submit_signal_orders a single rejection aborts ALL three TP slices for
+# that signal. We query it lazily per symbol; this is the fallback when the
+# broker does not expose stopsLevel. Mirrors strategies/shared/metaapi_client.py.
+_DEFAULT_MIN_STOP_DISTANCE = float(os.getenv("MIN_STOP_DISTANCE", "3.0"))  # XAUUSD: ~$3 ≈ 30 pips
+_SPEC_CACHE: dict[str, dict] = {}
+
 Side = Literal["buy", "sell"]
 
 
@@ -113,6 +121,62 @@ def _action_for(side: Side, *, is_limit: bool, entry: float, current: float) -> 
     return "ORDER_TYPE_SELL_LIMIT" if entry >= current else "ORDER_TYPE_SELL_STOP"
 
 
+def _get_symbol_spec(broker_symbol: str) -> dict:
+    """Fetch + cache the broker's spec. Returns {'stops_level_price', 'tick_size'}.
+
+    Falls back to {_DEFAULT_MIN_STOP_DISTANCE, 0.01} on DRY_RUN, missing creds,
+    or any error so callers always get a usable minimum distance.
+    """
+    if broker_symbol in _SPEC_CACHE:
+        return _SPEC_CACHE[broker_symbol]
+
+    spec = {"stops_level_price": _DEFAULT_MIN_STOP_DISTANCE, "tick_size": 0.01}
+    if DRY_RUN or not _TOKEN or not _ACCOUNT:
+        _SPEC_CACHE[broker_symbol] = spec
+        return spec
+
+    try:
+        url = f"{_trading_url()}/users/current/accounts/{_ACCOUNT}/symbols/{broker_symbol}/specification"
+        resp = requests.get(url, headers=_headers(), timeout=_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+        tick_size = float(data.get("tickSize", 0.01))
+        stops_level = int(data.get("stopsLevel", 0))
+        stops_price = stops_level * tick_size if stops_level > 0 else _DEFAULT_MIN_STOP_DISTANCE
+        spec = {"stops_level_price": stops_price, "tick_size": tick_size}
+        log.info("[MetaAPI] %s spec: tickSize=%s stopsLevel=%d -> min_distance=%.2f",
+                 broker_symbol, tick_size, stops_level, stops_price)
+    except Exception:
+        log.exception("[MetaAPI] _get_symbol_spec failed for %s — using fallback %.2f",
+                      broker_symbol, _DEFAULT_MIN_STOP_DISTANCE)
+
+    _SPEC_CACHE[broker_symbol] = spec
+    return spec
+
+
+def _apply_stops_floor(side: Side, ref_price: float, sl: float, tp: float,
+                       min_distance: float) -> tuple[float, float, bool]:
+    """Widen SL/TP *outward* so each sits at least `min_distance` from ref_price.
+
+    ref_price is what the broker measures the stops level against: the current
+    market price for a market order, or the open (entry) price for a pending
+    limit. Only ever pushes SL/TP further away, so the signal's direction and
+    is_malformed() invariants are preserved. Returns (sl, tp, was_adjusted).
+    """
+    adjusted = False
+    if side == "buy":
+        if (ref_price - sl) < min_distance:
+            sl = round(ref_price - min_distance, 2); adjusted = True
+        if (tp - ref_price) < min_distance:
+            tp = round(ref_price + min_distance, 2); adjusted = True
+    else:  # sell
+        if (sl - ref_price) < min_distance:
+            sl = round(ref_price + min_distance, 2); adjusted = True
+        if (ref_price - tp) < min_distance:
+            tp = round(ref_price - min_distance, 2); adjusted = True
+    return sl, tp, adjusted
+
+
 def place_market_order_full(side: Side, symbol: str, volume: float,
                             sl: float, tp: float, comment: str = "") -> str | None:
     broker = _SYMBOL_MAP.get(symbol, symbol)
@@ -185,6 +249,7 @@ def submit_signal_orders(side: Side, symbol: str, entry: float, sl: float,
     """
     if not tps:
         return []
+    broker = _SYMBOL_MAP.get(symbol, symbol)
     px = get_symbol_price(symbol)
     cur = (px["ask"] if side == "buy" else px["bid"]) if px else None
 
@@ -196,6 +261,11 @@ def submit_signal_orders(side: Side, symbol: str, entry: float, sl: float,
         if side == "sell" and cur >= entry:
             use_market = True
 
+    # Reference the broker measures the stops level from: current market price
+    # for a market order, the open (entry) price for a pending limit.
+    ref_price = cur if (use_market and cur is not None) else entry
+    min_d = _get_symbol_spec(broker)["stops_level_price"]
+
     vol_each = round(total_volume / len(tps), 2)
     if vol_each <= 0:
         log.warning("[%s] volume per TP rounds to 0 (total=%.2f, splits=%d)",
@@ -204,12 +274,18 @@ def submit_signal_orders(side: Side, symbol: str, entry: float, sl: float,
 
     submitted: list[dict] = []
     for i, tp in enumerate(tps, start=1):
+        # Widen SL/TP to the broker floor so a too-tight slice (commonly TP1)
+        # isn't rejected — a rejection here aborts ALL slices for this signal.
+        o_sl, o_tp, adjusted = _apply_stops_floor(side, ref_price, sl, tp, min_d)
+        if adjusted:
+            log.info("[%s] stops widened to broker floor (%.2f): SL %.2f->%.2f TP%d %.2f->%.2f",
+                     msg_id, min_d, sl, o_sl, i, tp, o_tp)
         comment = f"tg-{msg_id}-tp{i}"
         if use_market:
-            tid = place_market_order_full(side, symbol, vol_each, sl, tp, comment)
+            tid = place_market_order_full(side, symbol, vol_each, o_sl, o_tp, comment)
             kind = "market"
         else:
-            tid = place_limit_order(side, symbol, vol_each, entry, sl, tp, cur, comment)
+            tid = place_limit_order(side, symbol, vol_each, entry, o_sl, o_tp, cur, comment)
             kind = "limit"
         if not tid:
             log.error("[%s] order placement failed for TP%d — aborting remaining slices", msg_id, i)
@@ -219,8 +295,8 @@ def submit_signal_orders(side: Side, symbol: str, entry: float, sl: float,
                 else:
                     close_position(prev["ticket_id"])
             return []
-        submitted.append({"tp_index": i, "tp": tp, "ticket_id": tid, "kind": kind,
-                          "volume": vol_each, "entry": entry, "sl": sl})
+        submitted.append({"tp_index": i, "tp": o_tp, "ticket_id": tid, "kind": kind,
+                          "volume": vol_each, "entry": entry, "sl": o_sl})
         log.info("[%s] %s order placed | TP%d=%s vol=%.2f ticket=%s",
-                 msg_id, kind, i, tp, vol_each, tid)
+                 msg_id, kind, i, o_tp, vol_each, tid)
     return submitted

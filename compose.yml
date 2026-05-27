@@ -117,3 +117,37 @@ services:
       RESEARCH_DAYS_15M: "7"
       RESEARCH_DAYS_5M:  "4"
       # DRY_RUN: "true"   # uncomment to smoke-test without placing real orders
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Telegram copy-trader — mirrors @NeymarGoldTrader signals onto the live
+  # MetaAPI account. Telethon listens to the channel, parse_signals turns each
+  # post into entry-zone / SL / 3 TPs, and one order per TP is submitted (see
+  # Telegram_Bot/). Signals + per-TP orders + lifecycle events persist to
+  # TigerData (tg_signals / tg_orders / tg_signal_updates — auto-created on boot
+  # by db.init_schema(), so no separate DB-deploy step is needed).
+  #
+  # ONE-TIME LOGIN (required before the first `up`): the Telethon USER session
+  # must be created interactively once. It is then saved on the tg_session
+  # volume and reused on every restart. Run, in a terminal:
+  #     docker compose run --rm -it telegram_trader python live_trader.py
+  # enter the phone number + login code when prompted; once you see
+  # "Listening to NeymarGoldTrader ..." press Ctrl-C, then start it for real:
+  #     docker compose up -d telegram_trader
+  #
+  # SAFETY: DRY_RUN inherits from .env (currently false => LIVE, real orders).
+  #         Uncomment DRY_RUN: "true" below to smoke-test (logs orders, places NONE).
+  # ───────────────────────────────────────────────────────────────────────────
+  telegram_trader:
+    build: ./Telegram_Bot
+    restart: always
+    env_file: .env
+    environment:
+      TIGERDATA_URL:  ${TIGERDATA_URL:-}
+      TG_CHANNEL:     NeymarGoldTrader
+      TG_SESSION_DIR: /app/session
+      # DRY_RUN: "true"   # uncomment to smoke-test without placing real orders
+    volumes:
+      - tg_session:/app/session
+
+volumes:
+  tg_session:

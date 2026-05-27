@@ -55,7 +55,11 @@ log = logging.getLogger("tg-trader")
 API_ID = int(os.getenv("TG_API_ID", "30334024"))
 API_HASH = os.getenv("TG_API_HASH", "f7f83460d3bae2e462c02f144dbc114f")
 CHANNEL = os.getenv("TG_CHANNEL", "Test_XAU_USD")
-SESSION = "kronos_tg"
+# Telethon session path. Kept under TG_SESSION_DIR so it can be persisted on a
+# docker volume: without a saved session every (re)start re-triggers an
+# interactive phone/code login, which hangs (then crash-loops) in a headless
+# container — i.e. the bot never reaches the message handler and places no trades.
+SESSION = str(Path(os.getenv("TG_SESSION_DIR", str(_HERE))) / "kronos_tg")
 
 # Empty REDIS_URL → use in-memory state store. Set to a redis:// URL to enable Redis.
 REDIS_URL = os.getenv("REDIS_URL", "").strip() or None
@@ -70,6 +74,13 @@ RISK_PER_TRADE_USD = float(os.getenv("RISK_USD", "100"))
 # volume_lots = risk_usd / (risk_points * USD_PER_POINT_PER_LOT)
 USD_PER_POINT_PER_LOT = float(os.getenv("USD_PER_POINT_PER_LOT", "100"))  # XAUUSD default
 MIN_LOT = float(os.getenv("MIN_LOT", "0.01"))
+
+# A signal is only removed from the :open set on a TP3 / SL reply. If the channel
+# announces TP1/TP2 then goes quiet (no TP3, no SL), it would stay "open" forever
+# and the no-pyramiding guard below would skip every later signal. Expire — flatten
+# remaining broker orders and untrack — any signal open longer than this.
+MAX_OPEN_AGE_SEC = float(os.getenv("MAX_OPEN_AGE_HOURS", "12")) * 3600
+SWEEP_INTERVAL_SEC = int(os.getenv("SWEEP_INTERVAL_SEC", "1800"))  # background stale-sweep cadence
 
 r = None  # state store (RedisStore or MemoryStore) — set in main()
 
@@ -179,6 +190,49 @@ async def close_order(msg_id: int, reason: str):
     log.info(f"[{msg_id}] CLOSE ({reason})")
 
 
+async def sweep_stale_open() -> int:
+    """Expire signals open longer than MAX_OPEN_AGE_SEC.
+
+    Closes their remaining broker orders and drops them from the :open set so a
+    signal the channel never resolves (TP1/TP2 then silence) can't wedge the
+    no-pyramiding guard forever. Returns the number expired.
+    """
+    open_ids = await r.smembers(f"{REDIS_PREFIX}:open")
+    now = datetime.now(timezone.utc)
+    expired = 0
+    for sid in open_ids:
+        pos_json = await r.get(f"{REDIS_PREFIX}:signal:{sid}")
+        if not pos_json:
+            await r.srem(f"{REDIS_PREFIX}:open", sid)  # dangling id, no detail row
+            continue
+        pos = json.loads(pos_json)
+        stamp = pos.get("opened_at") or pos.get("posted_at")
+        if not stamp:
+            continue
+        try:
+            age = (now - datetime.fromisoformat(stamp)).total_seconds()
+        except ValueError:
+            continue
+        if age > MAX_OPEN_AGE_SEC:
+            log.warning("[%s] open %.1fh > max %.1fh — expiring (flatten + unblock)",
+                        sid, age / 3600, MAX_OPEN_AGE_SEC / 3600)
+            await close_order(int(sid), "expired")
+            expired += 1
+    return expired
+
+
+async def _stale_sweeper() -> None:
+    """Periodically expire stale open signals even when no new signal arrives."""
+    while True:
+        await asyncio.sleep(SWEEP_INTERVAL_SEC)
+        try:
+            n = await sweep_stale_open()
+            if n:
+                log.info("Background stale-sweep expired %d open signal(s)", n)
+        except Exception as e:
+            log.exception(f"stale sweeper error: {e}")
+
+
 async def handle_new_signal(msg) -> None:
     text = clean(msg.text or "")
     sig = parse_signal(text)
@@ -195,6 +249,7 @@ async def handle_new_signal(msg) -> None:
     if bad:
         log.warning(f"[{msg.id}] malformed signal ({bad}) — skip")
         return
+    await sweep_stale_open()  # clear any wedged stale opens before the guard
     open_ids = await r.smembers(f"{REDIS_PREFIX}:open")
     if open_ids:
         log.warning(f"[{msg.id}] {len(open_ids)} open position(s) already — skip (no pyramiding)")
@@ -278,6 +333,7 @@ async def main(args):
 
     db.init_schema()
     await hydrate_from_db()
+    await sweep_stale_open()  # clear opens that already went stale while we were down
 
     client = TelegramClient(SESSION, API_ID, API_HASH)
     await client.start()
@@ -293,6 +349,7 @@ async def main(args):
         except Exception as e:
             log.exception(f"handler error: {e}")
 
+    asyncio.create_task(_stale_sweeper())
     await client.run_until_disconnected()
 
 
