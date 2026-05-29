@@ -177,6 +177,23 @@ def _apply_stops_floor(side: Side, ref_price: float, sl: float, tp: float,
     return sl, tp, adjusted
 
 
+def _extract_ticket(resp: dict, payload: dict, prefer_position: bool) -> str | None:
+    """Return the ticket id from a trade response, or log+None if absent.
+
+    Without this the caller silently aborts the whole 3-slice batch and we never
+    learn why the broker rejected the request (no HTTPError was raised, but the
+    response carried no ticket — e.g. an error stringCode in a 2xx body).
+    """
+    if prefer_position:
+        tid = resp.get("positionId") or resp.get("orderId")
+    else:
+        tid = resp.get("orderId") or resp.get("positionId")
+    if not tid:
+        log.error("[MetaAPI] trade returned no ticket id — payload=%s response=%s",
+                  payload, resp)
+    return tid
+
+
 def place_market_order_full(side: Side, symbol: str, volume: float,
                             sl: float, tp: float, comment: str = "") -> str | None:
     broker = _SYMBOL_MAP.get(symbol, symbol)
@@ -191,7 +208,7 @@ def place_market_order_full(side: Side, symbol: str, volume: float,
     resp = _trade(payload)
     if not resp:
         return None
-    return resp.get("positionId") or resp.get("orderId")
+    return _extract_ticket(resp, payload, prefer_position=True)
 
 
 def place_limit_order(side: Side, symbol: str, volume: float, entry: float,
@@ -212,7 +229,7 @@ def place_limit_order(side: Side, symbol: str, volume: float, entry: float,
     resp = _trade(payload)
     if not resp:
         return None
-    return resp.get("orderId") or resp.get("positionId")
+    return _extract_ticket(resp, payload, prefer_position=False)
 
 
 def modify_position_sl(position_id: str, new_sl: float) -> bool:

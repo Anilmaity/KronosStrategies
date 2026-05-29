@@ -260,6 +260,12 @@ async def handle_new_signal(msg) -> None:
     pos = await place_order(msg.id, sig)
     pos["raw"] = text
     pos["posted_at"] = msg.date.astimezone(timezone.utc).isoformat()
+    # Only track the signal if at least one slice actually hit the broker. A
+    # registration when orders=[] wedges the no-pyramiding guard until the 12h
+    # stale sweep — costing every subsequent signal of the session.
+    if not pos.get("orders"):
+        log.warning(f"[{msg.id}] no orders submitted — not tracking (next signal will be eligible)")
+        return
     await r.set(f"{REDIS_PREFIX}:signal:{msg.id}", json.dumps(pos))
     await r.sadd(f"{REDIS_PREFIX}:open", str(msg.id))
     loop = asyncio.get_running_loop()
