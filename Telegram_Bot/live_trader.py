@@ -233,6 +233,38 @@ async def _stale_sweeper() -> None:
             log.exception(f"stale sweeper error: {e}")
 
 
+async def _classify_open_signals(open_ids) -> tuple[list[str], list[str], bool]:
+    """Split currently-open signals into (live, unfilled) by broker truth.
+
+    The channel re-enters the same zone repeatedly, firing a fresh signal while
+    a previous one is still an UNFILLED pending limit. Holding one position at a
+    time, we want the new signal to take over those unfilled limits — but never
+    to cancel a slice that has actually filled into a live market position.
+
+    A signal is "live" if the broker reports an open position whose comment
+    carries its `tg-<msg_id>-` tag; otherwise it is "unfilled" (still pending,
+    or already gone) and may be superseded. The bool return is `ok`: False means
+    the broker position query failed, so the caller must fail safe and keep the
+    no-pyramiding guard rather than cancel anything it could not verify.
+    """
+    loop = asyncio.get_running_loop()
+    positions = await loop.run_in_executor(
+        None, lambda: mx.get_open_positions(next(iter(ALLOWED_INSTRUMENTS))))
+    if positions is None:
+        return [], [], False  # could not verify — caller must not cancel
+    live, unfilled = [], []
+    for sid in open_ids:
+        if not await r.get(f"{REDIS_PREFIX}:signal:{sid}"):
+            unfilled.append(sid)  # dangling id, no detail row — safe to drop
+            continue
+        needle = f"tg-{sid}-"
+        if any(needle in (p.get("comment") or "") for p in positions):
+            live.append(sid)
+        else:
+            unfilled.append(sid)
+    return live, unfilled, True
+
+
 async def handle_new_signal(msg) -> None:
     text = clean(msg.text or "")
     sig = parse_signal(text)
@@ -252,8 +284,19 @@ async def handle_new_signal(msg) -> None:
     await sweep_stale_open()  # clear any wedged stale opens before the guard
     open_ids = await r.smembers(f"{REDIS_PREFIX}:open")
     if open_ids:
-        log.warning(f"[{msg.id}] {len(open_ids)} open position(s) already — skip (no pyramiding)")
-        return
+        live, unfilled, ok = await _classify_open_signals(open_ids)
+        if not ok:
+            log.warning(f"[{msg.id}] {len(open_ids)} open signal(s), broker check failed "
+                        f"— skip (no pyramiding, fail-safe)")
+            return
+        if live:
+            log.warning(f"[{msg.id}] {len(live)} live position(s) in market — skip (no pyramiding)")
+            return
+        # All prior opens are unfilled pending limits (never entered the market).
+        # Supersede them so this fresh re-entry can take over the single slot.
+        for sid in unfilled:
+            log.info(f"[{msg.id}] superseding unfilled signal {sid} (pending limit, not in market)")
+            await close_order(int(sid), "superseded")
 
     log.info(f"[{msg.id}] NEW SIGNAL {sig['side']} {sig['instrument']} "
              f"entry={sig['entry_low']}-{sig['entry_high']} SL={sig['sl']} TPs={sig['tps']}")

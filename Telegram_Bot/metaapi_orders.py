@@ -257,6 +257,35 @@ def close_position(position_id: str) -> bool:
     return _trade(payload) is not None
 
 
+def get_open_positions(symbol: str | None = None) -> list[dict] | None:
+    """Return open broker positions (optionally filtered by symbol).
+
+    Returns [] when the account genuinely holds no (matching) positions, and
+    None when the broker could not be queried (missing creds or an API error).
+    Callers MUST treat None as "unknown" and fail safe — never cancel an order
+    on the assumption that no position exists when we simply couldn't check.
+    DRY_RUN returns [] since there is no live broker state to inspect.
+    """
+    if DRY_RUN:
+        return []
+    if not _TOKEN or not _ACCOUNT:
+        return None
+    broker = _SYMBOL_MAP.get(symbol, symbol) if symbol else None
+    try:
+        url = f"{_trading_url()}/users/current/accounts/{_ACCOUNT}/positions"
+        resp = requests.get(url, headers=_headers(), timeout=_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, list):
+            return None
+        if broker:
+            data = [p for p in data if p.get("symbol") == broker]
+        return data
+    except Exception:
+        log.exception("[MetaAPI] positions fetch failed")
+        return None
+
+
 def submit_signal_orders(side: Side, symbol: str, entry: float, sl: float,
                          tps: list[float], total_volume: float,
                          msg_id: int) -> list[dict]:
