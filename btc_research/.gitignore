@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+# regenerable from the DB via data.build_cache() — too large to track
+cache/*.parquet

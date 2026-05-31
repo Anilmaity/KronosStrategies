@@ -1,0 +1,261 @@
+{
+  "vol_by_hour_bps": {
+    "0": 10.9,
+    "1": 10.73,
+    "2": 9.64,
+    "3": 8.11,
+    "4": 7.74,
+    "5": 7.62,
+    "6": 7.68,
+    "7": 8.1,
+    "8": 8.37,
+    "9": 8.13,
+    "10": 7.54,
+    "11": 7.76,
+    "12": 9.25,
+    "13": 13.02,
+    "14": 17.39,
+    "15": 16.01,
+    "16": 13.26,
+    "17": 13.09,
+    "18": 11.82,
+    "19": 11.12,
+    "20": 10.52,
+    "21": 11.02,
+    "22": 11.1,
+    "23": 8.91
+  },
+  "vol_by_session_bps": {
+    "ASIA": 8.92,
+    "LATE": 10.34,
+    "LONDON": 7.98,
+    "NY": 12.83
+  },
+  "daily_range_pct": {
+    "mean": 3.46,
+    "median": 3.023,
+    "p90": 5.872,
+    "by_weekday": {
+      "Mon": 4.07,
+      "Tue": 3.946,
+      "Wed": 3.678,
+      "Thu": 3.66,
+      "Fri": 3.879,
+      "Sun": 1.498
+    }
+  },
+  "mean_revert_vs_trend": {
+    "5m": {
+      "autocorr1": -0.00392,
+      "vr4": 0.9819
+    },
+    "15m": {
+      "autocorr1": -0.0066,
+      "vr4": 0.9808
+    },
+    "1h": {
+      "autocorr1": 0.00089,
+      "vr4": 0.9999
+    }
+  },
+  "edge_scans": [
+    {
+      "name": "pdl_sweep_fade_long",
+      "n": 739,
+      "horizon": "8x15m",
+      "side": 1,
+      "mean_edge_bps": 3.81,
+      "win_pct": 55.3,
+      "t_stat": 1.13,
+      "baseline_move_bps": 18.22,
+      "edge_vs_baseline": 0.21,
+      "signals": 739
+    },
+    {
+      "name": "breakout_up_continue_long",
+      "n": 867,
+      "horizon": "4x15m",
+      "side": 1,
+      "mean_edge_bps": 1.47,
+      "win_pct": 48.8,
+      "t_stat": 0.59,
+      "baseline_move_bps": 18.22,
+      "edge_vs_baseline": 0.08,
+      "signals": 867
+    },
+    {
+      "name": "zscore>1.5_fade_short",
+      "n": 5188,
+      "horizon": "4x15m",
+      "side": -1,
+      "mean_edge_bps": 0.35,
+      "win_pct": 52.2,
+      "t_stat": 0.4,
+      "baseline_move_bps": 18.22,
+      "edge_vs_baseline": 0.02,
+      "signals": 5188,
+      "z_thr": 1.5
+    },
+    {
+      "name": "round1000_above_fade_short",
+      "n": 83,
+      "horizon": "6x5m",
+      "side": -1,
+      "mean_edge_bps": 0.87,
+      "win_pct": 47.0,
+      "t_stat": 0.17,
+      "baseline_move_bps": 10.37,
+      "edge_vs_baseline": 0.08,
+      "signals": 83
+    },
+    {
+      "name": "round500_above_fade_short",
+      "n": 63,
+      "horizon": "6x5m",
+      "side": -1,
+      "mean_edge_bps": 0.35,
+      "win_pct": 50.8,
+      "t_stat": 0.06,
+      "baseline_move_bps": 10.37,
+      "edge_vs_baseline": 0.03,
+      "signals": 63
+    },
+    {
+      "name": "breakout_dn_continue_short",
+      "n": 907,
+      "horizon": "4x15m",
+      "side": -1,
+      "mean_edge_bps": -0.34,
+      "win_pct": 48.0,
+      "t_stat": -0.13,
+      "baseline_move_bps": 18.22,
+      "edge_vs_baseline": -0.02,
+      "signals": 907
+    },
+    {
+      "name": "round1000_below_fade_long",
+      "n": 90,
+      "horizon": "6x5m",
+      "side": 1,
+      "mean_edge_bps": -2.62,
+      "win_pct": 36.7,
+      "t_stat": -0.38,
+      "baseline_move_bps": 10.37,
+      "edge_vs_baseline": -0.25,
+      "signals": 90
+    },
+    {
+      "name": "zscore<-2.5_fade_long",
+      "n": 1037,
+      "horizon": "4x15m",
+      "side": 1,
+      "mean_edge_bps": -1.0,
+      "win_pct": 49.8,
+      "t_stat": -0.48,
+      "baseline_move_bps": 18.22,
+      "edge_vs_baseline": -0.06,
+      "signals": 1037,
+      "z_thr": 2.5
+    },
+    {
+      "name": "asia_sweep_high_fade_short",
+      "n": 842,
+      "horizon": "4x15m",
+      "side": -1,
+      "mean_edge_bps": -1.19,
+      "win_pct": 50.4,
+      "t_stat": -0.56,
+      "baseline_move_bps": 18.22,
+      "edge_vs_baseline": -0.07,
+      "signals": 842
+    },
+    {
+      "name": "pdh_sweep_fade_short",
+      "n": 819,
+      "horizon": "8x15m",
+      "side": -1,
+      "mean_edge_bps": -1.8,
+      "win_pct": 48.7,
+      "t_stat": -0.64,
+      "baseline_move_bps": 18.22,
+      "edge_vs_baseline": -0.1,
+      "signals": 819
+    },
+    {
+      "name": "zscore>2.0_fade_short",
+      "n": 2374,
+      "horizon": "4x15m",
+      "side": -1,
+      "mean_edge_bps": -1.59,
+      "win_pct": 52.2,
+      "t_stat": -1.16,
+      "baseline_move_bps": 18.22,
+      "edge_vs_baseline": -0.09,
+      "signals": 2374,
+      "z_thr": 2.0
+    },
+    {
+      "name": "asia_sweep_low_fade_long",
+      "n": 891,
+      "horizon": "4x15m",
+      "side": 1,
+      "mean_edge_bps": -2.62,
+      "win_pct": 51.2,
+      "t_stat": -1.36,
+      "baseline_move_bps": 18.22,
+      "edge_vs_baseline": -0.14,
+      "signals": 891
+    },
+    {
+      "name": "zscore>2.5_fade_short",
+      "n": 965,
+      "horizon": "4x15m",
+      "side": -1,
+      "mean_edge_bps": -3.83,
+      "win_pct": 49.8,
+      "t_stat": -1.64,
+      "baseline_move_bps": 18.22,
+      "edge_vs_baseline": -0.21,
+      "signals": 965,
+      "z_thr": 2.5
+    },
+    {
+      "name": "round500_below_fade_long",
+      "n": 58,
+      "horizon": "6x5m",
+      "side": 1,
+      "mean_edge_bps": -9.25,
+      "win_pct": 37.9,
+      "t_stat": -1.67,
+      "baseline_move_bps": 10.37,
+      "edge_vs_baseline": -0.89,
+      "signals": 58
+    },
+    {
+      "name": "zscore<-1.5_fade_long",
+      "n": 5286,
+      "horizon": "4x15m",
+      "side": 1,
+      "mean_edge_bps": -1.64,
+      "win_pct": 51.4,
+      "t_stat": -1.88,
+      "baseline_move_bps": 18.22,
+      "edge_vs_baseline": -0.09,
+      "signals": 5286,
+      "z_thr": 1.5
+    },
+    {
+      "name": "zscore<-2.0_fade_long",
+      "n": 2577,
+      "horizon": "4x15m",
+      "side": 1,
+      "mean_edge_bps": -2.87,
+      "win_pct": 49.6,
+      "t_stat": -2.19,
+      "baseline_move_bps": 18.22,
+      "edge_vs_baseline": -0.16,
+      "signals": 2577,
+      "z_thr": 2.0
+    }
+  ]
+}
