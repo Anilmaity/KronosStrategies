@@ -2,3 +2,9 @@
 # Already-tracked files here (place_test_order.py, dummy_trade_m90_fade.py)
 # stay tracked; this just stops new ad-hoc helpers from being committed.
 strategies/_scratch/
+_scratch/
+
+# OANDA S5 candle cache written by the live collector / backfill_ltp.py.
+# Can grow to GBs over a multi-month backfill — the already-tracked XAU sample
+# stays tracked; all new cache files are ignored.
+tick_data_collector/Tick_Data_Generator/cache_data/

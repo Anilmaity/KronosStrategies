@@ -40,6 +40,20 @@ services:
       TIGERDATA_URL:    ${TIGERDATA_URL:-}
       OANDA_INSTRUMENT: XAG_USD
 
+  # Same image, third instance polling BTC_USD (bitcoin). OANDA serves BTC_USD
+  # as a forex-hours CFD on the same practice account, so the shared
+  # is_market_closed_utc() gate applies unchanged. Writes to the same ltp
+  # hypertable, distinguished by the `symbol` column. Deep history is loaded
+  # separately via tick_data_collector/backfill_ltp.py.
+  tick_data_collector_btcusd:
+    build: ./tick_data_collector
+    restart: always
+    env_file: .env
+    environment:
+      TSDB_TARGET:      ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL:    ${TIGERDATA_URL:-}
+      OANDA_INSTRUMENT: BTC_USD
+
   # ───────────────────────────────────────────────────────────────────────────
   # Position manager — evaluates open positions every second, closes on TP/SL
   # ───────────────────────────────────────────────────────────────────────────
