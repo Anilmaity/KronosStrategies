@@ -1,24 +1,30 @@
 """
 validate_ltp_backfill.py
 ------------------------
-Validate the TimescaleDB `ltp` hypertable coverage for XAU_USD against the
-local 16-month JSON tick cache at `.history_data/<SYMBOL>/D_M_YYYY.json`.
+Validate TimescaleDB `ltp` hypertable coverage for any symbol against its
+local JSON tick cache at `<cache-dir>/<SYMBOL>/D_M_YYYY.json`.
 
 Two independent checks per trading day:
   1. CACHE completeness  -- does the JSON file have ~enough S5 candle groups?
      (reuses oanda_tick_lib._validator: weekend/holiday aware, 16,560/day)
-  2. DB completeness     -- do the rows actually in `ltp` cover that day's
-     ticks? DB ticks should be >= ~95% of the JSON tick count for that day.
+  2. DB gap check        -- any weekday (non-holiday) where `ltp` holds < 1,000
+     ticks is flagged as a backfill gap. This is offset-agnostic and needs no
+     cache, so it runs even in DB-only mode (no local cache present).
 
-A day is flagged for repair when the cache file is missing/empty/partial,
-or when the DB holds materially fewer ticks than the (good) cache file.
+Prices outside the per-symbol band (PRICE_BANDS, override with --price-min/
+--price-max) are flagged as data errors. A day is flagged for repair when the
+cache file is missing/empty/partial, the DB has a gap, or prices are bad.
 
 Output: a per-day report plus a machine-readable list of bad dates written
 to `db/ltp_repair_dates.txt` (one YYYY-MM-DD per line) for the repair step.
+Exit code 2 when any day needs attention, 0 when clean.
 
 Usage:
-  python db/validate_ltp_backfill.py
-  python db/validate_ltp_backfill.py --start 2025-01-01 --end 2026-05-12
+  python db/validate_ltp_backfill.py                                  # XAU_USD, .history_data
+  python db/validate_ltp_backfill.py --symbol XAG_USD
+  python db/validate_ltp_backfill.py --symbol BTC_USD                 # cache auto-resolves to
+                                                                      # tick_data_collector/Tick_Data_Generator/cache_data
+  python db/validate_ltp_backfill.py --symbol BTC_USD --start 2025-01-01 --end 2026-05-29
 """
 from __future__ import annotations
 
@@ -40,8 +46,24 @@ COLLECTOR_LIB = REPO_ROOT / "tick_data_collector"
 
 # DB ticks must be at least this fraction of the cache-file tick count.
 DB_COVERAGE_THRESHOLD = 0.95
-# Plausible XAU/USD price band -- ticks outside this are data errors.
-PRICE_MIN, PRICE_MAX = 1500.0, 6000.0
+
+# Plausible price band per symbol -- ticks outside it are data errors
+# (decimal-shift, zero, or stale fills). Override via --price-min/--price-max.
+PRICE_BANDS: dict[str, tuple[float, float]] = {
+    "XAU_USD": (1_500.0, 6_000.0),
+    "XAG_USD": (10.0, 150.0),
+    "BTC_USD": (10_000.0, 250_000.0),
+}
+# Unknown symbol: accept anything (band check effectively disabled) + warn.
+_DEFAULT_BAND = (0.0, float("inf"))
+
+# Where each symbol's JSON tick cache lives. XAU/XAG were backfilled into
+# .history_data/; BTC_USD via tick_data_collector/backfill_ltp.py writes into
+# the live collector's cache root. Override with --cache-dir. A missing cache
+# dir is non-fatal -- the DB gap check still runs (DB-only mode).
+DEFAULT_CACHE_DIRS: dict[str, Path] = {
+    "BTC_USD": COLLECTOR_LIB / "Tick_Data_Generator" / "cache_data",
+}
 
 
 def _iter_prices(path: Path):
@@ -61,14 +83,14 @@ def _iter_prices(path: Path):
     yield from walk(data)
 
 
-def _cache_tick_count(path: Path) -> tuple[int, int, int]:
+def _cache_tick_count(path: Path, price_min: float, price_max: float) -> tuple[int, int, int]:
     """Return (tick_count, n_below_band, n_above_band) for a history file."""
     n = lo = hi = 0
     for price in _iter_prices(path):
         n += 1
-        if price < PRICE_MIN:
+        if price < price_min:
             lo += 1
-        elif price > PRICE_MAX:
+        elif price > price_max:
             hi += 1
     return n, lo, hi
 
@@ -78,25 +100,48 @@ def main() -> int:
     ap.add_argument("--symbol", default="XAU_USD")
     ap.add_argument("--start", default="2025-01-01")
     ap.add_argument("--end", default=None, help="default: today")
+    ap.add_argument("--cache-dir", default=None,
+                    help="JSON tick cache root (default: per-symbol; see DEFAULT_CACHE_DIRS)")
+    ap.add_argument("--price-min", type=float, default=None,
+                    help="override the lower price band for the symbol")
+    ap.add_argument("--price-max", type=float, default=None,
+                    help="override the upper price band for the symbol")
     args = ap.parse_args()
 
     start = datetime.strptime(args.start, "%Y-%m-%d").date()
     end = datetime.strptime(args.end, "%Y-%m-%d").date() if args.end \
         else datetime.utcnow().date()
 
-    sym_dir = HISTORY_DIR / args.symbol
-    if not sym_dir.is_dir():
-        print(f"[ERR] history dir not found: {sym_dir}")
-        return 1
+    # ---- resolve per-symbol price band (CLI override > table > wide default) -
+    band = PRICE_BANDS.get(args.symbol, _DEFAULT_BAND)
+    price_min = args.price_min if args.price_min is not None else band[0]
+    price_max = args.price_max if args.price_max is not None else band[1]
+    if args.symbol not in PRICE_BANDS and args.price_min is None and args.price_max is None:
+        print(f"[WARN] no price band configured for {args.symbol}; "
+              f"price-band check disabled (pass --price-min/--price-max to enable)")
+    print(f"[CFG] symbol={args.symbol}  price band=[{price_min:g} .. {price_max:g}]")
 
-    # ---- cache completeness via oanda_tick_lib validator -------------------
+    # ---- resolve cache dir; a missing one is non-fatal (DB-only mode) -------
+    cache_root = Path(args.cache_dir) if args.cache_dir \
+        else DEFAULT_CACHE_DIRS.get(args.symbol, HISTORY_DIR)
+    sym_dir = cache_root / args.symbol
+    have_cache = sym_dir.is_dir()
+
+    # OANDA_HOLIDAYS is cache-independent and needed by the DB gap check below.
     sys.path.insert(0, str(COLLECTOR_LIB))
     from oanda_tick_lib._validator import validate_range, OANDA_HOLIDAYS
 
-    reports = validate_range(
-        start.isoformat(), end.isoformat(),
-        cache_dir=str(HISTORY_DIR), instrument=args.symbol,
-    )
+    # ---- cache completeness via oanda_tick_lib validator -------------------
+    if have_cache:
+        print(f"[CFG] cache dir={sym_dir}")
+        reports = validate_range(
+            start.isoformat(), end.isoformat(),
+            cache_dir=str(cache_root), instrument=args.symbol,
+        )
+    else:
+        print(f"[INFO] no cache dir for {args.symbol} at {sym_dir} — "
+              f"running DB-only gap check (cache completeness skipped)")
+        reports = []
 
     # ---- DB tick counts per calendar day -----------------------------------
     conn = _connect()
@@ -118,12 +163,13 @@ def main() -> int:
     cur.close()
     conn.close()
 
-    # ---- per-day comparison -------------------------------------------------
+    # ---- per-day comparison (cache mode only) -------------------------------
     bad: list[date] = []
     counts = defaultdict(int)
-    print(f"\n{'date':<12} {'cache':<9} {'cache_ticks':>12} {'db_ticks':>12} "
-          f"{'db/cache':>9}  verdict")
-    print("-" * 78)
+    if reports:
+        print(f"\n{'date':<12} {'cache':<9} {'cache_ticks':>12} {'db_ticks':>12} "
+              f"{'db/cache':>9}  verdict")
+        print("-" * 78)
 
     for rep in reports:
         d = rep.date
@@ -136,7 +182,7 @@ def main() -> int:
         # actual tick timestamps, so we sum DB ticks the file produced.
         cache_ticks = lo = hi = 0
         if rep.path and Path(rep.path).exists():
-            cache_ticks, lo, hi = _cache_tick_count(Path(rep.path))
+            cache_ticks, lo, hi = _cache_tick_count(Path(rep.path), price_min, price_max)
 
         # DB ticks for this file's data: the file's internal timestamps land
         # on (filename date - 1) and (filename date). Sum both calendar days
@@ -192,7 +238,7 @@ def main() -> int:
     )
     for m, n, lo_p, hi_p in cur.fetchall():
         flag = ""
-        if float(lo_p) < PRICE_MIN or float(hi_p) > PRICE_MAX:
+        if float(lo_p) < price_min or float(hi_p) > price_max:
             flag = "  <-- PRICE OUT OF BAND"
         print(f"  {m}  {n:>10,}  price[{float(lo_p):.1f}..{float(hi_p):.1f}]{flag}")
     cur.close()
@@ -209,7 +255,8 @@ def main() -> int:
         print(f"\n[REPAIR] {len(set(bad))} day(s) need refetch -> {out}")
         return 2
     out.write_text("")
-    print("\n[OK] cache complete; no refetch needed.")
+    print("\n[OK] DB coverage complete; no gaps found."
+          if not have_cache else "\n[OK] cache complete; no refetch needed.")
     return 0
 
 
