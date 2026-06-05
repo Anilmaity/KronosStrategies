@@ -22,6 +22,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -82,6 +83,15 @@ MIN_LOT = float(os.getenv("MIN_LOT", "0.01"))
 MAX_OPEN_AGE_SEC = float(os.getenv("MAX_OPEN_AGE_HOURS", "12")) * 3600
 SWEEP_INTERVAL_SEC = int(os.getenv("SWEEP_INTERVAL_SEC", "1800"))  # background stale-sweep cadence
 
+# Broker reconciliation: poll MetaAPI for the *actual* fate of each tracked
+# slice (filled? closed? live PnL?) instead of inferring outcomes only from the
+# channel's text replies. A slice that disappears from the broker is confirmed
+# terminal only after ABSENT_CONFIRM_POLLS consecutive misses, so a single
+# transient empty read can't fake a close.
+BROKER_POLL_SEC = int(os.getenv("BROKER_POLL_SEC", "30"))
+ABSENT_CONFIRM_POLLS = int(os.getenv("ABSENT_CONFIRM_POLLS", "2"))
+_TAG_RE = re.compile(r"tg-(\d+)-tp(\d+)")
+
 r = None  # state store (RedisStore or MemoryStore) — set in main()
 
 
@@ -120,6 +130,15 @@ async def place_order(msg_id: int, sig: dict) -> dict:
             msg_id=msg_id,
         ),
     )
+
+    # Seed per-slice broker bookkeeping the reconciler maintains: a market slice
+    # is born "filled", a limit "pending". `observed` flips True once we actually
+    # see the slice at the broker, so absence can only conclude a slice we have
+    # confirmed existed (never a just-placed order the broker hasn't listed yet).
+    for o in submitted:
+        o["broker_state"] = "filled" if o.get("kind") == "market" else "pending"
+        o["observed"] = False
+        o["miss"] = 0
 
     return {
         "msg_id": msg_id,
@@ -231,6 +250,136 @@ async def _stale_sweeper() -> None:
                 log.info("Background stale-sweep expired %d open signal(s)", n)
         except Exception as e:
             log.exception(f"stale sweeper error: {e}")
+
+
+def _infer_close_reason(last_price, last_profit, tp, sl) -> str:
+    """Best-effort tp/sl call for a filled slice that left the broker.
+
+    Realized PnL/close deals are not exposed over REST on this account, so we
+    use the last live snapshot before the position vanished: a positive last
+    profit means it ran to target, negative means it was stopped. Falls back to
+    whichever of tp/sl the last seen price was nearer when profit is unknown.
+    """
+    if last_profit is not None:
+        return "tp" if last_profit > 0 else "sl"
+    if last_price is None:
+        return "tp"
+    return "tp" if abs(last_price - tp) <= abs(last_price - sl) else "sl"
+
+
+async def reconcile_broker() -> None:
+    """Reconcile tracked signals against broker positions/orders (broker truth).
+
+    Read-only against MetaAPI. Detects fills (pending limit -> live position),
+    snapshots live PnL, and confirms slice closes/cancels. When every slice of a
+    signal is terminal it concludes the signal from broker state — recording the
+    real outcome + PnL and unblocking the no-pyramiding guard on reality, rather
+    than waiting for a channel reply or the 12h stale-sweep.
+    """
+    open_ids = await r.smembers(f"{REDIS_PREFIX}:open")
+    if not open_ids:
+        return
+    loop = asyncio.get_running_loop()
+    symbol = next(iter(ALLOWED_INSTRUMENTS))
+    positions = await loop.run_in_executor(None, lambda: mx.get_open_positions(symbol))
+    orders = await loop.run_in_executor(None, lambda: mx.get_pending_orders(symbol))
+    if positions is None or orders is None:
+        return  # could not verify broker — skip this cycle, fail safe
+
+    pos_by_tag, ord_by_tag = {}, {}
+    for p in positions:
+        m = _TAG_RE.search(p.get("comment") or "")
+        if m:
+            pos_by_tag[(int(m.group(1)), int(m.group(2)))] = p
+    for o in orders:
+        m = _TAG_RE.search(o.get("comment") or "")
+        if m:
+            ord_by_tag[(int(m.group(1)), int(m.group(2)))] = o
+
+    for sid in open_ids:
+        key = f"{REDIS_PREFIX}:signal:{sid}"
+        pos_json = await r.get(key)
+        if not pos_json:
+            continue
+        pos = json.loads(pos_json)
+        sid_i = int(sid)
+        changed = False
+
+        for o in pos.get("orders", []):
+            idx = o["tp_index"]
+            prev = o.get("broker_state") or ("filled" if o.get("kind") == "market" else "pending")
+            bpos = pos_by_tag.get((sid_i, idx))
+            bord = ord_by_tag.get((sid_i, idx))
+
+            if bpos is not None:                       # slice is a live position
+                o["observed"] = True
+                o["miss"] = 0
+                if prev != "filled":
+                    fp = float(bpos.get("openPrice") or o["entry"])
+                    o["broker_state"], o["kind"], o["fill_price"] = "filled", "market", fp
+                    await loop.run_in_executor(None, db.record_fill, sid_i, idx, o["ticket_id"], fp)
+                    log.info("[%s] TP%d FILLED @ %.2f (broker)", sid_i, idx, fp)
+                o["last_profit"] = bpos.get("profit")
+                o["last_price"] = bpos.get("currentPrice")
+                changed = True
+            elif bord is not None:                     # still a pending order
+                if not o.get("observed"):
+                    o["observed"] = True               # persist so absence can later conclude it
+                    changed = True
+                o["miss"] = 0
+                if prev != "pending":
+                    o["broker_state"] = "pending"
+                    changed = True
+            else:                                      # absent from the broker
+                if prev in ("closed", "cancelled") or not o.get("observed"):
+                    continue                           # already terminal, or never seen yet
+                o["miss"] = o.get("miss", 0) + 1
+                changed = True  # persist the counter so it accrues across polls
+                if o["miss"] >= ABSENT_CONFIRM_POLLS:
+                    if prev == "filled":
+                        reason = _infer_close_reason(o.get("last_price"), o.get("last_profit"),
+                                                     o["tp"], o["sl"])
+                        pnl = o.get("last_profit")
+                        o["broker_state"], o["realized_pnl"] = "closed", pnl
+                        await loop.run_in_executor(None, db.record_slice_close,
+                                                   sid_i, idx, o["ticket_id"], reason, pnl)
+                        log.info("[%s] TP%d CLOSED (~%s, pnl~%s) (broker)", sid_i, idx, reason, pnl)
+                    else:                              # pending -> gone, never filled
+                        o["broker_state"] = "cancelled"
+                        await loop.run_in_executor(None, db.record_slice_close,
+                                                   sid_i, idx, o["ticket_id"], "cancelled", None)
+                        log.info("[%s] TP%d CANCELLED unfilled (broker)", sid_i, idx)
+                    changed = True
+
+        if changed:
+            await r.set(key, json.dumps(pos))
+
+        # Conclude the signal once every slice is terminal at the broker.
+        states = [o.get("broker_state") for o in pos.get("orders", [])]
+        if states and all(s in ("closed", "cancelled") for s in states):
+            filled = [o for o in pos["orders"] if o.get("broker_state") == "closed"]
+            if filled:
+                pnls = [o.get("realized_pnl") for o in filled if o.get("realized_pnl") is not None]
+                total = round(sum(pnls), 2) if pnls else None
+                reason = "broker_tp" if (total is not None and total > 0) else "broker_sl"
+            else:
+                total, reason = None, "broker_cancelled"
+            pos["status"] = f"closed_{reason}"
+            pos["closed_at"] = datetime.now(timezone.utc).isoformat()
+            await r.set(key, json.dumps(pos))
+            await r.srem(f"{REDIS_PREFIX}:open", str(sid_i))
+            await loop.run_in_executor(None, db.conclude_signal, sid_i, reason, total)
+            log.info("[%s] CONCLUDED from broker: %s pnl=%s", sid_i, reason, total)
+
+
+async def _position_poller() -> None:
+    """Periodically reconcile tracked signals against broker truth."""
+    while True:
+        await asyncio.sleep(BROKER_POLL_SEC)
+        try:
+            await reconcile_broker()
+        except Exception as e:
+            log.exception(f"position poller error: {e}")
 
 
 async def _classify_open_signals(open_ids) -> tuple[list[str], list[str], bool]:
@@ -399,6 +548,7 @@ async def main(args):
             log.exception(f"handler error: {e}")
 
     asyncio.create_task(_stale_sweeper())
+    asyncio.create_task(_position_poller())
     await client.run_until_disconnected()
 
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Literal
 
 import requests
@@ -36,6 +37,48 @@ DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
 _PROVISION_URL = "https://mt-provisioning-api-v1.agiliumtrade.ai"
 _TRADING_URL: str | None = None
 _TIMEOUT = 15
+
+# MetaAPI's broker link blips for a few seconds at a time: the gateway returns
+# 504/503/502 ("account is not connected to broker yet ... before retrying the
+# request") or 429, and bare connection/read timeouts surface as requests
+# exceptions. Without a retry a single blip aborts the whole signal (one failed
+# slice cancels all TPs), which is how the 2026-06-04 signals were lost. Retry
+# transient failures with backoff; a non-transient status (e.g. 400 bad order)
+# returns immediately so the caller's raise_for_status surfaces the real error.
+_RETRY_STATUSES = {429, 502, 503, 504}
+_RETRY_ATTEMPTS = int(os.getenv("METAAPI_RETRY_ATTEMPTS", "3"))
+_RETRY_BACKOFF = float(os.getenv("METAAPI_RETRY_BACKOFF", "1.5"))  # seconds, exponential
+
+
+def _request(method: str, url: str, **kwargs) -> requests.Response:
+    """HTTP request with bounded backoff retry on transient MetaAPI failures.
+
+    Returns the final Response (the caller still calls raise_for_status); raises
+    the last connection/timeout exception only if every attempt failed to reach
+    the server. A non-transient HTTP status returns on the first try.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(1, _RETRY_ATTEMPTS + 1):
+        try:
+            resp = requests.request(method, url, **kwargs)
+            if resp.status_code in _RETRY_STATUSES and attempt < _RETRY_ATTEMPTS:
+                delay = _RETRY_BACKOFF * (2 ** (attempt - 1))
+                log.warning("[MetaAPI] HTTP %s (attempt %d/%d) — retrying in %.1fs",
+                            resp.status_code, attempt, _RETRY_ATTEMPTS, delay)
+                time.sleep(delay)
+                continue
+            return resp
+        except (requests.ConnectionError, requests.Timeout) as e:
+            last_exc = e
+            if attempt < _RETRY_ATTEMPTS:
+                delay = _RETRY_BACKOFF * (2 ** (attempt - 1))
+                log.warning("[MetaAPI] %s (attempt %d/%d) — retrying in %.1fs",
+                            type(e).__name__, attempt, _RETRY_ATTEMPTS, delay)
+                time.sleep(delay)
+                continue
+            raise
+    # Unreachable when attempts >= 1, but keeps type checkers happy.
+    raise last_exc if last_exc else RuntimeError("retry loop exhausted")
 
 _SYMBOL_MAP = {"XAUUSD": "XAUUSD", "XAU_USD": "XAUUSD"}
 
@@ -82,7 +125,7 @@ def _trade(payload: dict) -> dict | None:
         return None
     try:
         url = f"{_trading_url()}/users/current/accounts/{_ACCOUNT}/trade"
-        resp = requests.post(url, headers=_headers(), json=payload, timeout=_TIMEOUT)
+        resp = _request("POST", url, headers=_headers(), json=payload, timeout=_TIMEOUT)
         resp.raise_for_status()
         return resp.json()
     except requests.HTTPError as e:
@@ -99,7 +142,7 @@ def get_symbol_price(symbol: str) -> dict | None:
         return None  # caller will fall through to market-when-in-zone heuristic
     try:
         url = f"{_trading_url()}/users/current/accounts/{_ACCOUNT}/symbols/{broker}/current-price"
-        resp = requests.get(url, headers=_headers(), timeout=_TIMEOUT)
+        resp = _request("GET", url, headers=_headers(), timeout=_TIMEOUT)
         resp.raise_for_status()
         d = resp.json()
         return {"bid": float(d["bid"]), "ask": float(d["ask"])}
@@ -137,7 +180,7 @@ def _get_symbol_spec(broker_symbol: str) -> dict:
 
     try:
         url = f"{_trading_url()}/users/current/accounts/{_ACCOUNT}/symbols/{broker_symbol}/specification"
-        resp = requests.get(url, headers=_headers(), timeout=_TIMEOUT)
+        resp = _request("GET", url, headers=_headers(), timeout=_TIMEOUT)
         resp.raise_for_status()
         data = resp.json()
         tick_size = float(data.get("tickSize", 0.01))
@@ -273,7 +316,7 @@ def get_open_positions(symbol: str | None = None) -> list[dict] | None:
     broker = _SYMBOL_MAP.get(symbol, symbol) if symbol else None
     try:
         url = f"{_trading_url()}/users/current/accounts/{_ACCOUNT}/positions"
-        resp = requests.get(url, headers=_headers(), timeout=_TIMEOUT)
+        resp = _request("GET", url, headers=_headers(), timeout=_TIMEOUT)
         resp.raise_for_status()
         data = resp.json()
         if not isinstance(data, list):
@@ -283,6 +326,34 @@ def get_open_positions(symbol: str | None = None) -> list[dict] | None:
         return data
     except Exception:
         log.exception("[MetaAPI] positions fetch failed")
+        return None
+
+
+def get_pending_orders(symbol: str | None = None) -> list[dict] | None:
+    """Return open *pending* orders (limits/stops not yet filled).
+
+    Same contract as get_open_positions: [] when there are genuinely none, None
+    when the broker could not be queried (missing creds / API error) so callers
+    fail safe and never read a transient error as "the order vanished". DRY_RUN
+    returns [] — no live broker state to inspect.
+    """
+    if DRY_RUN:
+        return []
+    if not _TOKEN or not _ACCOUNT:
+        return None
+    broker = _SYMBOL_MAP.get(symbol, symbol) if symbol else None
+    try:
+        url = f"{_trading_url()}/users/current/accounts/{_ACCOUNT}/orders"
+        resp = _request("GET", url, headers=_headers(), timeout=_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, list):
+            return None
+        if broker:
+            data = [o for o in data if o.get("symbol") == broker]
+        return data
+    except Exception:
+        log.exception("[MetaAPI] orders fetch failed")
         return None
 
 

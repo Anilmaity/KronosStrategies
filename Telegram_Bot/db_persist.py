@@ -133,6 +133,66 @@ def update_sl(msg_id: int, new_sl: float) -> None:
     record_update(msg_id, "sl_modify", {"sl": new_sl})
 
 
+def record_fill(msg_id: int, tp_index: int, ticket_id: str, fill_price: float) -> None:
+    """Mark a slice as filled at the broker (pending limit -> live position).
+
+    Flips kind to 'market' so the close path closes the position instead of
+    trying to cancel an order that no longer exists, and stamps the fill price.
+    """
+    try:
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE tg_orders
+                   SET broker_state = 'filled', fill_price = %s, kind = 'market'
+                 WHERE ticket_id = %s
+                """,
+                (round(fill_price, 3), str(ticket_id)),
+            )
+    except Exception as e:
+        log.error("[db] record_fill msg_id=%s tp%s failed: %s", msg_id, tp_index, e)
+    record_update(msg_id, "fill", {"tp_index": tp_index, "fill_price": fill_price})
+
+
+def record_slice_close(msg_id: int, tp_index: int, ticket_id: str,
+                       reason: str, pnl: float | None) -> None:
+    """Record a single slice leaving the broker (closed if it had filled, or
+    cancelled if it was still pending). pnl is the last live snapshot before the
+    position vanished (None for a never-filled cancel)."""
+    state = "cancelled" if reason == "cancelled" else "closed"
+    try:
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE tg_orders
+                   SET broker_state = %s, realized_pnl = %s, closed_at = NOW()
+                 WHERE ticket_id = %s
+                """,
+                (state, pnl, str(ticket_id)),
+            )
+    except Exception as e:
+        log.error("[db] record_slice_close msg_id=%s tp%s failed: %s", msg_id, tp_index, e)
+    record_update(msg_id, "slice_close",
+                  {"tp_index": tp_index, "reason": reason, "pnl": pnl})
+
+
+def conclude_signal(msg_id: int, reason: str, realized_pnl: float | None) -> None:
+    """Close a signal from broker truth, stamping the aggregate realized PnL."""
+    try:
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE tg_signals
+                   SET status = %s, close_reason = %s, realized_pnl = %s, closed_at = NOW()
+                 WHERE msg_id = %s
+                """,
+                (f"closed_{reason}", reason, realized_pnl, msg_id),
+            )
+    except Exception as e:
+        log.error("[db] conclude_signal msg_id=%s failed: %s", msg_id, e)
+    record_update(msg_id, "close", {"reason": reason, "realized_pnl": realized_pnl, "source": "broker"})
+
+
 def load_open_signals() -> list[dict]:
     """Return every signal whose status is still open (not closed_*).
 
@@ -158,7 +218,8 @@ def load_open_signals() -> list[dict]:
             ids = [row[0] for row in sig_rows]
             cur.execute(
                 """
-                SELECT msg_id, ticket_id, tp_index, kind, volume, entry, sl, tp
+                SELECT msg_id, ticket_id, tp_index, kind, volume, entry, sl, tp,
+                       broker_state, fill_price
                   FROM tg_orders
                  WHERE msg_id = ANY(%s)
                  ORDER BY msg_id, tp_index
@@ -166,11 +227,13 @@ def load_open_signals() -> list[dict]:
                 (ids,),
             )
             orders_by_msg: dict[int, list[dict]] = {}
-            for (mid, tid, idx, kind, vol, entry, sl, tp) in cur.fetchall():
+            for (mid, tid, idx, kind, vol, entry, sl, tp, bstate, fprice) in cur.fetchall():
                 orders_by_msg.setdefault(mid, []).append({
                     "tp_index": idx, "ticket_id": tid, "kind": kind,
                     "volume": float(vol), "entry": float(entry),
                     "sl": float(sl), "tp": float(tp),
+                    "broker_state": bstate or ("filled" if kind == "market" else "pending"),
+                    "fill_price": float(fprice) if fprice is not None else None,
                 })
 
         positions: list[dict] = []
