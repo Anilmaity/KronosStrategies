@@ -48,6 +48,7 @@ from telethon import TelegramClient, events
 from parse_signals import parse_signal, classify_outcome, SL_FIX_RE, clean
 import metaapi_orders as mx
 import db_persist as db
+import apis_persist as apis
 from state_store import make_store
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -111,8 +112,15 @@ def is_malformed(sig: dict) -> str | None:
 
 
 async def place_order(msg_id: int, sig: dict) -> dict:
-    """Place 3 MetaAPI orders (one per TP), each at entry midpoint with shared SL."""
-    entry_mid = (sig["entry_low"] + sig["entry_high"]) / 2
+    """Place one MetaAPI order per TP at the NEAR edge of the entry zone, shared SL.
+
+    The near edge is the price the market touches first as it retraces into the
+    zone, so a shallower pullback fills us and we participate more often:
+      sell -> entry_low  (price rises into the zone, hits the low edge first)
+      buy  -> entry_high (price falls into the zone, hits the high edge first)
+    Risk/volume, breakeven, and the recorded entry all derive from this price.
+    """
+    entry_mid = sig["entry_low"] if sig["side"] == "sell" else sig["entry_high"]
     risk_pts = abs(entry_mid - sig["sl"])
     total_vol = RISK_PER_TRADE_USD / (risk_pts * USD_PER_POINT_PER_LOT)
     total_vol = max(total_vol, MIN_LOT * len(sig["tps"]))
@@ -206,6 +214,22 @@ async def close_order(msg_id: int, reason: str):
     await r.set(key, json.dumps(pos))
     await r.srem(f"{REDIS_PREFIX}:open", str(msg_id))
     await loop.run_in_executor(None, db.close_signal, msg_id, reason)
+    # Mirror the close into the dashboard position. Realized PnL from the last
+    # broker snapshot of the filled slices, if any. The quantity>0 guard in
+    # conclude_position makes this a no-op if broker reconciliation already
+    # concluded it, and unfilled superseded/expired signals have no row.
+    apis_id = pos.get("apis_pos_id")
+    if apis_id:
+        filled = [o for o in pos.get("orders", []) if o.get("broker_state") == "filled"]
+        rp = [o.get("realized_pnl") if o.get("realized_pnl") is not None else o.get("last_profit")
+              for o in filled]
+        rp = [x for x in rp if x is not None]
+        realized = round(sum(rp), 2) if rp else None
+        close_price = next((o.get("last_price") for o in reversed(pos.get("orders", []))
+                            if o.get("last_price") is not None), None)
+        await loop.run_in_executor(
+            None, lambda: apis.conclude_position(apis_id, realized, close_price,
+                                                 pos["side"], pos.get("total_volume"), reason))
     log.info(f"[{msg_id}] CLOSE ({reason})")
 
 
@@ -354,6 +378,29 @@ async def reconcile_broker() -> None:
         if changed:
             await r.set(key, json.dumps(pos))
 
+        # ── Dashboard mirror (apis_position) ──────────────────────────────
+        # Reflect real broker state into the apis schema the web dashboard
+        # reads (the same one the other live strategies write to). Created
+        # lazily on first fill so only genuine market entries show; live PnL
+        # refreshed each poll. Best-effort — never blocks reconciliation.
+        filled_slices = [o for o in pos.get("orders", []) if o.get("broker_state") == "filled"]
+        if filled_slices:
+            if not pos.get("apis_pos_id"):
+                total_vol = round(sum(float(o["volume"]) for o in pos.get("orders", [])), 2)
+                first_ticket = str(pos["orders"][0].get("ticket_id")) if pos.get("orders") else None
+                apis_id = await loop.run_in_executor(
+                    None, lambda: apis.open_position(pos["side"], pos["entry_mid"], total_vol, first_ticket))
+                if apis_id:
+                    pos["apis_pos_id"] = apis_id
+                    await r.set(key, json.dumps(pos))
+            if pos.get("apis_pos_id"):
+                live_pnls = [o.get("last_profit") for o in filled_slices if o.get("last_profit") is not None]
+                live_pnl = round(sum(live_pnls), 2) if live_pnls else None
+                prices = [o.get("last_price") for o in filled_slices if o.get("last_price") is not None]
+                last_price = prices[-1] if prices else None
+                await loop.run_in_executor(
+                    None, lambda: apis.update_live(pos.get("apis_pos_id"), last_price, live_pnl))
+
         # Conclude the signal once every slice is terminal at the broker.
         states = [o.get("broker_state") for o in pos.get("orders", [])]
         if states and all(s in ("closed", "cancelled") for s in states):
@@ -369,6 +416,22 @@ async def reconcile_broker() -> None:
             await r.set(key, json.dumps(pos))
             await r.srem(f"{REDIS_PREFIX}:open", str(sid_i))
             await loop.run_in_executor(None, db.conclude_signal, sid_i, reason, total)
+            # Flatten the dashboard position with the realized PnL. If broker
+            # filled then closed entirely between polls we may never have
+            # created the row — recover it (or create it) so the concluded
+            # trade still shows.
+            apis_id = pos.get("apis_pos_id")
+            if not apis_id and reason != "broker_cancelled":
+                apis_id = await loop.run_in_executor(None, apis.find_open_position_id)
+                if not apis_id:
+                    total_vol = round(sum(float(o["volume"]) for o in pos.get("orders", [])), 2)
+                    apis_id = await loop.run_in_executor(
+                        None, lambda: apis.open_position(pos["side"], pos["entry_mid"], total_vol))
+            close_price = next((o.get("last_price") for o in reversed(pos.get("orders", []))
+                                if o.get("last_price") is not None), None)
+            await loop.run_in_executor(
+                None, lambda: apis.conclude_position(apis_id, total, close_price,
+                                                     pos["side"], pos.get("total_volume"), reason))
             log.info("[%s] CONCLUDED from broker: %s pnl=%s", sid_i, reason, total)
 
 

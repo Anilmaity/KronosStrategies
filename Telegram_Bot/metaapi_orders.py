@@ -256,7 +256,15 @@ def place_market_order_full(side: Side, symbol: str, volume: float,
 
 def place_limit_order(side: Side, symbol: str, volume: float, entry: float,
                       sl: float, tp: float, current_price: float | None = None,
-                      comment: str = "") -> str | None:
+                      comment: str = "") -> tuple[str | None, str | None]:
+    """Place a pending limit/stop order.
+
+    Returns (ticket_id, retcode). retcode is the broker's stringCode when the
+    order was rejected without a ticket (e.g. 'TRADE_RETCODE_INVALID_PRICE' when
+    price has moved to the wrong side of the limit between our price fetch and
+    the trade), letting the caller fall back to a market entry instead of
+    aborting the whole signal.
+    """
     broker = _SYMBOL_MAP.get(symbol, symbol)
     ref = current_price if current_price is not None else entry
     action = _action_for(side, is_limit=True, entry=entry, current=ref)
@@ -271,8 +279,10 @@ def place_limit_order(side: Side, symbol: str, volume: float, entry: float,
     }
     resp = _trade(payload)
     if not resp:
-        return None
-    return _extract_ticket(resp, payload, prefer_position=False)
+        return None, None
+    tid = _extract_ticket(resp, payload, prefer_position=False)
+    retcode = None if tid else (resp.get("stringCode") or resp.get("numericCode"))
+    return tid, retcode
 
 
 def modify_position_sl(position_id: str, new_sl: float) -> bool:
@@ -367,21 +377,26 @@ def submit_signal_orders(side: Side, symbol: str, entry: float, sl: float,
     if not tps:
         return []
     broker = _SYMBOL_MAP.get(symbol, symbol)
+    min_d = _get_symbol_spec(broker)["stops_level_price"]
     px = get_symbol_price(symbol)
     cur = (px["ask"] if side == "buy" else px["bid"]) if px else None
 
-    # If current price is already inside/past the entry, use market; else limit.
+    # Market vs limit. A pending limit's open price must sit at least the broker
+    # stops-distance (min_d) on the correct side of the market, else the broker
+    # rejects it with INVALID_PRICE. So when current price is already inside/past
+    # the entry — or merely within min_d of it — enter at market instead.
+    #   BUY_LIMIT  needs entry <= cur - min_d  -> else market
+    #   SELL_LIMIT needs entry >= cur + min_d  -> else market
     use_market = False
     if cur is not None:
-        if side == "buy" and cur <= entry:
+        if side == "buy" and entry > cur - min_d:
             use_market = True
-        if side == "sell" and cur >= entry:
+        if side == "sell" and entry < cur + min_d:
             use_market = True
 
     # Reference the broker measures the stops level from: current market price
     # for a market order, the open (entry) price for a pending limit.
     ref_price = cur if (use_market and cur is not None) else entry
-    min_d = _get_symbol_spec(broker)["stops_level_price"]
 
     vol_each = round(total_volume / len(tps), 2)
     if vol_each <= 0:
@@ -402,8 +417,27 @@ def submit_signal_orders(side: Side, symbol: str, entry: float, sl: float,
             tid = place_market_order_full(side, symbol, vol_each, o_sl, o_tp, comment)
             kind = "market"
         else:
-            tid = place_limit_order(side, symbol, vol_each, entry, o_sl, o_tp, cur, comment)
+            tid, retcode = place_limit_order(side, symbol, vol_each, entry, o_sl, o_tp, cur, comment)
             kind = "limit"
+            # Price moved to the wrong side of the limit between our fetch and the
+            # trade (the recurring INVALID_PRICE drop) — enter at market instead of
+            # aborting the whole signal, as long as we're not chasing into the SL.
+            if not tid and str(retcode) in ("TRADE_RETCODE_INVALID_PRICE", "10015"):
+                px2 = get_symbol_price(symbol)
+                cur2 = (px2["ask"] if side == "buy" else px2["bid"]) if px2 else cur
+                room_ok = cur2 is not None and (
+                    (sl - cur2 >= min_d) if side == "sell" else (cur2 - sl >= min_d))
+                if room_ok:
+                    o_sl, o_tp, adj2 = _apply_stops_floor(side, cur2, sl, tp, min_d)
+                    log.warning("[%s] TP%d limit rejected INVALID_PRICE (entry=%.2f cur=%.2f) "
+                                "— falling back to market", msg_id, i, entry, cur2)
+                    tid = place_market_order_full(side, symbol, vol_each, o_sl, o_tp, comment)
+                    kind = "market"
+                    if tid:
+                        use_market = True  # remaining slices go straight to market
+                else:
+                    log.warning("[%s] TP%d limit rejected INVALID_PRICE and market unsafe "
+                                "(cur=%s sl=%.2f) — not chasing", msg_id, i, cur2, sl)
         if not tid:
             log.error("[%s] order placement failed for TP%d — aborting remaining slices", msg_id, i)
             for prev in submitted:
