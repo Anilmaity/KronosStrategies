@@ -149,5 +149,46 @@ services:
     volumes:
       - tg_session:/app/session
 
+  # ───────────────────────────────────────────────────────────────────────────
+  # Telegram copy-trader — SECOND account. Same @NeymarGoldTrader channel, same
+  # code/image, but mirrored onto a *different* MetaAPI account (account2.txt).
+  # It runs fully ALONGSIDE the primary telegram_trader above; the two never
+  # collide because every shared surface is namespaced:
+  #   - MetaAPI account/token .... overridden here (TG2_* — set in .env on the box)
+  #   - Telethon session ......... own volume tg_session_neymar2 (separate one-time login)
+  #   - tg_* audit tables ........ TG_DB_PREFIX=tg_neymar2  -> tg_neymar2_signals/...
+  #   - Redis state keys ......... TG_REDIS_PREFIX=hft:tg2  (only matters with real Redis)
+  #   - Kronos dashboard rows .... APIS_DASHBOARD_SYNC=false (no apis_position collision)
+  #
+  # ONE-TIME LOGIN before the first `up` (its own session volume, so separate
+  # from the primary trader's login):
+  #     docker compose run --rm -it telegram_trader_neymar2 python live_trader.py
+  # enter phone + code; once you see "Listening to NeymarGoldTrader ...", Ctrl-C,
+  # then:  docker compose up -d telegram_trader_neymar2
+  #
+  # REQUIRED in .env on the box (NOT committed — pull from account2.txt):
+  #     TG2_META_ACCOUNT_ID=c9bf3b9d-b773-4c93-b387-af79f7a83f66
+  #     TG2_META_API_TOKEN=<token from account2.txt>
+  # SAFETY: DRY_RUN is "false" => LIVE real orders on the second account.
+  #         Consider setting RISK_USD per-account if the two balances differ.
+  # ───────────────────────────────────────────────────────────────────────────
+  telegram_trader_neymar2:
+    build: ./Telegram_Bot
+    restart: always
+    env_file: .env
+    environment:
+      META_ACCOUNT_ID:     ${TG2_META_ACCOUNT_ID}
+      META_API_TOKEN:      ${TG2_META_API_TOKEN}
+      TIGERDATA_URL:       ${TIGERDATA_URL:-}
+      TG_CHANNEL:          NeymarGoldTrader
+      TG_SESSION_DIR:      /app/session
+      TG_DB_PREFIX:        tg_neymar2
+      TG_REDIS_PREFIX:     hft:tg2
+      APIS_DASHBOARD_SYNC: "false"
+      DRY_RUN:             "false"
+    volumes:
+      - tg_session_neymar2:/app/session
+
 volumes:
   tg_session:
+  tg_session_neymar2:

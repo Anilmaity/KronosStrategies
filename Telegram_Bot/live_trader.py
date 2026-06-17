@@ -65,7 +65,10 @@ SESSION = str(Path(os.getenv("TG_SESSION_DIR", str(_HERE))) / "kronos_tg")
 
 # Empty REDIS_URL → use in-memory state store. Set to a redis:// URL to enable Redis.
 REDIS_URL = os.getenv("REDIS_URL", "").strip() or None
-REDIS_PREFIX = "hft:tg"
+# State-key namespace. A second trader copy (parallel account, same channel) sets
+# its own prefix so the two never share :open / :signal:* keys when a real Redis
+# backend is configured. (The default in-memory store is already per-process.)
+REDIS_PREFIX = os.getenv("TG_REDIS_PREFIX", "hft:tg")
 
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
 MAX_SIGNAL_AGE_SEC = 120          # ignore signals we receive late (recovery from downtime)
