@@ -158,3 +158,47 @@ def test_signal_concludes_only_when_all_accounts_terminal(monkeypatch):
     out = json.loads(asyncio.run(store.get(f"{lt.REDIS_PREFIX}:signal:7")))
     assert out["status"].startswith("closed_")
     assert "7" not in asyncio.run(store.smembers(f"{lt.REDIS_PREFIX}:open"))
+
+
+class _FakeDash:
+    def __init__(self, label):
+        self.label = label; self.opened = []
+    def open_position(self, side, entry, vol, ticket=None):
+        self.opened.append((side, entry, vol)); return f"{self.label}-pos"
+    def update_live(self, pid, ltp, pnl): pass
+    def conclude_position(self, *a, **k): pass
+    def find_open_position_id(self): return None
+
+
+def test_each_account_opens_its_own_dashboard_position(monkeypatch):
+    _silence_io(monkeypatch)
+    store = MemoryStore(); monkeypatch.setattr(lt, "r", store)
+
+    def fc(label):
+        return _FakeClient(label,
+            positions=[{"comment": "tg-1-tp1", "openPrice": 2000.0, "profit": 2.0, "currentPrice": 2002.0}],
+            orders=[])
+    dprim, dney = _FakeDash("primary"), _FakeDash("neymar2")
+    monkeypatch.setattr(lt, "ACCOUNTS", [
+        {"label": "primary", "client": fc("primary"), "risk_usd": 100.0, "apis": dprim},
+        {"label": "neymar2", "client": fc("neymar2"), "risk_usd": 100.0, "apis": dney},
+    ])
+    pos = {
+        "msg_id": 1, "side": "buy", "instrument": "XAUUSD", "entry_mid": 2000.0,
+        "sl": 1990.0, "tps": [2005.0], "total_volume": 0.02,
+        "orders": [
+            {"tp_index": 1, "tp": 2005.0, "ticket_id": "P1", "kind": "market", "volume": 0.01,
+             "entry": 2000.0, "sl": 1990.0, "account": "primary", "broker_state": "pending", "observed": True, "miss": 0},
+            {"tp_index": 1, "tp": 2005.0, "ticket_id": "N1", "kind": "market", "volume": 0.01,
+             "entry": 2000.0, "sl": 1990.0, "account": "neymar2", "broker_state": "pending", "observed": True, "miss": 0},
+        ],
+    }
+    asyncio.run(store.set(f"{lt.REDIS_PREFIX}:signal:1", json.dumps(pos)))
+    asyncio.run(store.sadd(f"{lt.REDIS_PREFIX}:open", "1"))
+
+    asyncio.run(lt.reconcile_broker())
+
+    assert dprim.opened, "primary dashboard position not opened"
+    assert dney.opened, "neymar2 dashboard position not opened"
+    out = json.loads(asyncio.run(store.get(f"{lt.REDIS_PREFIX}:signal:1")))
+    assert out["apis_pos_ids"] == {"primary": "primary-pos", "neymar2": "neymar2-pos"}
