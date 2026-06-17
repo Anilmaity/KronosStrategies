@@ -60,3 +60,9 @@ ALTER TABLE tg_orders  ADD COLUMN IF NOT EXISTS broker_state TEXT;        -- pen
 ALTER TABLE tg_orders  ADD COLUMN IF NOT EXISTS fill_price   NUMERIC(12,3);
 ALTER TABLE tg_orders  ADD COLUMN IF NOT EXISTS realized_pnl NUMERIC(14,4);
 ALTER TABLE tg_orders  ADD COLUMN IF NOT EXISTS closed_at    TIMESTAMPTZ;
+
+-- Copy-trade fan-out (added 2026-06-17): one signal is mirrored onto more than
+-- one MetaAPI account in a single process, so each TP slice records which account
+-- it was placed on. Existing rows default to 'primary'. Reconciliation routes each
+-- slice to its own account's broker state by this column.
+ALTER TABLE tg_orders  ADD COLUMN IF NOT EXISTS account TEXT NOT NULL DEFAULT 'primary';

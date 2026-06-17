@@ -43,8 +43,8 @@ for _p in _candidates:
     if _p.exists():
         load_dotenv(_p, override=False)
 
-from telethon import TelegramClient, events
-
+# telethon is imported lazily inside main() so this module can be imported (and
+# unit-tested) without the Telegram client dependency installed.
 from parse_signals import parse_signal, classify_outcome, SL_FIX_RE, clean
 import metaapi_orders as mx
 import db_persist as db
@@ -96,6 +96,32 @@ BROKER_POLL_SEC = int(os.getenv("BROKER_POLL_SEC", "30"))
 ABSENT_CONFIRM_POLLS = int(os.getenv("ABSENT_CONFIRM_POLLS", "2"))
 _TAG_RE = re.compile(r"tg-(\d+)-tp(\d+)")
 
+
+def _build_accounts() -> list[dict]:
+    """Accounts each signal is mirrored onto (copy trading).
+
+    Primary is always present; a second ('neymar2') is added only when both
+    TG2_META_ACCOUNT_ID and TG2_META_API_TOKEN are set — so with no TG2_* creds
+    the single-account behaviour is unchanged. Each account carries its own
+    MetaApiClient (independent token / trading host / spec cache) and risk size.
+    """
+    primary = mx.MetaApiClient(
+        os.getenv("META_API_TOKEN", ""), os.getenv("META_ACCOUNT_ID", ""),
+        dry_run=DRY_RUN, label="primary")
+    accounts = [{"label": "primary", "client": primary, "risk_usd": RISK_PER_TRADE_USD}]
+
+    tg2_acct = os.getenv("TG2_META_ACCOUNT_ID", "").strip()
+    tg2_tok = os.getenv("TG2_META_API_TOKEN", "").strip()
+    if tg2_acct and tg2_tok:
+        client2 = mx.MetaApiClient(tg2_tok, tg2_acct, dry_run=DRY_RUN, label="neymar2")
+        accounts.append({"label": "neymar2", "client": client2,
+                         "risk_usd": float(os.getenv("TG2_RISK_USD", str(RISK_PER_TRADE_USD)))})
+    return accounts
+
+
+ACCOUNTS = _build_accounts()
+ACCOUNTS_BY_LABEL = {a["label"]: a["client"] for a in ACCOUNTS}
+
 r = None  # state store (RedisStore or MemoryStore) — set in main()
 
 
@@ -125,31 +151,43 @@ async def place_order(msg_id: int, sig: dict) -> dict:
     """
     entry_mid = sig["entry_low"] if sig["side"] == "sell" else sig["entry_high"]
     risk_pts = abs(entry_mid - sig["sl"])
-    total_vol = RISK_PER_TRADE_USD / (risk_pts * USD_PER_POINT_PER_LOT)
-    total_vol = max(total_vol, MIN_LOT * len(sig["tps"]))
 
     loop = asyncio.get_running_loop()
-    submitted = await loop.run_in_executor(
-        None,
-        lambda: mx.submit_signal_orders(
-            side=sig["side"],
-            symbol=sig["instrument"],
-            entry=entry_mid,
-            sl=sig["sl"],
-            tps=sig["tps"],
-            total_volume=total_vol,
-            msg_id=msg_id,
-        ),
-    )
-
-    # Seed per-slice broker bookkeeping the reconciler maintains: a market slice
-    # is born "filled", a limit "pending". `observed` flips True once we actually
-    # see the slice at the broker, so absence can only conclude a slice we have
-    # confirmed existed (never a just-placed order the broker hasn't listed yet).
-    for o in submitted:
-        o["broker_state"] = "filled" if o.get("kind") == "market" else "pending"
-        o["observed"] = False
-        o["miss"] = 0
+    all_orders: list[dict] = []
+    primary_vol: float | None = None
+    for acc in ACCOUNTS:
+        client, label = acc["client"], acc["label"]
+        total_vol = acc["risk_usd"] / (risk_pts * USD_PER_POINT_PER_LOT)
+        total_vol = max(total_vol, MIN_LOT * len(sig["tps"]))
+        submitted = await loop.run_in_executor(
+            None,
+            lambda c=client, v=total_vol: c.submit_signal_orders(
+                side=sig["side"],
+                symbol=sig["instrument"],
+                entry=entry_mid,
+                sl=sig["sl"],
+                tps=sig["tps"],
+                total_volume=v,
+                msg_id=msg_id,
+            ),
+        )
+        # Seed per-slice broker bookkeeping the reconciler maintains: a market
+        # slice is born "filled", a limit "pending". `observed` flips True once we
+        # actually see the slice at the broker, so absence can only conclude a
+        # slice we confirmed existed (never a just-placed order not yet listed).
+        # Each slice is tagged with its account so modify/close/reconcile route
+        # to the right broker.
+        for o in submitted:
+            o["account"] = label
+            o["broker_state"] = "filled" if o.get("kind") == "market" else "pending"
+            o["observed"] = False
+            o["miss"] = 0
+        if not submitted:
+            log.warning("[%s:%s] no orders submitted for this account", msg_id, label)
+        if label == "primary":
+            primary_vol = (round(sum(float(o["volume"]) for o in submitted), 2)
+                           if submitted else total_vol)
+        all_orders.extend(submitted)
 
     return {
         "msg_id": msg_id,
@@ -160,10 +198,11 @@ async def place_order(msg_id: int, sig: dict) -> dict:
         "entry_mid": entry_mid,
         "sl": sig["sl"],
         "tps": sig["tps"],
-        "total_volume": total_vol,
+        # total_volume drives the (primary-only) dashboard + audit row.
+        "total_volume": primary_vol if primary_vol is not None else 0.0,
         "risk_pts": risk_pts,
-        "orders": submitted,
-        "status": "submitted" if submitted else "rejected",
+        "orders": all_orders,
+        "status": "submitted" if all_orders else "rejected",
         "dry_run": DRY_RUN,
         "opened_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -180,9 +219,12 @@ async def modify_sl(msg_id: int, new_sl: float):
 
     loop = asyncio.get_running_loop()
     for o in pos.get("orders", []):
+        client = ACCOUNTS_BY_LABEL.get(o.get("account", "primary"))
+        if client is None:
+            continue
         # POSITION_MODIFY only applies once filled; pending limits ignore the call.
         # Safe to attempt either way — MetaAPI returns an error we log and move on.
-        await loop.run_in_executor(None, mx.modify_position_sl, o["ticket_id"], new_sl)
+        await loop.run_in_executor(None, client.modify_position_sl, o["ticket_id"], new_sl)
 
     await r.set(key, json.dumps(pos))
     await loop.run_in_executor(None, db.update_sl, msg_id, new_sl)
@@ -207,10 +249,13 @@ async def close_order(msg_id: int, reason: str):
 
     loop = asyncio.get_running_loop()
     for o in pos.get("orders", []):
+        client = ACCOUNTS_BY_LABEL.get(o.get("account", "primary"))
+        if client is None:
+            continue
         if o["kind"] == "limit":
-            await loop.run_in_executor(None, mx.cancel_order, o["ticket_id"])
+            await loop.run_in_executor(None, client.cancel_order, o["ticket_id"])
         else:
-            await loop.run_in_executor(None, mx.close_position, o["ticket_id"])
+            await loop.run_in_executor(None, client.close_position, o["ticket_id"])
 
     pos["status"] = f"closed_{reason}"
     pos["closed_at"] = datetime.now(timezone.utc).isoformat()
@@ -223,12 +268,14 @@ async def close_order(msg_id: int, reason: str):
     # concluded it, and unfilled superseded/expired signals have no row.
     apis_id = pos.get("apis_pos_id")
     if apis_id:
-        filled = [o for o in pos.get("orders", []) if o.get("broker_state") == "filled"]
+        # Dashboard reflects the PRIMARY account only.
+        primary_orders = [o for o in pos.get("orders", []) if o.get("account", "primary") == "primary"]
+        filled = [o for o in primary_orders if o.get("broker_state") == "filled"]
         rp = [o.get("realized_pnl") if o.get("realized_pnl") is not None else o.get("last_profit")
               for o in filled]
         rp = [x for x in rp if x is not None]
         realized = round(sum(rp), 2) if rp else None
-        close_price = next((o.get("last_price") for o in reversed(pos.get("orders", []))
+        close_price = next((o.get("last_price") for o in reversed(primary_orders)
                             if o.get("last_price") is not None), None)
         await loop.run_in_executor(
             None, lambda: apis.conclude_position(apis_id, realized, close_price,
@@ -308,20 +355,28 @@ async def reconcile_broker() -> None:
         return
     loop = asyncio.get_running_loop()
     symbol = next(iter(ALLOWED_INSTRUMENTS))
-    positions = await loop.run_in_executor(None, lambda: mx.get_open_positions(symbol))
-    orders = await loop.run_in_executor(None, lambda: mx.get_pending_orders(symbol))
-    if positions is None or orders is None:
-        return  # could not verify broker — skip this cycle, fail safe
 
-    pos_by_tag, ord_by_tag = {}, {}
-    for p in positions:
-        m = _TAG_RE.search(p.get("comment") or "")
-        if m:
-            pos_by_tag[(int(m.group(1)), int(m.group(2)))] = p
-    for o in orders:
-        m = _TAG_RE.search(o.get("comment") or "")
-        if m:
-            ord_by_tag[(int(m.group(1)), int(m.group(2)))] = o
+    # Build per-account tag maps from each account's own broker truth. Keeping
+    # them per-account is the safety-critical bit: a slice is only ever matched
+    # against positions/orders from ITS OWN account, never another's. If ANY
+    # configured account can't be queried, skip this whole cycle and fail safe.
+    acct_maps: dict[str, tuple[dict, dict]] = {}
+    for acc in ACCOUNTS:
+        client, label = acc["client"], acc["label"]
+        positions = await loop.run_in_executor(None, lambda c=client: c.get_open_positions(symbol))
+        orders = await loop.run_in_executor(None, lambda c=client: c.get_pending_orders(symbol))
+        if positions is None or orders is None:
+            return  # could not verify a broker — skip this cycle, fail safe
+        pos_by_tag, ord_by_tag = {}, {}
+        for p in positions:
+            m = _TAG_RE.search(p.get("comment") or "")
+            if m:
+                pos_by_tag[(int(m.group(1)), int(m.group(2)))] = p
+        for o in orders:
+            m = _TAG_RE.search(o.get("comment") or "")
+            if m:
+                ord_by_tag[(int(m.group(1)), int(m.group(2)))] = o
+        acct_maps[label] = (pos_by_tag, ord_by_tag)
 
     for sid in open_ids:
         key = f"{REDIS_PREFIX}:signal:{sid}"
@@ -333,6 +388,11 @@ async def reconcile_broker() -> None:
         changed = False
 
         for o in pos.get("orders", []):
+            label = o.get("account", "primary")
+            maps = acct_maps.get(label)
+            if maps is None:
+                continue  # slice's account isn't configured/polled — leave untouched
+            pos_by_tag, ord_by_tag = maps
             idx = o["tp_index"]
             prev = o.get("broker_state") or ("filled" if o.get("kind") == "market" else "pending")
             bpos = pos_by_tag.get((sid_i, idx))
@@ -345,7 +405,7 @@ async def reconcile_broker() -> None:
                     fp = float(bpos.get("openPrice") or o["entry"])
                     o["broker_state"], o["kind"], o["fill_price"] = "filled", "market", fp
                     await loop.run_in_executor(None, db.record_fill, sid_i, idx, o["ticket_id"], fp)
-                    log.info("[%s] TP%d FILLED @ %.2f (broker)", sid_i, idx, fp)
+                    log.info("[%s:%s] TP%d FILLED @ %.2f (broker)", sid_i, label, idx, fp)
                 o["last_profit"] = bpos.get("profit")
                 o["last_price"] = bpos.get("currentPrice")
                 changed = True
@@ -370,27 +430,29 @@ async def reconcile_broker() -> None:
                         o["broker_state"], o["realized_pnl"] = "closed", pnl
                         await loop.run_in_executor(None, db.record_slice_close,
                                                    sid_i, idx, o["ticket_id"], reason, pnl)
-                        log.info("[%s] TP%d CLOSED (~%s, pnl~%s) (broker)", sid_i, idx, reason, pnl)
+                        log.info("[%s:%s] TP%d CLOSED (~%s, pnl~%s) (broker)", sid_i, label, idx, reason, pnl)
                     else:                              # pending -> gone, never filled
                         o["broker_state"] = "cancelled"
                         await loop.run_in_executor(None, db.record_slice_close,
                                                    sid_i, idx, o["ticket_id"], "cancelled", None)
-                        log.info("[%s] TP%d CANCELLED unfilled (broker)", sid_i, idx)
+                        log.info("[%s:%s] TP%d CANCELLED unfilled (broker)", sid_i, label, idx)
                     changed = True
 
         if changed:
             await r.set(key, json.dumps(pos))
 
-        # ── Dashboard mirror (apis_position) ──────────────────────────────
+        # ── Dashboard mirror (apis_position) — PRIMARY account only ───────
         # Reflect real broker state into the apis schema the web dashboard
         # reads (the same one the other live strategies write to). Created
         # lazily on first fill so only genuine market entries show; live PnL
-        # refreshed each poll. Best-effort — never blocks reconciliation.
-        filled_slices = [o for o in pos.get("orders", []) if o.get("broker_state") == "filled"]
+        # refreshed each poll. Best-effort — never blocks reconciliation. The
+        # second account is a copy-trade mirror and is not shown on the dashboard.
+        primary_orders = [o for o in pos.get("orders", []) if o.get("account", "primary") == "primary"]
+        filled_slices = [o for o in primary_orders if o.get("broker_state") == "filled"]
         if filled_slices:
             if not pos.get("apis_pos_id"):
-                total_vol = round(sum(float(o["volume"]) for o in pos.get("orders", [])), 2)
-                first_ticket = str(pos["orders"][0].get("ticket_id")) if pos.get("orders") else None
+                total_vol = round(sum(float(o["volume"]) for o in primary_orders), 2)
+                first_ticket = str(primary_orders[0].get("ticket_id")) if primary_orders else None
                 apis_id = await loop.run_in_executor(
                     None, lambda: apis.open_position(pos["side"], pos["entry_mid"], total_vol, first_ticket))
                 if apis_id:
@@ -404,38 +466,46 @@ async def reconcile_broker() -> None:
                 await loop.run_in_executor(
                     None, lambda: apis.update_live(pos.get("apis_pos_id"), last_price, live_pnl))
 
-        # Conclude the signal once every slice is terminal at the broker.
+        # Conclude the signal once EVERY slice (across all accounts) is terminal.
         states = [o.get("broker_state") for o in pos.get("orders", [])]
         if states and all(s in ("closed", "cancelled") for s in states):
-            filled = [o for o in pos["orders"] if o.get("broker_state") == "closed"]
-            if filled:
-                pnls = [o.get("realized_pnl") for o in filled if o.get("realized_pnl") is not None]
-                total = round(sum(pnls), 2) if pnls else None
-                reason = "broker_tp" if (total is not None and total > 0) else "broker_sl"
+            closed_all = [o for o in pos["orders"] if o.get("broker_state") == "closed"]
+            # Aggregate realized PnL across all accounts for the audit row.
+            all_pnls = [o.get("realized_pnl") for o in closed_all if o.get("realized_pnl") is not None]
+            total = round(sum(all_pnls), 2) if all_pnls else None
+            # Dashboard PnL + the win/loss outcome track the PRIMARY account; the
+            # outcome (tp vs sl) is a property of the market, so primary speaks for it.
+            primary_closed = [o for o in primary_orders if o.get("broker_state") == "closed"]
+            primary_pnls = [o.get("realized_pnl") for o in primary_closed if o.get("realized_pnl") is not None]
+            primary_total = round(sum(primary_pnls), 2) if primary_pnls else None
+            if closed_all:
+                basis = primary_total if primary_total is not None else total
+                reason = "broker_tp" if (basis is not None and basis > 0) else "broker_sl"
             else:
-                total, reason = None, "broker_cancelled"
+                reason = "broker_cancelled"
             pos["status"] = f"closed_{reason}"
             pos["closed_at"] = datetime.now(timezone.utc).isoformat()
             await r.set(key, json.dumps(pos))
             await r.srem(f"{REDIS_PREFIX}:open", str(sid_i))
             await loop.run_in_executor(None, db.conclude_signal, sid_i, reason, total)
-            # Flatten the dashboard position with the realized PnL. If broker
-            # filled then closed entirely between polls we may never have
-            # created the row — recover it (or create it) so the concluded
-            # trade still shows.
+            # Flatten the dashboard position (PRIMARY account) with its realized
+            # PnL. If the broker filled then closed entirely between polls we may
+            # never have created the row — recover it (or create it) so the
+            # concluded trade still shows.
             apis_id = pos.get("apis_pos_id")
             if not apis_id and reason != "broker_cancelled":
                 apis_id = await loop.run_in_executor(None, apis.find_open_position_id)
                 if not apis_id:
-                    total_vol = round(sum(float(o["volume"]) for o in pos.get("orders", [])), 2)
+                    total_vol = round(sum(float(o["volume"]) for o in primary_orders), 2)
                     apis_id = await loop.run_in_executor(
                         None, lambda: apis.open_position(pos["side"], pos["entry_mid"], total_vol))
-            close_price = next((o.get("last_price") for o in reversed(pos.get("orders", []))
+            close_price = next((o.get("last_price") for o in reversed(primary_orders)
                                 if o.get("last_price") is not None), None)
             await loop.run_in_executor(
-                None, lambda: apis.conclude_position(apis_id, total, close_price,
+                None, lambda: apis.conclude_position(apis_id, primary_total, close_price,
                                                      pos["side"], pos.get("total_volume"), reason))
-            log.info("[%s] CONCLUDED from broker: %s pnl=%s", sid_i, reason, total)
+            log.info("[%s] CONCLUDED from broker: %s pnl=%s (all-acct %s)",
+                     sid_i, reason, primary_total, total)
 
 
 async def _position_poller() -> None:
@@ -456,24 +526,29 @@ async def _classify_open_signals(open_ids) -> tuple[list[str], list[str], bool]:
     time, we want the new signal to take over those unfilled limits — but never
     to cancel a slice that has actually filled into a live market position.
 
-    A signal is "live" if the broker reports an open position whose comment
+    A signal is "live" if ANY account reports an open position whose comment
     carries its `tg-<msg_id>-` tag; otherwise it is "unfilled" (still pending,
-    or already gone) and may be superseded. The bool return is `ok`: False means
-    the broker position query failed, so the caller must fail safe and keep the
-    no-pyramiding guard rather than cancel anything it could not verify.
+    or already gone) and may be superseded — we never supersede while the signal
+    holds a live position on any mirrored account. The bool return is `ok`: False
+    means a broker position query failed, so the caller must fail safe and keep
+    the no-pyramiding guard rather than cancel anything it could not verify.
     """
     loop = asyncio.get_running_loop()
-    positions = await loop.run_in_executor(
-        None, lambda: mx.get_open_positions(next(iter(ALLOWED_INSTRUMENTS))))
-    if positions is None:
-        return [], [], False  # could not verify — caller must not cancel
+    symbol = next(iter(ALLOWED_INSTRUMENTS))
+    all_positions: list[dict] = []
+    for acc in ACCOUNTS:
+        client = acc["client"]
+        positions = await loop.run_in_executor(None, lambda c=client: c.get_open_positions(symbol))
+        if positions is None:
+            return [], [], False  # could not verify an account — caller must not cancel
+        all_positions.extend(positions)
     live, unfilled = [], []
     for sid in open_ids:
         if not await r.get(f"{REDIS_PREFIX}:signal:{sid}"):
             unfilled.append(sid)  # dangling id, no detail row — safe to drop
             continue
         needle = f"tg-{sid}-"
-        if any(needle in (p.get("comment") or "") for p in positions):
+        if any(needle in (p.get("comment") or "") for p in all_positions):
             live.append(sid)
         else:
             unfilled.append(sid)
@@ -589,8 +664,12 @@ async def reset_state():
 
 async def main(args):
     global r
+    from telethon import TelegramClient, events  # runtime-only dependency
+
     r, kind = await make_store(REDIS_URL)
     log.info(f"State store: {kind}")
+    log.info("Fanning out each signal to accounts: %s",
+             [a["label"] for a in ACCOUNTS])
 
     if args.reset:
         await reset_state()

@@ -124,13 +124,14 @@ def insert_signal(pos: dict, channel: str) -> None:
                     f"""
                     INSERT INTO {_T_ORDERS} (
                         ticket_id, msg_id, tp_index, kind,
-                        volume, entry, sl, tp
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        volume, entry, sl, tp, account
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (ticket_id) DO NOTHING
                     """,
                     (
                         str(o["ticket_id"]), pos["msg_id"], o["tp_index"], o["kind"],
                         o["volume"], o["entry"], o["sl"], o["tp"],
+                        o.get("account", "primary"),
                     ),
                 )
     except Exception as e:
@@ -250,7 +251,7 @@ def load_open_signals() -> list[dict]:
             cur.execute(
                 f"""
                 SELECT msg_id, ticket_id, tp_index, kind, volume, entry, sl, tp,
-                       broker_state, fill_price
+                       broker_state, fill_price, account
                   FROM {_T_ORDERS}
                  WHERE msg_id = ANY(%s)
                  ORDER BY msg_id, tp_index
@@ -258,13 +259,14 @@ def load_open_signals() -> list[dict]:
                 (ids,),
             )
             orders_by_msg: dict[int, list[dict]] = {}
-            for (mid, tid, idx, kind, vol, entry, sl, tp, bstate, fprice) in cur.fetchall():
+            for (mid, tid, idx, kind, vol, entry, sl, tp, bstate, fprice, account) in cur.fetchall():
                 orders_by_msg.setdefault(mid, []).append({
                     "tp_index": idx, "ticket_id": tid, "kind": kind,
                     "volume": float(vol), "entry": float(entry),
                     "sl": float(sl), "tp": float(tp),
                     "broker_state": bstate or ("filled" if kind == "market" else "pending"),
                     "fill_price": float(fprice) if fprice is not None else None,
+                    "account": account or "primary",
                 })
 
         positions: list[dict] = []
