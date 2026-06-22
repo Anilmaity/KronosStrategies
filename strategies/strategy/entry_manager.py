@@ -17,7 +17,7 @@ from shared.models import (
     UserStrategy, Strategy, CurrencyPair,
     StrategySignal,
 )
-from shared.metaapi_client import place_market_order
+from shared.metaapi_client import client_for_broker
 from strategy.ict_engine import EntrySignal
 
 log = logging.getLogger(__name__)
@@ -229,7 +229,20 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
     # Fire MetaAPI market order FIRST. If broker rejects, we don't pollute the
     # DB with phantom positions. On success we record the broker positionId on
     # the Order so position_monitor / reconciliation can correlate.
-    broker_position_id = place_market_order(
+    # Per-account: open on the deployed account's own MetaAPI creds. Refuse
+    # (never fall back to the env account) if the account has no usable creds.
+    _sess = Session()
+    try:
+        _client = client_for_broker(_sess, ctx["user_broker_id"])
+    finally:
+        _sess.close()
+    if _client is None:
+        _update_signal_status(signal_log_id, "REJECTED",
+                              rejection_reason="no_account_credentials")
+        log.warning("[ENTRY] account %s has no usable MetaAPI creds — refusing to open",
+                    ctx["user_broker_id"])
+        return False
+    broker_position_id = _client.place_market_order(
         side=signal.side,
         symbol=symbol,
         volume=qty,
