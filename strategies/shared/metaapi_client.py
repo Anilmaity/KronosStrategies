@@ -26,8 +26,22 @@ _TOKEN      = os.getenv("META_API_TOKEN", "")
 _ACCOUNT    = os.getenv("META_ACCOUNT_ID", "")
 _DRY_RUN    = os.getenv("DRY_RUN", "false").lower() == "true"
 
-_PROVISION_URL = "https://mt-provisioning-api-v1.agiliumtrade.ai"
-_TRADING_URL: str | None = None   # resolved lazily
+# MetaAPI provisioning host. The single-label `agiliumtrade.ai` provisioning
+# subdomain was retired (NXDOMAIN); the live one is the double-label domain.
+# Only used when a management-scoped token is available — the trading token is
+# client-scoped and gets 403 here, so region resolution normally relies on
+# META_REGION / the default below.
+_PROVISION_URL = os.getenv(
+    "META_PROVISION_URL",
+    "https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai",
+)
+# Client/trading hosts still serve on the single-label domain.
+_CLIENT_DOMAIN   = os.getenv("META_CLIENT_DOMAIN", "agiliumtrade.ai").strip()
+# Explicit region override — skips the provisioning lookup entirely.
+_REGION_OVERRIDE = os.getenv("META_REGION", "").strip()
+# Fallback region when neither override nor provisioning yields one.
+_DEFAULT_REGION  = os.getenv("META_DEFAULT_REGION", "new-york").strip()
+_TRADING_URL: str | None = None   # resolved lazily (module-level, used by close_position_by_id)
 
 # OANDA instrument → MetaAPI broker symbol
 _SYMBOL_MAP = {
@@ -49,24 +63,35 @@ def _headers() -> dict:
 
 
 def _trading_url() -> str:
-    """Resolve and cache the regional trading host for this account."""
+    """Resolve and cache the regional trading host for this account.
+
+    Precedence:
+      1. META_REGION env override — skips provisioning entirely (the trading
+         token is client-scoped and cannot call the provisioning API).
+      2. Provisioning API lookup — only succeeds with a management-scoped token.
+      3. META_DEFAULT_REGION fallback (default 'new-york').
+    """
     global _TRADING_URL
     if _TRADING_URL:
         return _TRADING_URL
 
-    try:
-        resp = requests.get(
-            f"{_PROVISION_URL}/users/current/accounts/{_ACCOUNT}",
-            headers=_headers(),
-            timeout=10,
-        )
-        resp.raise_for_status()
-        region = resp.json().get("region", "new-york")
-    except Exception:
-        log.warning("[MetaAPI] Could not fetch account region — defaulting to new-york")
-        region = "new-york"
+    region = _REGION_OVERRIDE
+    if region:
+        log.info("[MetaAPI] Using META_REGION override: %s", region)
+    else:
+        try:
+            resp = requests.get(
+                f"{_PROVISION_URL}/users/current/accounts/{_ACCOUNT}",
+                headers=_headers(),
+                timeout=10,
+            )
+            resp.raise_for_status()
+            region = resp.json().get("region") or _DEFAULT_REGION
+        except Exception:
+            log.warning("[MetaAPI] Could not fetch account region — defaulting to %s", _DEFAULT_REGION)
+            region = _DEFAULT_REGION
 
-    _TRADING_URL = f"https://mt-client-api-v1.{region}.agiliumtrade.ai"
+    _TRADING_URL = f"https://mt-client-api-v1.{region}.{_CLIENT_DOMAIN}"
     log.info("[MetaAPI] Resolved trading host: %s", _TRADING_URL)
     return _TRADING_URL
 
@@ -124,77 +149,204 @@ def _apply_stops_floor(side: str, entry_price: float, stop_loss: float, take_pro
     return stop_loss, take_profit, adjusted
 
 
-def place_market_order(
-    side: str,
-    symbol: str,
-    volume: float,
-    stop_loss: float,
-    take_profit: float,
-    entry_price: float | None = None,
-) -> str | None:
+# ---------------------------------------------------------------------------
+# Per-account client (used for strategies that have per-UserBroker creds)
+# ---------------------------------------------------------------------------
+
+class MetaApiClient:
+    """Per-account MetaAPI REST client.
+
+    Each instance holds its own account_id + token so that multiple
+    broker accounts can be served from the same process without colliding
+    on module-level env globals.
     """
-    Place a MARKET order with SL and TP.
 
-    If `entry_price` is provided, SL/TP are widened to honour the broker's
-    stops level (queried lazily from MetaAPI) so the order won't be rejected
-    with TRADE_RETCODE_INVALID_STOPS.
+    def __init__(self, account_id: str, token: str) -> None:
+        self.account_id = account_id
+        self.token = token
+        self._trading_url_cache: str | None = None
+        self._spec_cache: dict[str, dict] = {}
 
-    Returns the MetaAPI positionId (broker ticket) on success, None on failure.
-    On DRY_RUN returns the sentinel string 'dry-run'.
-    """
-    broker_symbol = _SYMBOL_MAP.get(symbol, symbol)
-    action = "ORDER_TYPE_BUY" if side == "BUY" else "ORDER_TYPE_SELL"
+    # ------------------------------------------------------------------
+    # Internal helpers (per-instance copies of the module functions)
+    # ------------------------------------------------------------------
 
-    # Honour the broker's stops level — widen SL/TP if too close to entry.
-    if entry_price is not None:
-        min_d = _get_symbol_spec(broker_symbol)["stops_level_price"]
-        new_sl, new_tp, adjusted = _apply_stops_floor(side, entry_price, stop_loss, take_profit, min_d)
-        if adjusted:
-            log.info("[MetaAPI] stops widened to broker floor (%.2f): SL %.2f→%.2f TP %.2f→%.2f",
-                     min_d, stop_loss, new_sl, take_profit, new_tp)
-        stop_loss, take_profit = new_sl, new_tp
+    def _headers(self) -> dict:
+        return {"auth-token": self.token, "Content-Type": "application/json"}
 
-    payload = {
-        "actionType": action,
-        "symbol": broker_symbol,
-        "volume": round(volume, 2),
-        "stopLoss": round(stop_loss, 2),
-        "takeProfit": round(take_profit, 2),
-    }
+    def _trading_url(self) -> str:
+        """Resolve and cache the regional trading host for this account.
 
-    if _DRY_RUN:
-        log.info("[MetaAPI DRY_RUN] place_market_order payload=%s", payload)
-        return "dry-run"
+        Precedence:
+          1. META_REGION env override — skips provisioning entirely (the trading
+             token is client-scoped and cannot call the provisioning API).
+          2. Provisioning API lookup — only succeeds with a management-scoped token.
+          3. META_DEFAULT_REGION fallback (default 'new-york').
+        """
+        if self._trading_url_cache:
+            return self._trading_url_cache
 
-    if not _TOKEN or not _ACCOUNT:
-        log.error("[MetaAPI] META_API_TOKEN / META_ACCOUNT_ID not configured")
-        return None
+        region = _REGION_OVERRIDE
+        if region:
+            log.info("[MetaAPI] Using META_REGION override: %s", region)
+        else:
+            try:
+                resp = requests.get(
+                    f"{_PROVISION_URL}/users/current/accounts/{self.account_id}",
+                    headers=self._headers(),
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                region = resp.json().get("region") or _DEFAULT_REGION
+            except Exception:
+                log.warning("[MetaAPI] Could not fetch account region — defaulting to %s", _DEFAULT_REGION)
+                region = _DEFAULT_REGION
 
-    try:
-        url = f"{_trading_url()}/users/current/accounts/{_ACCOUNT}/trade"
-        resp = requests.post(url, headers=_headers(), json=payload, timeout=_TIMEOUT)
-        resp.raise_for_status()
-        data = resp.json()
+        self._trading_url_cache = f"https://mt-client-api-v1.{region}.{_CLIENT_DOMAIN}"
+        log.info("[MetaAPI] Resolved trading host: %s", self._trading_url_cache)
+        return self._trading_url_cache
 
-        # MetaAPI returns orderId and positionId (same value for market orders)
-        pos_id = data.get("positionId") or data.get("orderId") or ""
-        code   = data.get("stringCode", "")
+    def _get_symbol_spec(self, broker_symbol: str) -> dict:
+        """Fetch and cache the broker's specification for a symbol.
 
-        if "DONE" not in code and pos_id == "":
-            log.warning("[MetaAPI] Unexpected trade response: %s", data)
+        Returns dict with keys:
+          stops_level_price: float — minimum SL/TP distance from market in price units
+          tick_size:         float — broker tickSize (informational)
+        Falls back to {_DEFAULT_MIN_STOP_DISTANCE, 0.01} on any error.
+        """
+        if broker_symbol in self._spec_cache:
+            return self._spec_cache[broker_symbol]
+
+        spec = {"stops_level_price": _DEFAULT_MIN_STOP_DISTANCE, "tick_size": 0.01}
+        if _DRY_RUN or not self.token or not self.account_id:
+            self._spec_cache[broker_symbol] = spec
+            return spec
+
+        try:
+            url = f"{self._trading_url()}/users/current/accounts/{self.account_id}/symbols/{broker_symbol}/specification"
+            resp = requests.get(url, headers=self._headers(), timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            tick_size   = float(data.get("tickSize", 0.01))
+            stops_level = int(data.get("stopsLevel", 0))
+            stops_price = stops_level * tick_size if stops_level > 0 else _DEFAULT_MIN_STOP_DISTANCE
+            spec = {"stops_level_price": stops_price, "tick_size": tick_size}
+            log.info("[MetaAPI] %s spec: tickSize=%s stopsLevel=%d → min_distance=%.2f",
+                     broker_symbol, tick_size, stops_level, stops_price)
+        except Exception:
+            log.exception("[MetaAPI] _get_symbol_spec failed for %s — using fallback %.2f",
+                          broker_symbol, _DEFAULT_MIN_STOP_DISTANCE)
+
+        self._spec_cache[broker_symbol] = spec
+        return spec
+
+    def place_market_order(
+        self,
+        side: str,
+        symbol: str,
+        volume: float,
+        stop_loss: float,
+        take_profit: float,
+        entry_price: float | None = None,
+    ) -> str | None:
+        """
+        Place a MARKET order with SL and TP.
+
+        If `entry_price` is provided, SL/TP are widened to honour the broker's
+        stops level (queried lazily from MetaAPI) so the order won't be rejected
+        with TRADE_RETCODE_INVALID_STOPS.
+
+        Returns the MetaAPI positionId (broker ticket) on success, None on failure.
+        On DRY_RUN returns the sentinel string 'dry-run'.
+        """
+        broker_symbol = _SYMBOL_MAP.get(symbol, symbol)
+        action = "ORDER_TYPE_BUY" if side == "BUY" else "ORDER_TYPE_SELL"
+
+        # Honour the broker's stops level — widen SL/TP if too close to entry.
+        if entry_price is not None:
+            min_d = self._get_symbol_spec(broker_symbol)["stops_level_price"]
+            new_sl, new_tp, adjusted = _apply_stops_floor(side, entry_price, stop_loss, take_profit, min_d)
+            if adjusted:
+                log.info("[MetaAPI] stops widened to broker floor (%.2f): SL %.2f→%.2f TP %.2f→%.2f",
+                         min_d, stop_loss, new_sl, take_profit, new_tp)
+            stop_loss, take_profit = new_sl, new_tp
+
+        payload = {
+            "actionType": action,
+            "symbol": broker_symbol,
+            "volume": round(volume, 2),
+            "stopLoss": round(stop_loss, 2),
+            "takeProfit": round(take_profit, 2),
+        }
+
+        if _DRY_RUN:
+            log.info("[MetaAPI DRY_RUN] place_market_order payload=%s", payload)
+            return "dry-run"
+
+        if not self.token or not self.account_id:
+            log.error("[MetaAPI] account_id / token not configured")
             return None
 
-        log.info(
-            "[MetaAPI] Order placed | %s %s vol=%.2f SL=%.2f TP=%.2f | positionId=%s",
-            side, broker_symbol, volume, stop_loss, take_profit, pos_id,
-        )
-        return pos_id or None
+        try:
+            url = f"{self._trading_url()}/users/current/accounts/{self.account_id}/trade"
+            resp = requests.post(url, headers=self._headers(), json=payload, timeout=_TIMEOUT)
+            resp.raise_for_status()
+            data = resp.json()
 
-    except requests.HTTPError as exc:
-        log.error("[MetaAPI] HTTP error %s: %s", exc.response.status_code, exc.response.text)
-    except Exception:
-        log.exception("[MetaAPI] Failed to place order")
-    return None
+            # MetaAPI returns orderId and positionId (same value for market orders)
+            pos_id = data.get("positionId") or data.get("orderId") or ""
+            code   = data.get("stringCode", "")
+
+            if "DONE" not in code and pos_id == "":
+                log.warning("[MetaAPI] Unexpected trade response: %s", data)
+                return None
+
+            log.info(
+                "[MetaAPI] Order placed | %s %s vol=%.2f SL=%.2f TP=%.2f | positionId=%s",
+                side, broker_symbol, volume, stop_loss, take_profit, pos_id,
+            )
+            return pos_id or None
+
+        except requests.HTTPError as exc:
+            log.error("[MetaAPI] HTTP error %s: %s", exc.response.status_code, exc.response.text)
+        except Exception:
+            log.exception("[MetaAPI] Failed to place order")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Per-broker client factory (looks up per-account creds from DB)
+# ---------------------------------------------------------------------------
+
+_CLIENT_CACHE: dict[str, "MetaApiClient"] = {}
+
+
+def client_for_broker(session, user_broker_id) -> "MetaApiClient | None":
+    """Return a MetaApiClient for the broker's stored creds, or None (→ refuse)."""
+    # Lazy imports to avoid DB engine initialisation during module load and
+    # potential circular imports when running under pytest.
+    from strategies.shared.models import UserBroker
+    from strategies.shared.crypto import decrypt_token
+
+    broker = session.query(UserBroker).filter_by(id=user_broker_id).first()
+    if broker is None:
+        log.warning("[MetaAPI] UserBroker %s not found — refusing", user_broker_id)
+        return None
+    acct = (getattr(broker, "meta_account_id", "") or "").strip()
+    enc = getattr(broker, "meta_api_token_enc", "") or ""
+    if not acct or not enc:
+        log.warning("[MetaAPI] account %s has no per-account creds — refusing", user_broker_id)
+        return None
+    if acct in _CLIENT_CACHE:
+        return _CLIENT_CACHE[acct]
+    try:
+        token = decrypt_token(enc)
+    except Exception as e:
+        log.error("[MetaAPI] decrypt failed for %s: %s — refusing", user_broker_id, e)
+        return None
+    client = MetaApiClient(acct, token)
+    _CLIENT_CACHE[acct] = client
+    return client
 
 
 def close_position_by_id(meta_position_id: str) -> bool:
