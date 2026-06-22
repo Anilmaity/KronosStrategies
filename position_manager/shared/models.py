@@ -1,5 +1,5 @@
 from sqlalchemy import (ARRAY, Boolean, Column, Date, DateTime, Float,
-                        ForeignKey, Integer, Numeric, String, create_engine,
+                        ForeignKey, Integer, Numeric, String, Text, create_engine,
                         func, Enum, DECIMAL, JSON)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, sessionmaker, declarative_base
@@ -86,6 +86,8 @@ class UserBroker(BaseModel):
     api_key          = Column(String(500), unique=True, default=str(uuid.uuid4()))
     margin_available = Column(String(100), default="")
     margin_used      = Column(String(100), default="0.00")
+    meta_account_id    = Column(String(120), default="")
+    meta_api_token_enc = Column(Text, default="")
     status           = Column(String(100), default="ACTIVE")
     is_active        = Column(Boolean, default=True)
     last_updated     = Column(DateTime, default=get_kolkata_time)

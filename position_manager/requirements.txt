@@ -4,3 +4,4 @@ pandas
 requests
 python-dotenv
 pytz
+cryptography==42.0.5
