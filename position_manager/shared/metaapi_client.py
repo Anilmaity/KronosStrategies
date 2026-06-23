@@ -26,7 +26,21 @@ _TOKEN      = os.getenv("META_API_TOKEN", "")
 _ACCOUNT    = os.getenv("META_ACCOUNT_ID", "")
 _DRY_RUN    = os.getenv("DRY_RUN", "false").lower() == "true"
 
-_PROVISION_URL = "https://mt-provisioning-api-v1.agiliumtrade.ai"
+# MetaAPI provisioning host. The single-label `agiliumtrade.ai` provisioning
+# subdomain was retired (NXDOMAIN); the live one is the double-label domain.
+# Only used when a management-scoped token is available — the trading token is
+# client-scoped and gets 403 here, so region resolution normally relies on
+# META_REGION / the default below.
+_PROVISION_URL = os.getenv(
+    "META_PROVISION_URL",
+    "https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai",
+)
+# Client/trading hosts still serve on the single-label domain.
+_CLIENT_DOMAIN   = os.getenv("META_CLIENT_DOMAIN", "agiliumtrade.ai").strip()
+# Explicit region override — skips the provisioning lookup entirely.
+_REGION_OVERRIDE = os.getenv("META_REGION", "").strip()
+# Fallback region when neither override nor provisioning yields one.
+_DEFAULT_REGION  = os.getenv("META_DEFAULT_REGION", "new-york").strip()
 _TRADING_URL: str | None = None   # resolved lazily
 
 # OANDA instrument → MetaAPI broker symbol
@@ -49,24 +63,35 @@ def _headers() -> dict:
 
 
 def _trading_url() -> str:
-    """Resolve and cache the regional trading host for this account."""
+    """Resolve and cache the regional trading host for this account.
+
+    Precedence:
+      1. META_REGION env override — skips provisioning entirely (the trading
+         token is client-scoped and cannot call the provisioning API).
+      2. Provisioning API lookup — only succeeds with a management-scoped token.
+      3. META_DEFAULT_REGION fallback (default 'new-york').
+    """
     global _TRADING_URL
     if _TRADING_URL:
         return _TRADING_URL
 
-    try:
-        resp = requests.get(
-            f"{_PROVISION_URL}/users/current/accounts/{_ACCOUNT}",
-            headers=_headers(),
-            timeout=10,
-        )
-        resp.raise_for_status()
-        region = resp.json().get("region", "new-york")
-    except Exception:
-        log.warning("[MetaAPI] Could not fetch account region — defaulting to new-york")
-        region = "new-york"
+    region = _REGION_OVERRIDE
+    if region:
+        log.info("[MetaAPI] Using META_REGION override: %s", region)
+    else:
+        try:
+            resp = requests.get(
+                f"{_PROVISION_URL}/users/current/accounts/{_ACCOUNT}",
+                headers=_headers(),
+                timeout=10,
+            )
+            resp.raise_for_status()
+            region = resp.json().get("region") or _DEFAULT_REGION
+        except Exception:
+            log.warning("[MetaAPI] Could not fetch account region — defaulting to %s", _DEFAULT_REGION)
+            region = _DEFAULT_REGION
 
-    _TRADING_URL = f"https://mt-client-api-v1.{region}.agiliumtrade.ai"
+    _TRADING_URL = f"https://mt-client-api-v1.{region}.{_CLIENT_DOMAIN}"
     log.info("[MetaAPI] Resolved trading host: %s", _TRADING_URL)
     return _TRADING_URL
 

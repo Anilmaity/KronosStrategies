@@ -8,3 +8,13 @@ _scratch/
 # Can grow to GBs over a multi-month backfill — the already-tracked XAU sample
 # stays tracked; all new cache files are ignored.
 tick_data_collector/Tick_Data_Generator/cache_data/
+
+# Secrets — NEVER commit. AWS keys, OANDA tokens, broker creds, DB passwords.
+.env
+.env.*
+.env_aws
+**/.env
+*.pem
+# MetaAPI account credential drops (id + JWT token).
+account2.txt
+account*.txt
