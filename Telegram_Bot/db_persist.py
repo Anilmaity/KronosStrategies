@@ -37,6 +37,19 @@ _TSDB_NAME = os.getenv("TSDB_NAME", "hft")
 _TSDB_USER = os.getenv("TSDB_USER", "postgres")
 _TSDB_PASS = os.getenv("TSDB_PASS", "postgres")
 
+# The original audit DB (TigerData/Timescale) was decommissioned — its host no
+# longer resolves, so every write here was silently failing and restart-hydrate
+# (load_open_signals) returned nothing. Prefer the live application DB (DB_* —
+# the SAME instance apis_persist and position_manager already use successfully),
+# so the audit log + hydrate work again with creds already present in the env.
+# TIGERDATA_URL / TSDB_* remain as explicit overrides / legacy fallback.
+_DB_HOST = os.getenv("DB_HOST")
+_DB_PORT = int(os.getenv("DB_PORT", "5432"))
+_DB_NAME = os.getenv("DB_NAME", "tsdb")
+_DB_USER = os.getenv("DB_USER", "tsdbadmin")
+_DB_PASS = os.getenv("DB_PASSWORD")
+_DB_SSLMODE = os.getenv("DB_SSLMODE", "require")
+
 # Table namespace. The schema files / SQL below are written against the canonical
 # "tg_" names; a non-default prefix rewrites both the DDL and every query so a
 # parallel instance is fully isolated. Validate strictly — the prefix is
@@ -65,6 +78,14 @@ def _render_ddl(raw: str, prefix: str) -> str:
 
 
 def _connect():
+    # Prefer the live application DB (same creds apis_persist uses). Only fall
+    # back to the legacy TigerData/TSDB targets when DB_* is not configured.
+    if _DB_HOST and _DB_NAME and _DB_USER:
+        return psycopg2.connect(
+            host=_DB_HOST, port=_DB_PORT,
+            dbname=_DB_NAME, user=_DB_USER, password=_DB_PASS,
+            sslmode=_DB_SSLMODE, connect_timeout=10,
+        )
     if _TIGERDATA_URL:
         return psycopg2.connect(_TIGERDATA_URL)
     return psycopg2.connect(
