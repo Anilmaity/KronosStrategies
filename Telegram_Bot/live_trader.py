@@ -366,9 +366,10 @@ async def close_order(msg_id: int, reason: str):
         realized = round(sum(rp), 2) if rp else None
         close_price = next((o.get("last_price") for o in reversed(acct_orders)
                             if o.get("last_price") is not None), None)
+        acct_vol = round(sum(float(o["volume"]) for o in acct_orders), 2) if acct_orders else None
         await loop.run_in_executor(
-            None, lambda d=dash, pid=apis_id, rl=realized, cp=close_price:
-            d.conclude_position(pid, rl, cp, pos["side"], pos.get("total_volume"), reason))
+            None, lambda d=dash, pid=apis_id, rl=realized, cp=close_price, av=acct_vol:
+            d.conclude_position(pid, rl, cp, pos["side"], av, reason))
     log.info(f"[{msg_id}] CLOSE ({reason})")
 
 
@@ -629,18 +630,18 @@ async def reconcile_broker() -> None:
                 acct_closed = [o for o in acct_orders if o.get("broker_state") == "closed"]
                 acct_pnls = [o.get("realized_pnl") for o in acct_closed if o.get("realized_pnl") is not None]
                 acct_total = round(sum(acct_pnls), 2) if acct_pnls else None
+                acct_vol = round(sum(float(o["volume"]) for o in acct_orders), 2) if acct_orders else None
                 apis_id = apis_ids.get(label)
                 if not apis_id and reason != "broker_cancelled":
                     apis_id = await loop.run_in_executor(None, dash.find_open_position_id)
                     if not apis_id:
-                        total_vol = round(sum(float(o["volume"]) for o in acct_orders), 2)
                         apis_id = await loop.run_in_executor(
-                            None, lambda d=dash, tv=total_vol: d.open_position(pos["side"], pos["entry_mid"], tv))
+                            None, lambda d=dash, tv=acct_vol: d.open_position(pos["side"], pos["entry_mid"], tv))
                 cp = next((o.get("last_price") for o in reversed(acct_orders)
                            if o.get("last_price") is not None), None)
                 await loop.run_in_executor(
-                    None, lambda d=dash, pid=apis_id, t=acct_total, c=cp:
-                    d.conclude_position(pid, t, c, pos["side"], pos.get("total_volume"), reason))
+                    None, lambda d=dash, pid=apis_id, t=acct_total, c=cp, av=acct_vol:
+                    d.conclude_position(pid, t, c, pos["side"], av, reason))
             log.info("[%s] CONCLUDED from broker: %s pnl=%s (all-acct %s)",
                      sid_i, reason, primary_total, total)
 
