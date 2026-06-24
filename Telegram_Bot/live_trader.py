@@ -298,10 +298,12 @@ async def close_order(msg_id: int, reason: str):
     await r.set(key, json.dumps(pos))
     await r.srem(f"{REDIS_PREFIX}:open", str(msg_id))
     await loop.run_in_executor(None, db.close_signal, msg_id, reason)
-    # Mirror the close into each account's dashboard position. Realized PnL from
-    # the last broker snapshot of that account's filled slices. The quantity>0
-    # guard in conclude_position makes this a no-op if broker reconciliation
-    # already concluded it, and unfilled superseded signals have no row.
+    # Mirror the close into each account's dashboard position. Realized PnL is
+    # the broker's settled deal figure for each filled slice (history deals),
+    # falling back to the last live snapshot when deals aren't settled yet. The
+    # quantity>0 guard in conclude_position makes this a no-op if broker
+    # reconciliation already concluded it, and unfilled superseded signals have
+    # no row.
     apis_ids = pos.get("apis_pos_ids", {})
     for acc in ACCOUNTS:
         label, dash = acc["label"], acc.get("apis")
@@ -310,9 +312,16 @@ async def close_order(msg_id: int, reason: str):
             continue
         acct_orders = [o for o in pos.get("orders", []) if o.get("account", "primary") == label]
         filled = [o for o in acct_orders if o.get("broker_state") == "filled"]
-        rp = [o.get("realized_pnl") if o.get("realized_pnl") is not None else o.get("last_profit")
-              for o in filled]
-        rp = [x for x in rp if x is not None]
+        client = ACCOUNTS_BY_LABEL.get(label)
+        rp = []
+        for o in filled:
+            # Use an already-recorded realized figure (reconcile may have set it),
+            # else pull the broker-true deal PnL, else the last live snapshot.
+            val = o.get("realized_pnl")
+            if val is None:
+                val = await _slice_realized_pnl(loop, client, o)
+            if val is not None:
+                rp.append(val)
         realized = round(sum(rp), 2) if rp else None
         close_price = next((o.get("last_price") for o in reversed(acct_orders)
                             if o.get("last_price") is not None), None)
@@ -363,6 +372,31 @@ async def _stale_sweeper() -> None:
                 log.info("Background stale-sweep expired %d open signal(s)", n)
         except Exception as e:
             log.exception(f"stale sweeper error: {e}")
+
+
+async def _slice_realized_pnl(loop, client, o: dict):
+    """Best-effort broker-TRUE realized PnL for a filled slice that has left (or
+    is leaving) the broker.
+
+    Prefers the settled figure from MetaAPI history deals; falls back to the last
+    live `profit` snapshot when the deal lookup is unavailable or the position
+    hasn't settled in history yet — so a close is never lost waiting on deals.
+    Side effects: stamps o['last_price'] with the real close price and
+    o['pnl_source'] ('deal' | 'snapshot') when a settled deal is found. Returns
+    the realized PnL (float | None).
+    """
+    bpid = o.get("broker_position_id")
+    deal = None
+    if client is not None and bpid:
+        deal = await loop.run_in_executor(
+            None, lambda c=client, p=bpid: c.get_position_realized_pnl(p))
+    if deal and deal.get("closed"):
+        if deal.get("close_price") is not None:
+            o["last_price"] = deal["close_price"]
+        o["pnl_source"] = "deal"
+        return deal["realized_pnl"]
+    o["pnl_source"] = "snapshot"
+    return o.get("last_profit")
 
 
 def _infer_close_reason(last_price, last_profit, tp, sl) -> str:
@@ -445,6 +479,11 @@ async def reconcile_broker() -> None:
                     o["broker_state"], o["kind"], o["fill_price"] = "filled", "market", fp
                     await loop.run_in_executor(None, db.record_fill, sid_i, idx, o["ticket_id"], fp)
                     log.info("[%s:%s] TP%d FILLED @ %.2f (broker)", sid_i, label, idx, fp)
+                # Capture the broker's POSITION id (distinct from our order ticket
+                # for limit fills) so we can pull this slice's real close deal from
+                # history once it leaves the broker.
+                if bpos.get("id") is not None:
+                    o["broker_position_id"] = bpos.get("id")
                 o["last_profit"] = bpos.get("profit")
                 o["last_price"] = bpos.get("currentPrice")
                 changed = True
@@ -463,13 +502,16 @@ async def reconcile_broker() -> None:
                 changed = True  # persist the counter so it accrues across polls
                 if o["miss"] >= ABSENT_CONFIRM_POLLS:
                     if prev == "filled":
-                        reason = _infer_close_reason(o.get("last_price"), o.get("last_profit"),
-                                                     o["tp"], o["sl"])
-                        pnl = o.get("last_profit")
+                        # Prefer the broker's TRUE realized PnL (history deals)
+                        # over the stale last-live snapshot; falls back to the
+                        # snapshot if deals aren't available/settled yet.
+                        pnl = await _slice_realized_pnl(loop, ACCOUNTS_BY_LABEL.get(label), o)
+                        reason = _infer_close_reason(o.get("last_price"), pnl, o["tp"], o["sl"])
                         o["broker_state"], o["realized_pnl"] = "closed", pnl
                         await loop.run_in_executor(None, db.record_slice_close,
                                                    sid_i, idx, o["ticket_id"], reason, pnl)
-                        log.info("[%s:%s] TP%d CLOSED (~%s, pnl~%s) (broker)", sid_i, label, idx, reason, pnl)
+                        log.info("[%s:%s] TP%d CLOSED (~%s, pnl=%s via %s) (broker)",
+                                 sid_i, label, idx, reason, pnl, o.get("pnl_source"))
                     else:                              # pending -> gone, never filled
                         o["broker_state"] = "cancelled"
                         await loop.run_in_executor(None, db.record_slice_close,

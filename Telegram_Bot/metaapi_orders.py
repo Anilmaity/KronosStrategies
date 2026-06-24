@@ -382,6 +382,48 @@ class MetaApiClient:
             log.exception("[MetaAPI:%s] orders fetch failed", self.label)
             return None
 
+    def get_position_realized_pnl(self, position_id: str) -> dict | None:
+        """Broker-TRUE realized PnL + close price for a (closed) position.
+
+        Queries the MetaAPI client-API history-deals endpoint for `position_id`
+        and aggregates the realized components (profit + commission + swap) over
+        all of the position's deals — the broker's actual settled figure, which
+        replaces the stale last-live-snapshot approximation reconcile_broker used
+        to record. Each TP slice is its own single-entry/single-exit position, so
+        the full deal set for one position id is the whole realized PnL.
+
+        Returns {"realized_pnl": float, "close_price": float | None,
+                 "closed": bool} — `closed` is True once an exit (DEAL_ENTRY_OUT)
+        deal exists. Returns None on dry_run, missing creds, empty/non-list
+        history, or any API error, so the caller falls back to the snapshot and
+        live trading is never blocked by this best-effort lookup.
+        """
+        if self.dry_run or not self._token or not self._account or not position_id:
+            return None
+        try:
+            url = (f"{self._resolve_trading_url()}/users/current/accounts/{self._account}"
+                   f"/history-deals/position/{position_id}")
+            resp = _request("GET", url, headers=self._headers(), timeout=_TIMEOUT)
+            resp.raise_for_status()
+            deals = resp.json()
+            if not isinstance(deals, list) or not deals:
+                return None
+            realized = 0.0
+            for d in deals:
+                for k in ("profit", "commission", "swap"):
+                    v = d.get(k)
+                    if v is not None:
+                        realized += float(v)
+            out_deals = [d for d in deals if str(d.get("entryType", "")).endswith("OUT")]
+            ref = out_deals[-1] if out_deals else deals[-1]
+            close_price = float(ref["price"]) if ref.get("price") is not None else None
+            return {"realized_pnl": round(realized, 2), "close_price": close_price,
+                    "closed": bool(out_deals)}
+        except Exception:
+            log.exception("[MetaAPI:%s] history-deals fetch failed for position %s",
+                          self.label, position_id)
+            return None
+
     def submit_signal_orders(self, side: Side, symbol: str, entry: float, sl: float,
                              tps: list[float], total_volume: float,
                              msg_id: int) -> list[dict]:
