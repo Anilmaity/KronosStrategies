@@ -189,24 +189,30 @@ async def place_order(msg_id: int, sig: dict) -> dict:
     risk_pts = abs(entry_mid - sig["sl"])
 
     loop = asyncio.get_running_loop()
-    all_orders: list[dict] = []
-    primary_vol: float | None = None
-    for acc in ACCOUNTS:
+
+    async def _submit_for_account(acc: dict) -> tuple[str, list[dict], float]:
+        """Submit one account's slices and tag them. Returns (label, slices,
+        account_volume). Swallows its own broker errors so one account failing
+        can never abort another whose orders may already be live at the broker."""
         client, label = acc["client"], acc["label"]
         total_vol = acc["risk_usd"] / (risk_pts * USD_PER_POINT_PER_LOT)
         total_vol = max(total_vol, MIN_LOT * len(sig["tps"]))
-        submitted = await loop.run_in_executor(
-            None,
-            lambda c=client, v=total_vol: c.submit_signal_orders(
-                side=sig["side"],
-                symbol=sig["instrument"],
-                entry=entry_mid,
-                sl=sig["sl"],
-                tps=sig["tps"],
-                total_volume=v,
-                msg_id=msg_id,
-            ),
-        )
+        try:
+            submitted = await loop.run_in_executor(
+                None,
+                lambda c=client, v=total_vol: c.submit_signal_orders(
+                    side=sig["side"],
+                    symbol=sig["instrument"],
+                    entry=entry_mid,
+                    sl=sig["sl"],
+                    tps=sig["tps"],
+                    total_volume=v,
+                    msg_id=msg_id,
+                ),
+            )
+        except Exception:
+            log.exception("[%s:%s] submit_signal_orders raised", msg_id, label)
+            submitted = []
         # Seed per-slice broker bookkeeping the reconciler maintains: a market
         # slice is born "filled", a limit "pending". `observed` flips True once we
         # actually see the slice at the broker, so absence can only conclude a
@@ -220,10 +226,22 @@ async def place_order(msg_id: int, sig: dict) -> dict:
             o["miss"] = 0
         if not submitted:
             log.warning("[%s:%s] no orders submitted for this account", msg_id, label)
-        if label == "primary":
-            primary_vol = (round(sum(float(o["volume"]) for o in submitted), 2)
-                           if submitted else total_vol)
+        acct_vol = (round(sum(float(o["volume"]) for o in submitted), 2)
+                    if submitted else total_vol)
+        return label, submitted, acct_vol
+
+    # Fan out to every account CONCURRENTLY so each makes its entry decision (price
+    # fetch + market-vs-limit) at the same wall-clock instant. Sequential
+    # submission made later accounts decide several broker round-trips behind the
+    # first, fetching a worse price on a fast retrace — our-side fill divergence.
+    results = await asyncio.gather(*(_submit_for_account(acc) for acc in ACCOUNTS))
+
+    all_orders: list[dict] = []
+    primary_vol: float | None = None
+    for label, submitted, acct_vol in results:
         all_orders.extend(submitted)
+        if label == "primary":
+            primary_vol = acct_vol
 
     return {
         "msg_id": msg_id,
