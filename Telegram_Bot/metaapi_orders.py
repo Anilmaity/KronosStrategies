@@ -424,17 +424,26 @@ class MetaApiClient:
                           self.label, position_id)
             return None
 
-    def submit_signal_orders(self, side: Side, symbol: str, entry: float, sl: float,
-                             tps: list[float], total_volume: float,
-                             msg_id: int) -> list[dict]:
-        """Submit one order per TP. Decide market vs limit based on current price.
-
-        Returns list of dicts: {tp_index, tp, ticket_id, kind, volume, entry, sl}.
-        """
-        if not tps:
-            return []
+    def stops_level_price(self, symbol: str) -> float:
+        """The broker's minimum SL/TP distance for `symbol` (from the cached spec)."""
         broker = _SYMBOL_MAP.get(symbol, symbol)
-        min_d = self._get_symbol_spec(broker)["stops_level_price"]
+        return self._get_symbol_spec(broker)["stops_level_price"]
+
+    def build_order_plan(self, side: Side, symbol: str, entry: float, sl: float,
+                         tps: list[float], min_distance: float | None = None) -> dict:
+        """Decide ONE order plan: market-vs-limit kind + per-TP (SL, TP) levels.
+
+        Built once and shared across mirrored accounts so every account places
+        IDENTICAL target levels (only the fill price differs, by broker spread —
+        which is unavoidable). `min_distance` overrides this account's own
+        stops-floor: pass the STRICTEST distance across accounts so the single
+        plan satisfies every broker. Returns
+        {"use_market": bool, "levels": [(o_sl, o_tp), ...], "min_d": float,
+         "cur": float | None}.
+        """
+        broker = _SYMBOL_MAP.get(symbol, symbol)
+        min_d = (min_distance if min_distance is not None
+                 else self._get_symbol_spec(broker)["stops_level_price"])
         px = self.get_symbol_price(symbol)
         cur = (px["ask"] if side == "buy" else px["bid"]) if px else None
 
@@ -454,6 +463,34 @@ class MetaApiClient:
         # Reference the broker measures the stops level from: current market price
         # for a market order, the open (entry) price for a pending limit.
         ref_price = cur if (use_market and cur is not None) else entry
+        levels: list[tuple[float, float]] = []
+        for tp in tps:
+            o_sl, o_tp, adjusted = _apply_stops_floor(side, ref_price, sl, tp, min_d)
+            if adjusted:
+                log.info("[%s:%s] stops widened to broker floor (%.2f): SL %.2f->%.2f TP %.2f->%.2f",
+                         self.label, self.label, min_d, sl, o_sl, tp, o_tp)
+            levels.append((o_sl, o_tp))
+        return {"use_market": use_market, "levels": levels, "min_d": min_d, "cur": cur}
+
+    def submit_signal_orders(self, side: Side, symbol: str, entry: float, sl: float,
+                             tps: list[float], total_volume: float,
+                             msg_id: int, plan: dict | None = None) -> list[dict]:
+        """Submit one order per TP using a shared order plan.
+
+        When `plan` is None the account builds its own (single-account path,
+        unchanged). When the caller passes a plan (copy-trade fan-out), every
+        account places the SAME market/limit kind and the SAME per-TP SL/TP
+        levels — only this account's per-TP volume differs. Returns list of
+        dicts: {tp_index, tp, ticket_id, kind, volume, entry, sl}.
+        """
+        if not tps:
+            return []
+        if plan is None:
+            plan = self.build_order_plan(side, symbol, entry, sl, tps)
+        use_market = plan["use_market"]
+        levels = plan["levels"]
+        min_d = plan["min_d"]
+        cur = plan.get("cur")
 
         vol_each = round(total_volume / len(tps), 2)
         if vol_each <= 0:
@@ -462,13 +499,7 @@ class MetaApiClient:
             return []
 
         submitted: list[dict] = []
-        for i, tp in enumerate(tps, start=1):
-            # Widen SL/TP to the broker floor so a too-tight slice (commonly TP1)
-            # isn't rejected — a rejection here aborts ALL slices for this signal.
-            o_sl, o_tp, adjusted = _apply_stops_floor(side, ref_price, sl, tp, min_d)
-            if adjusted:
-                log.info("[%s:%s] stops widened to broker floor (%.2f): SL %.2f->%.2f TP%d %.2f->%.2f",
-                         msg_id, self.label, min_d, sl, o_sl, i, tp, o_tp)
+        for i, (o_sl, o_tp) in enumerate(levels, start=1):
             comment = f"tg-{msg_id}-tp{i}"
             if use_market:
                 tid = self.place_market_order_full(side, symbol, vol_each, o_sl, o_tp, comment)
@@ -476,16 +507,18 @@ class MetaApiClient:
             else:
                 tid, retcode = self.place_limit_order(side, symbol, vol_each, entry, o_sl, o_tp, cur, comment)
                 kind = "limit"
-                # Price moved to the wrong side of the limit between our fetch and the
-                # trade (the recurring INVALID_PRICE drop) — enter at market instead of
-                # aborting the whole signal, as long as we're not chasing into the SL.
+                # Price moved to the wrong side of the limit between plan and trade
+                # (the recurring INVALID_PRICE drop) — enter at market instead of
+                # aborting the whole signal, as long as we're not chasing into the
+                # SL. Keep the plan's TARGET levels (only widen further if THIS
+                # account's price now demands it) so accounts stay aligned.
                 if not tid and str(retcode) in ("TRADE_RETCODE_INVALID_PRICE", "10015"):
                     px2 = self.get_symbol_price(symbol)
                     cur2 = (px2["ask"] if side == "buy" else px2["bid"]) if px2 else cur
                     room_ok = cur2 is not None and (
-                        (sl - cur2 >= min_d) if side == "sell" else (cur2 - sl >= min_d))
+                        (o_sl - cur2 >= min_d) if side == "sell" else (cur2 - o_sl >= min_d))
                     if room_ok:
-                        o_sl, o_tp, adj2 = _apply_stops_floor(side, cur2, sl, tp, min_d)
+                        o_sl, o_tp, adj2 = _apply_stops_floor(side, cur2, o_sl, o_tp, min_d)
                         log.warning("[%s:%s] TP%d limit rejected INVALID_PRICE (entry=%.2f cur=%.2f) "
                                     "— falling back to market", msg_id, self.label, i, entry, cur2)
                         tid = self.place_market_order_full(side, symbol, vol_each, o_sl, o_tp, comment)
@@ -494,7 +527,7 @@ class MetaApiClient:
                             use_market = True  # remaining slices go straight to market
                     else:
                         log.warning("[%s:%s] TP%d limit rejected INVALID_PRICE and market unsafe "
-                                    "(cur=%s sl=%.2f) — not chasing", msg_id, self.label, i, cur2, sl)
+                                    "(cur=%s sl=%.2f) — not chasing", msg_id, self.label, i, cur2, o_sl)
             if not tid:
                 log.error("[%s:%s] order placement failed for TP%d — aborting remaining slices",
                           msg_id, self.label, i)
@@ -555,6 +588,6 @@ def get_pending_orders(symbol: str | None = None) -> list[dict] | None:
 
 def submit_signal_orders(side: Side, symbol: str, entry: float, sl: float,
                          tps: list[float], total_volume: float,
-                         msg_id: int) -> list[dict]:
+                         msg_id: int, plan: dict | None = None) -> list[dict]:
     return _default_client.submit_signal_orders(side, symbol, entry, sl, tps,
-                                                total_volume, msg_id)
+                                                total_volume, msg_id, plan)

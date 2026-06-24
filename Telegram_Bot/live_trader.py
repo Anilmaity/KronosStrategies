@@ -190,6 +190,28 @@ async def place_order(msg_id: int, sig: dict) -> dict:
 
     loop = asyncio.get_running_loop()
 
+    # ── Build ONE order plan shared by every account ──────────────────────────
+    # Mirrored accounts must place IDENTICAL SL/TP levels (only the fill price may
+    # differ, by broker spread). So we decide the plan once — using the STRICTEST
+    # stops-floor across all accounts (so it satisfies every broker) and the
+    # reference (first/primary) account's price for the market-vs-limit call —
+    # instead of letting each account re-decide against its own price/spec, which
+    # is what made neymar2 widen a TP differently and miss fills primary caught.
+    stops = await asyncio.gather(*(
+        loop.run_in_executor(None, lambda c=acc["client"]: c.stops_level_price(sig["instrument"]))
+        for acc in ACCOUNTS), return_exceptions=True)
+    min_ds = [s for s in stops if isinstance(s, (int, float))]
+    min_d = max(min_ds) if min_ds else None
+    ref_client = ACCOUNTS[0]["client"]
+    try:
+        plan = await loop.run_in_executor(
+            None, lambda: ref_client.build_order_plan(
+                sig["side"], sig["instrument"], entry_mid, sig["sl"], sig["tps"],
+                min_distance=min_d))
+    except Exception:
+        log.exception("[%s] build_order_plan raised — each account will self-plan", msg_id)
+        plan = None
+
     async def _submit_for_account(acc: dict) -> tuple[str, list[dict], float]:
         """Submit one account's slices and tag them. Returns (label, slices,
         account_volume). Swallows its own broker errors so one account failing
@@ -208,6 +230,7 @@ async def place_order(msg_id: int, sig: dict) -> dict:
                     tps=sig["tps"],
                     total_volume=v,
                     msg_id=msg_id,
+                    plan=plan,
                 ),
             )
         except Exception:

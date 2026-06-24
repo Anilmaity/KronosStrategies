@@ -27,8 +27,15 @@ def test_place_order_submits_accounts_concurrently(monkeypatch):
         def __init__(self, label):
             self.label = label
 
+        def stops_level_price(self, symbol):
+            return 3.0
+
+        def build_order_plan(self, side, symbol, entry, sl, tps, min_distance=None):
+            return {"use_market": True, "levels": [(sl, t) for t in tps],
+                    "min_d": min_distance or 3.0, "cur": entry}
+
         def submit_signal_orders(self, side, symbol, entry, sl, tps,
-                                 total_volume, msg_id):
+                                 total_volume, msg_id, plan=None):
             barrier.wait()   # both accounts must be in-flight together
             ve = round(total_volume / len(tps), 2)
             return [{"tp_index": i + 1, "tp": tps[i], "ticket_id": f"{self.label}-{i+1}",
@@ -54,12 +61,23 @@ def test_place_order_one_account_failing_does_not_drop_the_other(monkeypatch):
     """A concurrent submit that raises for one account must not abort the other's
     already-placed orders — we still track what was submitted."""
     class _Good:
-        def submit_signal_orders(self, side, symbol, entry, sl, tps, total_volume, msg_id):
+        def stops_level_price(self, symbol):
+            return 3.0
+
+        def build_order_plan(self, side, symbol, entry, sl, tps, min_distance=None):
+            return {"use_market": True, "levels": [(sl, tps[0])],
+                    "min_d": min_distance or 3.0, "cur": entry}
+
+        def submit_signal_orders(self, side, symbol, entry, sl, tps, total_volume,
+                                 msg_id, plan=None):
             ve = round(total_volume / len(tps), 2)
             return [{"tp_index": 1, "tp": tps[0], "ticket_id": "g-1", "kind": "market",
                      "volume": ve, "entry": entry, "sl": sl}]
 
     class _Bad:
+        def stops_level_price(self, symbol):
+            return 3.0
+
         def submit_signal_orders(self, *a, **k):
             raise RuntimeError("broker exploded")
 
