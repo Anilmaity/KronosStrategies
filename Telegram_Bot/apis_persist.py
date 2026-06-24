@@ -37,6 +37,9 @@ log = logging.getLogger("tg-apis")
 USER_STRATEGY_ID = os.getenv("APIS_USER_STRATEGY_ID", "4a4be335-9606-49cb-9658-4d10cfe064b1")
 CURRENCYPAIR_ID  = os.getenv("APIS_CURRENCYPAIR_ID",  "212ee480-2008-4fe1-a677-9ae7e82d59b0")
 USER_BROKER_ID   = os.getenv("APIS_USER_BROKER_ID",   "e673869c-8c56-4521-9a49-ac62f07d7da9")
+# Strategy (not UserStrategy) id — the FK StrategySignal rows hang off, so the
+# Signals tab shows each telegram signal under its strategy name.
+STRATEGY_ID      = os.getenv("APIS_STRATEGY_ID",      "d9bf1604-9ee0-4454-b3c1-b7335ff8915f")
 SYMBOL = "XAUUSD"
 
 # PnL UNIT CONVENTION — must match the rest of the Kronos dashboard. MetaAPI
@@ -55,7 +58,7 @@ class ApisDashboard:
     def __init__(self, user_strategy_id: str, user_broker_id: str,
                  currencypair_id: str, *, enabled: bool = True,
                  symbol: str = SYMBOL, contract_size: float = CONTRACT_SIZE,
-                 label: str = "primary"):
+                 label: str = "primary", strategy_id: str = STRATEGY_ID):
         self.user_strategy_id = user_strategy_id
         self.user_broker_id = user_broker_id
         self.currencypair_id = currencypair_id
@@ -63,6 +66,7 @@ class ApisDashboard:
         self.symbol = symbol
         self.contract_size = contract_size
         self.label = label
+        self.strategy_id = strategy_id
 
     def _to_cash(self, usd: float | None) -> float | None:
         """Convert a broker account-dollar PnL into the dashboard 'cash' unit."""
@@ -206,6 +210,47 @@ class ApisDashboard:
             log.error("[apis:%s] find_open_position_id failed: %s", self.label, e)
             return None
 
+    def record_signal(self, side: str, entry: float | None, sl: float | None,
+                      take_profit: float | None, *, status: str = "PLACED",
+                      reason: str = "", rejection_reason: str = "",
+                      signal_at=None, position_id: str | None = None) -> str | None:
+        """Best-effort StrategySignal insert so the Signals tab shows this
+        telegram signal under its strategy (mirrors the algo runners'
+        entry_manager._log_signal_fired). Never raises — trading must not depend
+        on it. `signal_at` may be an ISO string / datetime / None (-> NOW())."""
+        if not self.enabled or not self.strategy_id:
+            return None
+        sid = str(uuid.uuid4())
+        try:
+            with self._connect() as conn, conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO apis_strategysignal (
+                        id, created_at, modified_at,
+                        strategy_id, symbol, side, entry_price,
+                        stop_loss, take_profit, reason, status,
+                        rejection_reason, signal_at, position_id
+                    ) VALUES (
+                        %s, NOW(), NOW(),
+                        %s, %s, %s, %s,
+                        %s, %s, %s, %s,
+                        %s, COALESCE(%s::timestamptz, NOW()), %s
+                    )
+                    """,
+                    (
+                        sid, self.strategy_id, self.symbol, (side or "").upper(),
+                        entry if entry is not None else 0,
+                        sl, take_profit, (reason or "")[:500], status,
+                        (rejection_reason or "")[:500], signal_at, position_id,
+                    ),
+                )
+            log.info("[apis:%s] signal recorded id=%s %s %s @ %s",
+                     self.label, sid, status, (side or "").upper(), entry)
+            return sid
+        except Exception as e:
+            log.error("[apis:%s] record_signal failed: %s", self.label, e)
+            return None
+
     def _insert_order(self, cur, position_id: str, *, condition: str, side: str,
                       price: float, quantity: float, status: str,
                       reason: str = "NONE", broker_order_id: str | None = None) -> None:
@@ -265,3 +310,12 @@ def conclude_position(position_id: str | None, realized_pnl: float | None,
 
 def find_open_position_id() -> str | None:
     return _default_dashboard.find_open_position_id()
+
+
+def record_signal(side: str, entry: float | None, sl: float | None,
+                  take_profit: float | None, *, status: str = "PLACED",
+                  reason: str = "", rejection_reason: str = "",
+                  signal_at=None, position_id: str | None = None) -> str | None:
+    return _default_dashboard.record_signal(
+        side, entry, sl, take_profit, status=status, reason=reason,
+        rejection_reason=rejection_reason, signal_at=signal_at, position_id=position_id)

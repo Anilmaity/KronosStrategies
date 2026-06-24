@@ -120,7 +120,8 @@ def _build_accounts() -> list[dict]:
         dash2 = apis.ApisDashboard(
             os.getenv("APIS2_USER_STRATEGY_ID", "31c5b1cf-8a25-4f5a-983f-2207cceae4b8"),
             os.getenv("APIS2_USER_BROKER_ID", "45b0c6d8-90ed-4996-bbfd-a92a951966bb"),
-            apis.CURRENCYPAIR_ID, enabled=apis._ENABLED, label="neymar2")
+            apis.CURRENCYPAIR_ID, enabled=apis._ENABLED, label="neymar2",
+            strategy_id=os.getenv("APIS2_STRATEGY_ID", "30427449-9705-406c-820d-2b5ff9d8c003"))
         accounts.append({"label": "neymar2", "client": client2,
                          "risk_usd": float(os.getenv("TG2_RISK_USD", str(RISK_PER_TRADE_USD))),
                          "apis": dash2})
@@ -147,6 +148,32 @@ def is_malformed(sig: dict) -> str | None:
     if sig["side"] == "sell" and any(tp >= em for tp in sig["tps"]):
         return "sell TP above entry"
     return None
+
+
+def _signal_entry(sig: dict) -> float:
+    """The near-edge entry price place_order uses (sell->low, buy->high)."""
+    return sig["entry_low"] if sig["side"] == "sell" else sig["entry_high"]
+
+
+def _record_signals(sig: dict, *, status: str, reason: str = "",
+                    rejection_reason: str = "", signal_at=None,
+                    only_labels=None, pos_ids: dict | None = None) -> None:
+    """Best-effort StrategySignal row per account so the dashboard Signals tab
+    shows this telegram signal (one row per platform Strategy, matching the
+    per-account positions). Blocking (DB) — call via run_in_executor. Never
+    raises: apis.record_signal swallows its own errors."""
+    entry = _signal_entry(sig)
+    tp = sig["tps"][0] if sig.get("tps") else None
+    for acc in ACCOUNTS:
+        if only_labels is not None and acc["label"] not in only_labels:
+            continue
+        dash = acc.get("apis")
+        if dash is None:
+            continue
+        dash.record_signal(sig["side"], entry, sig["sl"], tp, status=status,
+                           reason=reason, rejection_reason=rejection_reason,
+                           signal_at=signal_at,
+                           position_id=(pos_ids or {}).get(acc["label"]))
 
 
 async def place_order(msg_id: int, sig: dict) -> dict:
@@ -608,6 +635,11 @@ async def handle_new_signal(msg) -> None:
             return
         if live:
             log.warning(f"[{msg.id}] {len(live)} live position(s) in market — skip (no pyramiding)")
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, lambda: _record_signals(
+                sig, status="REJECTED",
+                rejection_reason="open_position_cap (no pyramiding)",
+                signal_at=msg.date.astimezone(timezone.utc).isoformat()))
             return
         # All prior opens are unfilled pending limits (never entered the market).
         # Supersede them so this fresh re-entry can take over the single slot.
@@ -625,11 +657,29 @@ async def handle_new_signal(msg) -> None:
     # stale sweep — costing every subsequent signal of the session.
     if not pos.get("orders"):
         log.warning(f"[{msg.id}] no orders submitted — not tracking (next signal will be eligible)")
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, lambda: _record_signals(
+            sig, status="REJECTED",
+            rejection_reason="no orders submitted (broker rejection)",
+            signal_at=pos.get("posted_at")))
         return
     await r.set(f"{REDIS_PREFIX}:signal:{msg.id}", json.dumps(pos))
     await r.sadd(f"{REDIS_PREFIX}:open", str(msg.id))
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, lambda: db.insert_signal(pos, CHANNEL))
+    # Surface this signal on the dashboard Signals tab: one row per account that
+    # got orders (PLACED), one per account that the broker rejected (REJECTED).
+    placed = {o.get("account", "primary") for o in pos["orders"]}
+    reject = {a["label"] for a in ACCOUNTS} - placed
+    reason = (f"TG @{CHANNEL} | zone {sig['entry_low']}-{sig['entry_high']} "
+              f"| SL {sig['sl']} | TP {sig['tps']}")
+    await loop.run_in_executor(None, lambda: _record_signals(
+        sig, status="PLACED", reason=reason,
+        signal_at=pos.get("posted_at"), only_labels=placed))
+    if reject:
+        await loop.run_in_executor(None, lambda: _record_signals(
+            sig, status="REJECTED", rejection_reason="no orders on this account",
+            signal_at=pos.get("posted_at"), only_labels=reject))
 
 
 async def handle_reply(msg) -> None:
