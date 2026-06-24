@@ -66,68 +66,9 @@ services:
       TIGERDATA_URL: ${TIGERDATA_URL:-}
 
   # ───────────────────────────────────────────────────────────────────────────
-  # Research strategies (backtest_strategies/sNN_*.py). Generic
-  # research_runner.py dispatches to each via RESEARCH_STRATEGY env var.
-  # These are research-only — not OOS-validated. See backtest results in
-  # strategies/backtest/results/ before tuning entry quantities.
+  # Strategy services REMOVED 2026-06-24 (operator decision). The four heavy
+  # live strategies — kronos_combined_v2, research_m90_bias, research_ob_mit_bias
+  # and concept_c03_fvg_fill — were decommissioned and their DB rows deleted via
+  # strategies/db/delete_heavy_strategies.py. Recreatable from git history +
+  # deploy_combined_v2.py if ever needed again.
   # ───────────────────────────────────────────────────────────────────────────
-
-  research_m90_bias:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: s12_m90_fade_bias
-
-  research_ob_mit_bias:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: s14_ob_mit_bias
-
-  # Concept strategies (concept_strategies/cNN_*.py). C03_FVG_FILL promoted
-  # live 2026-05-18 — top performer of 20-concept build (2026-05-17 batch).
-  concept_c03_fvg_fill:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: c03_fvg_fill
-
-  # ───────────────────────────────────────────────────────────────────────────
-  # Combined Suite v2 — the WHOLE two-sided XAU/USD book as ONE strategy.
-  #   MR base (S02/S05/S06/S07/S14, reused legs) + long fades (E1/E2/E3) +
-  #   bear-day short fades (SE1/SE2); BOS daily-bias gate; per-leg ATR exits +
-  #   max-holds (via the new Signal.max_hold_min -> TIME_EXIT trigger); holds
-  #   several legs open at once (CONFIG.max_concurrent_positions=12).
-  #   The MR legs (S02/S05/S06/S07/S14) are now traded ONLY via this combined
-  #   strategy — the standalone kronos_s02/s05/s06/s07/s14 services were removed
-  #   2026-05-25 (their DB strategies were deleted) to avoid double-firing.
-  # NOTE the enlarged windows/fetch-depth: the MR legs need 205 M15/M5 bars, so
-  #   the default WIN_15M=100 would keep them silent.
-  # SAFETY: set DRY_RUN: "true" here to smoke-test (logs orders, places NONE).
-  # ───────────────────────────────────────────────────────────────────────────
-  kronos_combined_v2:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: kronos_combined_v2
-      RESEARCH_WIN_15M: "260"
-      RESEARCH_WIN_5M:  "260"
-      RESEARCH_DAYS_15M: "7"
-      RESEARCH_DAYS_5M:  "4"
-      # DRY_RUN: "true"   # uncomment to smoke-test without placing real orders
