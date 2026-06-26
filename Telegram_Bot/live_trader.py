@@ -45,7 +45,7 @@ for _p in _candidates:
 
 # telethon is imported lazily inside main() so this module can be imported (and
 # unit-tested) without the Telegram client dependency installed.
-from parse_signals import parse_signal, classify_outcome, SL_FIX_RE, clean
+from parse_signals import parse_signal, classify_outcome, looks_like_signal, SL_FIX_RE, clean
 import metaapi_orders as mx
 import db_persist as db
 import apis_persist as apis
@@ -697,6 +697,11 @@ async def handle_new_signal(msg) -> None:
     text = clean(msg.text or "")
     sig = parse_signal(text)
     if not sig:
+        # A message that reads like a signal (instrument + side + SL) but the
+        # grammar can't parse is an UNHANDLED FORMAT, not chatter — shout so it
+        # never again vanishes in silence the way the TP1/TP2/TP3 form did.
+        if looks_like_signal(text):
+            log.warning("[%s] UNPARSEABLE signal-like message — not traded: %r", msg.id, text)
         return
     age = (datetime.now(timezone.utc) - msg.date.astimezone(timezone.utc)).total_seconds()
     if age > MAX_SIGNAL_AGE_SEC:

@@ -37,12 +37,24 @@ SIGNAL_RE = re.compile(
     \s+(?P<side>buy|sell)(?:\s+now)?\s+
     (?P<e1>\d+(?:\.\d+)?)\s*-\s*(?P<e2>\d+(?:\.\d+)?)
     \s+SL[:\s]+(?P<sl>\d+(?:\.\d+)?)
-    \s+(?P<tps>(?:TP[:\s]+\S+\s*)+)
+    \s+(?P<tps>(?:TP\d{0,2}[:\s]+\S+\s*)+)
     """,
     re.IGNORECASE | re.VERBOSE,
 )
-TP_VAL_RE = re.compile(r"TP[:\s]+(\d+(?:\.\d+)?|open)", re.IGNORECASE)
+# Accept both the bare "TP: 4729" / "TP 4729" form and the numbered
+# "TP1 3338" / "TP2: 3342" form the channel actually posts (the digit glued to
+# "TP" previously matched zero TP tokens and silently dropped the whole signal).
+TP_VAL_RE = re.compile(r"TP\d{0,2}[:\s]+(\d+(?:\.\d+)?|open)", re.IGNORECASE)
 NOW_RE = re.compile(r"\b(Gold|XAU\w*|BTC\w*)\s+(buy|sell)\s+now\b", re.IGNORECASE)
+# Loose "this message is a trade signal" detector: an instrument + a side + a
+# stop-loss. Used only to tell a genuinely-unparseable SIGNAL (worth shouting
+# about) apart from ordinary channel chatter or the bare "Gold buy now" trigger
+# (no SL) — so a future format the strict SIGNAL_RE can't read is logged loudly
+# instead of being dropped in silence, as the TP1/TP2/TP3 form was.
+LOOKS_LIKE_SIGNAL_RE = re.compile(
+    r"(?:Gold|XAU\w*|BTC\w*|ETH\w*|GBP\w+|EUR\w+|USD\w+)\s+(?:buy|sell)\b.*\bSL\b",
+    re.IGNORECASE | re.DOTALL,
+)
 SL_FIX_RE = re.compile(r"SL\s+is\s+\*{0,2}(\d+(?:\.\d+)?)", re.IGNORECASE)
 
 
@@ -67,6 +79,13 @@ def classify_outcome(text: str) -> dict | None:
     if "set breakeven" in t or "move sl to entry" in t or "set be" in t or "to entry" in t:
         out["breakeven"] = True
     return out or None
+
+
+def looks_like_signal(text: str) -> bool:
+    """True when text reads like a trade signal (instrument + side + SL) even if
+    the strict grammar can't parse it. Lets the live trader distinguish a signal
+    it FAILED to parse (alert-worthy) from ordinary chatter (ignore quietly)."""
+    return bool(LOOKS_LIKE_SIGNAL_RE.search(text or ""))
 
 
 def parse_signal(text: str) -> dict | None:
