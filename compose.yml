@@ -66,6 +66,30 @@ services:
       TIGERDATA_URL: ${TIGERDATA_URL:-}
 
   # ───────────────────────────────────────────────────────────────────────────
+  # Challenge bot — XAUUSD H4 Donchian/EMA trend-follow with a 3xATR chandelier
+  # trail, risk-based sizing and a hard drawdown / kill-switch guard, trading a
+  # single funded/prop challenge account (FundingPips $5k 2-step). Self-contained:
+  # fetches H4 candles from OANDA, places orders on its OWN MetaAPI account via
+  # strategies/challenge/broker.py (separate from the Telegram copy-trader).
+  # Set CHALLENGE_DRY_RUN=true to run the loop without placing real orders.
+  # ───────────────────────────────────────────────────────────────────────────
+  challenge_xau_h4:
+    build: ./strategies
+    restart: always
+    command: python -m challenge.live_runner
+    env_file: .env
+    environment:
+      CHALLENGE_META_TOKEN:       ${CHALLENGE_META_TOKEN:-${META_API_TOKEN:-}}
+      CHALLENGE_META_ACCOUNT:     ${CHALLENGE_META_ACCOUNT:-}
+      CHALLENGE_SYMBOL:           ${CHALLENGE_SYMBOL:-XAU_USD}
+      CHALLENGE_INITIAL_BALANCE:  ${CHALLENGE_INITIAL_BALANCE:-5000}
+      CHALLENGE_RISK_PCT:         ${CHALLENGE_RISK_PCT:-0.01}
+      CHALLENGE_MAX_TRADE_RISK_PCT: ${CHALLENGE_MAX_TRADE_RISK_PCT:-0.025}
+      CHALLENGE_DRY_RUN:          ${CHALLENGE_DRY_RUN:-false}
+      OANDA_API_KEY:              ${OANDA_API_KEY:-}
+      OANDA_PRACTICE:             ${OANDA_PRACTICE:-true}
+
+  # ───────────────────────────────────────────────────────────────────────────
   # Strategy services REMOVED 2026-06-24 (operator decision). The four heavy
   # live strategies — kronos_combined_v2, research_m90_bias, research_ob_mit_bias
   # and concept_c03_fvg_fill — were decommissioned and their DB rows deleted via

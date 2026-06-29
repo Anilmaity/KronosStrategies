@@ -20,15 +20,21 @@ XAU_CONTRACT_USD_PER_DOLLAR_PER_LOT = 100.0
 def position_size(equity: float, risk_pct: float, sl_distance: float, *,
                   contract_size: float = XAU_CONTRACT_USD_PER_DOLLAR_PER_LOT,
                   lot_step: float = 0.01, min_lot: float = 0.01,
-                  max_lot: float | None = None) -> float:
-    """Lots to risk exactly `risk_pct` of `equity` over a `sl_distance` ($) stop.
+                  max_lot: float | None = None,
+                  max_trade_risk_pct: float | None = None) -> float:
+    """Lots to risk `risk_pct` of `equity` over a `sl_distance` ($) stop.
 
       risk_$   = equity * risk_pct
       raw_lots = risk_$ / (sl_distance * contract_size)
 
-    Rounded DOWN to `lot_step` so realized risk never exceeds the budget. Returns
-    0.0 when the stop distance is non-positive or when even `min_lot` would risk
-    more than the budget (refuse rather than over-risk). Caps at `max_lot`.
+    Rounded DOWN to `lot_step` so realized risk never exceeds the budget. Caps at
+    `max_lot`.
+
+    When the risk-correct size rounds below `min_lot` (high vol / small account):
+      - if `max_trade_risk_pct` is set, trade `min_lot` ONLY when its risk
+        (min_lot * contract_size * sl_distance) is within that cap of equity —
+        otherwise refuse (0.0);
+      - if no cap is given, refuse (0.0) — never silently over-risk.
     """
     if sl_distance <= 0 or risk_pct <= 0 or equity <= 0:
         return 0.0
@@ -36,6 +42,11 @@ def position_size(equity: float, risk_pct: float, sl_distance: float, *,
     raw = risk_amount / (sl_distance * contract_size)
     lots = math.floor(raw / lot_step + 1e-9) * lot_step
     if lots < min_lot:
+        if max_trade_risk_pct is None:
+            return 0.0
+        min_lot_risk = min_lot * contract_size * sl_distance
+        if min_lot_risk <= max_trade_risk_pct * equity:
+            return round(min_lot, 2)
         return 0.0
     if max_lot is not None:
         lots = min(lots, max_lot)
@@ -93,6 +104,13 @@ class ChallengeGuard:
             self.consec_losses += 1
         elif pnl > 0:
             self.consec_losses = 0
+
+    def risk_budget(self, equity: float) -> float:
+        """Max dollars a new trade may risk right now: the smaller of the room left
+        in today's daily limit and the room down to the overall floor. Never < 0."""
+        daily_room = self.daily_loss_limit + self.day_realized   # day_realized <= 0 when down
+        overall_room = equity - self.overall_floor
+        return max(0.0, min(daily_room, overall_room))
 
     def can_trade(self, equity: float) -> tuple[bool, str]:
         """Return (allowed, reason). Reasons: 'ok', 'target_reached', 'overall_dd',

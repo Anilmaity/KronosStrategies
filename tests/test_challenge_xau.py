@@ -24,6 +24,7 @@ from strategies.challenge.challenge_xau import (
     donchian_channels,
     chandelier_trail,
     generate_signals,
+    signal_at_last_bar,
     ChallengeSignal,
 )
 from strategies.challenge.risk import position_size, ChallengeGuard
@@ -136,6 +137,31 @@ def test_buy_initial_stop_is_three_atr_below_and_risk_positive():
 
 
 # ---------------------------------------------------------------------------
+# Live trigger on the most-recently-closed bar
+# ---------------------------------------------------------------------------
+def test_signal_at_last_bar_fires_on_breakout_trigger():
+    # Build the up-staircase frame, then trim it so the LAST row is a breakout
+    # trigger bar -> live evaluation should return a BUY entering at market now.
+    up = [2000 + i * 5 for i in range(1, 16)]
+    o, h, l, c = _flat_then(up)
+    b = _bars(o, h, l, c)
+    full = generate_signals(b, donchian_n=10, ema_fast=20, ema_slow=50, atr_n=14, atr_mult=3.0)
+    trig = full[0].entry_index - 1                      # the trigger bar index
+    live_frame = b.iloc[: trig + 1]                     # last row == trigger bar
+    s = signal_at_last_bar(live_frame, donchian_n=10, ema_fast=20, ema_slow=50,
+                           atr_n=14, atr_mult=3.0)
+    assert s is not None and s.direction == "BUY"
+    assert s.entry_index == len(live_frame)             # market entry "now" (next bar)
+
+
+def test_signal_at_last_bar_none_when_no_breakout():
+    o, h, l, c = _flat_then([2000.0])                   # flat, no breakout on last bar
+    b = _bars(o, h, l, c)
+    s = signal_at_last_bar(b, donchian_n=10, ema_fast=20, ema_slow=50, atr_n=14, atr_mult=3.0)
+    assert s is None
+
+
+# ---------------------------------------------------------------------------
 # Chandelier trailing stop
 # ---------------------------------------------------------------------------
 def test_chandelier_long_trails_up_never_down():
@@ -171,6 +197,21 @@ def test_position_size_zero_when_sl_distance_zero():
 def test_position_size_zero_when_min_lot_would_exceed_risk():
     # tiny equity: even 0.01 lot risks more than the budget -> refuse (0.0)
     lots = position_size(equity=100.0, risk_pct=0.01, sl_distance=15.0)
+    assert lots == 0.0
+
+
+def test_position_size_floors_to_min_lot_when_under_risk_cap():
+    # 1% sizing rounds to 0, but 0.01 lot risks 0.01*100*100=$100 = 2% of 5000,
+    # which is <= the 2.5% cap -> trade the min lot.
+    lots = position_size(equity=5000.0, risk_pct=0.01, sl_distance=100.0,
+                         max_trade_risk_pct=0.025)
+    assert lots == 0.01
+
+
+def test_position_size_refuses_min_lot_when_over_risk_cap():
+    # 0.01 lot risks 0.01*100*200=$200 = 4% of 5000 > 2.5% cap -> refuse.
+    lots = position_size(equity=5000.0, risk_pct=0.01, sl_distance=200.0,
+                         max_trade_risk_pct=0.025)
     assert lots == 0.0
 
 
@@ -226,6 +267,20 @@ def test_guard_blocks_when_profit_target_reached():
     assert not ok and reason == "target_reached"
 
 
+def test_guard_risk_budget_is_min_of_daily_room_and_overall_room():
+    g = _guard(); g.start_new_day(5000.0)
+    # fresh: daily limit 250 (5% of 5000), overall room 500 (down to 4500 floor) -> 250
+    assert math.isclose(g.risk_budget(5000.0), 250.0)
+    g.record_trade(-100.0)             # daily room now 150
+    assert math.isclose(g.risk_budget(4900.0), 150.0)
+
+
+def test_guard_risk_budget_never_negative():
+    g = _guard(); g.start_new_day(5000.0)
+    g.record_trade(-300.0)             # blown past daily limit
+    assert g.risk_budget(4700.0) == 0.0
+
+
 def test_guard_new_day_resets_daily_counters():
     g = _guard(); g.start_new_day(5000.0)
     g.record_trade(-260.0)             # blows the daily limit
@@ -233,3 +288,41 @@ def test_guard_new_day_resets_daily_counters():
     g.start_new_day(4740.0)            # next day, fresh daily budget
     ok, reason = g.can_trade(4740.0)
     assert ok and reason == "ok"
+
+
+# ---------------------------------------------------------------------------
+# Runner glue (dry broker, no network) — enter then trail
+# ---------------------------------------------------------------------------
+def test_runner_enters_and_trails_with_dry_broker():
+    from strategies.challenge.broker import ChallengeBroker
+    from strategies.challenge.risk import ChallengeGuard as _G
+    from strategies.challenge.live_runner import Runner
+
+    broker = ChallengeBroker("", "", dry_run=True, label="test")
+    guard = _G(5000.0, profit_target_pct=0.10, max_daily_dd_pct=0.05,
+               max_overall_dd_pct=0.10, max_consec_losses=2)
+    guard.start_new_day(5000.0)
+    r = Runner(broker, guard)
+
+    # a frame whose LAST bar is an up-breakout trigger -> runner opens a long
+    up = [2000 + i * 5 for i in range(1, 16)]
+    o, h, l, c = _flat_then(up)
+    b = _bars(o, h, l, c)
+    full = generate_signals(b, donchian_n=10, ema_fast=20, ema_slow=50, atr_n=14, atr_mult=3.0)
+    trig = full[0].entry_index - 1
+    frame = b.iloc[: trig + 1]
+
+    # default PARAMS use donchian_n=20 etc; this synthetic frame is tuned for n=10,
+    # so drive the decision directly with matching params via signal_at_last_bar path.
+    import strategies.challenge.live_runner as lr
+    lr.PARAMS = {"donchian_n": 10, "ema_fast": 20, "ema_slow": 50, "atr_n": 14, "atr_mult": 3.0}
+
+    r._maybe_enter(frame, equity=5000.0)
+    assert r.position is not None
+    assert r.position["direction"] == "BUY"
+    entry_stop = r.position["stop"]
+
+    # a strongly higher bar must ratchet the chandelier stop UP, never down
+    higher = pd.Series({"high": 2200.0, "low": 2150.0, "close": 2190.0})
+    r._trail(higher, current_atr=5.0)
+    assert r.position["stop"] >= entry_stop
