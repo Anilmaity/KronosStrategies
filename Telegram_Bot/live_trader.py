@@ -481,7 +481,15 @@ async def reconcile_broker() -> None:
         positions = await loop.run_in_executor(None, lambda c=client: c.get_open_positions(symbol))
         orders = await loop.run_in_executor(None, lambda c=client: c.get_pending_orders(symbol))
         if positions is None or orders is None:
-            return  # could not verify a broker — skip this cycle, fail safe
+            # This single account is unreachable this cycle. SKIP it (omit from
+            # acct_maps) but keep reconciling the others — the per-slice loop below
+            # already leaves a slice untouched when its account's map is missing.
+            # Aborting the whole cycle on one dead mirror meant the healthy
+            # primary's signals never concluded, so `:open` never drained and the
+            # no-pyramiding guard wedged every later signal (2026-06-26).
+            log.warning("[reconcile] account %s unreachable — skipping it this cycle "
+                        "(other accounts still reconcile)", label)
+            continue
         pos_by_tag, ord_by_tag = {}, {}
         for p in positions:
             m = _TAG_RE.search(p.get("comment") or "")
@@ -674,12 +682,26 @@ async def _classify_open_signals(open_ids) -> tuple[list[str], list[str], bool]:
     loop = asyncio.get_running_loop()
     symbol = next(iter(ALLOWED_INSTRUMENTS))
     all_positions: list[dict] = []
+    verified_any = False
     for acc in ACCOUNTS:
         client = acc["client"]
         positions = await loop.run_in_executor(None, lambda c=client: c.get_open_positions(symbol))
         if positions is None:
-            return [], [], False  # could not verify an account — caller must not cancel
+            # This single account is unreachable (e.g. a mirror account undeployed
+            # at the broker → HTTP 404). EXCLUDE it rather than vetoing the whole
+            # decision: it placed no orders for the incoming signal, so it can hold
+            # no position relevant to the no-pyramiding check. Letting one dead
+            # mirror return ok=False froze trading on the healthy primary too
+            # (2026-06-26). We only fail safe when NO account can be verified.
+            log.warning("[%s] account %s unreachable — excluding from no-pyramiding "
+                        "check (other accounts still decide)", "classify", acc["label"])
+            continue
+        verified_any = True
         all_positions.extend(positions)
+    if not verified_any:
+        # Could not verify a SINGLE account — genuinely blind, so fail safe and let
+        # the caller keep the guard rather than cancel/place on an unknown state.
+        return [], [], False
     live, unfilled = [], []
     for sid in open_ids:
         if not await r.get(f"{REDIS_PREFIX}:signal:{sid}"):
