@@ -59,11 +59,12 @@ def _request(method: str, url: str, **kwargs) -> requests.Response:
 
 class ChallengeBroker:
     def __init__(self, token: str, account: str, *, dry_run: bool = False,
-                 label: str = "challenge"):
+                 label: str = "challenge", region: str | None = None):
         self._token = token
         self._account = account
         self.dry_run = dry_run
         self.label = label
+        self._region = (region or "").strip() or None   # explicit override; skips lookup
         self._trading_url: str | None = None
 
     def _headers(self) -> dict:
@@ -72,14 +73,23 @@ class ChallengeBroker:
     def _resolve_trading_url(self) -> str:
         if self._trading_url:
             return self._trading_url
-        region = "new-york"
-        try:
-            resp = requests.get(f"{_PROVISION_URL}/users/current/accounts/{self._account}",
-                                headers=self._headers(), timeout=10)
-            resp.raise_for_status()
-            region = resp.json().get("region", "new-york")
-        except Exception:
-            log.warning("[%s] region lookup failed — defaulting to new-york", self.label)
+        # An explicit region (CHALLENGE_META_REGION) wins — the provisioning lookup
+        # 403s for some accounts/tokens, and guessing the wrong region's trading host
+        # also 403s. Pin it to the account's real region (e.g. the integrated bot uses
+        # london) to avoid both. Only auto-resolve when no override is given.
+        if self._region:
+            region = self._region
+            log.info("[%s] using configured region: %s", self.label, region)
+        else:
+            region = "new-york"
+            try:
+                resp = requests.get(f"{_PROVISION_URL}/users/current/accounts/{self._account}",
+                                    headers=self._headers(), timeout=10)
+                resp.raise_for_status()
+                region = resp.json().get("region", "new-york")
+            except Exception:
+                log.warning("[%s] region lookup failed — defaulting to new-york "
+                            "(set CHALLENGE_META_REGION to pin it)", self.label)
         self._trading_url = f"https://mt-client-api-v1.{region}.agiliumtrade.ai"
         log.info("[%s] trading host: %s", self.label, self._trading_url)
         return self._trading_url

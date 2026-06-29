@@ -258,7 +258,8 @@ def main() -> None:
     if not DRY_RUN and (not token or not account):
         sys.exit("CHALLENGE_META_TOKEN and CHALLENGE_META_ACCOUNT must be set "
                  "(or CHALLENGE_DRY_RUN=true for a no-broker smoke run)")
-    broker = ChallengeBroker(token, account, dry_run=DRY_RUN, label="challenge")
+    region = os.getenv("CHALLENGE_META_REGION", "")
+    broker = ChallengeBroker(token, account, dry_run=DRY_RUN, label="challenge", region=region)
     guard = ChallengeGuard(INITIAL_BALANCE, **GUARD_KW)
     Runner(broker, guard).run()
 
