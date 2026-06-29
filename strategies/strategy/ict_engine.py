@@ -32,6 +32,7 @@ class EntrySignal:
     zone_low: float
     zone_high: float
     max_hold_min: float | None = None   # optional time-exit (minutes); see base.Signal
+    trailing: bool = False              # chandelier trailing exit; see base.Signal
 
 
 @dataclass

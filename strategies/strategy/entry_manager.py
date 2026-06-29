@@ -58,6 +58,12 @@ _VARIATION_STRATEGY_NAME = {
     # per-leg time-exit via Signal.max_hold_min). Ported from TradingSkills
     # backtest/combined_suite_v2.py.
     "KRONOS_COMBINED_V2":    "Kronos Combined Suite v2",
+    # CHALLENGE_XAU — H4 Donchian trend-follow with a chandelier TRAILING stop
+    # (backtest_strategies/kronos_challenge_xau.py). The deployable answer to the
+    # $5000->$5500 FundingPips challenge research. First strategy to use the
+    # Signal.trailing exit (TRAILING_STOPLOSS_POINTS trigger, ratcheted in
+    # position_monitor).
+    "CHALLENGE_XAU":         "Challenge XAU H4 Trend",
 }
 
 
@@ -299,36 +305,65 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
         # LONG: SL fires when price <= sl  (greater_than=False)
         # SHORT: SL fires when price >= sl (greater_than=True)
         close_side = "SELL" if is_long else "BUY"
-        sl_trigger = Trigger(
-            id=uuid.uuid4(),
-            symbol=symbol,
-            trigger_price=Decimal(str(signal.stop_loss)),
-            order_type="MARKET",
-            side=close_side,
-            greater_than=not is_long,
-            quantity=Decimal(str(qty)),
-            trigger_type="STOPLOSS",
-            status="PENDING",
-            position_id=position.id,
-        )
-        sess.add(sl_trigger)
+        is_trailing = bool(getattr(signal, "trailing", False))
 
-        # ── 4. TP Trigger ─────────────────────────────────────────────────────
-        # LONG: TP fires when price >= tp (greater_than=True)
-        # SHORT: TP fires when price <= tp (greater_than=False)
-        tp_trigger = Trigger(
-            id=uuid.uuid4(),
-            symbol=symbol,
-            trigger_price=Decimal(str(signal.take_profit)),
-            order_type="MARKET",
-            side=close_side,
-            greater_than=is_long,
-            quantity=Decimal(str(qty)),
-            trigger_type="TARGET",
-            status="PENDING",
-            position_id=position.id,
-        )
-        sess.add(tp_trigger)
+        if is_trailing:
+            # ── 3+4. TRAIL Trigger (chandelier trailing stop) ─────────────────
+            # Replaces the static SL + fixed TP for a trend-follow leg. The
+            # trigger starts at signal.stop_loss (== entry -/+ k*ATR) and carries
+            # the trail DISTANCE in trail_points; position_monitor ratchets
+            # trigger_price off the high/low-water mark each tick, then fires on
+            # the usual price-cross and actively closes the broker position (the
+            # ratcheted level has no broker-side equivalent). The broker still
+            # holds the initial stop_loss (and the far take_profit) as an offline
+            # backstop. No TARGET trigger: the right tail is never capped.
+            trail_distance = abs(float(signal.entry_price) - float(signal.stop_loss))
+            trail_trigger = Trigger(
+                id=uuid.uuid4(),
+                symbol=symbol,
+                trigger_price=Decimal(str(signal.stop_loss)),   # initial stop level
+                order_type="MARKET",
+                side=close_side,
+                greater_than=not is_long,    # LONG fires on price<=stop; SHORT on price>=stop
+                quantity=Decimal(str(qty)),
+                trigger_type="TRAILING_STOPLOSS_POINTS",
+                trail_points=Decimal(str(round(trail_distance, 2))),
+                status="PENDING",
+                position_id=position.id,
+            )
+            sess.add(trail_trigger)
+        else:
+            # ── 3. SL Trigger ─────────────────────────────────────────────────
+            sl_trigger = Trigger(
+                id=uuid.uuid4(),
+                symbol=symbol,
+                trigger_price=Decimal(str(signal.stop_loss)),
+                order_type="MARKET",
+                side=close_side,
+                greater_than=not is_long,
+                quantity=Decimal(str(qty)),
+                trigger_type="STOPLOSS",
+                status="PENDING",
+                position_id=position.id,
+            )
+            sess.add(sl_trigger)
+
+            # ── 4. TP Trigger ─────────────────────────────────────────────────
+            # LONG: TP fires when price >= tp (greater_than=True)
+            # SHORT: TP fires when price <= tp (greater_than=False)
+            tp_trigger = Trigger(
+                id=uuid.uuid4(),
+                symbol=symbol,
+                trigger_price=Decimal(str(signal.take_profit)),
+                order_type="MARKET",
+                side=close_side,
+                greater_than=is_long,
+                quantity=Decimal(str(qty)),
+                trigger_type="TARGET",
+                status="PENDING",
+                position_id=position.id,
+            )
+            sess.add(tp_trigger)
 
         # ── 5. TIME_EXIT Trigger (optional per-leg max-hold) ──────────────────
         # The Trigger.trigger_type enum has no TIMEOUT value, so we reuse CUSTOM

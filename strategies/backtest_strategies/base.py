@@ -30,6 +30,14 @@ class Signal:
     # behaviour). When set, place_entry creates a CUSTOM/TIME_EXIT trigger and
     # position_monitor closes the position once that many minutes elapse.
     max_hold_min: float | None = None
+    # When True, the exit is a chandelier TRAILING stop instead of a static
+    # SL + fixed TP. place_entry creates ONE TRAILING_STOPLOSS_POINTS trigger
+    # (initial level = stop_loss, trail distance = |entry_price - stop_loss|)
+    # and skips the static STOPLOSS / TARGET triggers; position_monitor ratchets
+    # the stop off the high/low-water mark each tick. The broker still carries
+    # the initial stop_loss (and take_profit, which a trend-follow sets far away)
+    # as an offline backstop. Trend-follow strategies set this to let winners run.
+    trailing: bool = False
 
 
 @dataclass(frozen=True)

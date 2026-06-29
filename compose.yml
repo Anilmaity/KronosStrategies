@@ -72,3 +72,27 @@ services:
   # strategies/db/delete_heavy_strategies.py. Recreatable from git history +
   # deploy_combined_v2.py if ever needed again.
   # ───────────────────────────────────────────────────────────────────────────
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # CHALLENGE_XAU — H4 Donchian trend-follow with a chandelier TRAILING stop.
+  # The deployable answer to the $5000->$5500 FundingPips challenge research
+  # (port of bot/challenge_xau.py). Requires its DB rows first:
+  #     python -m db.deploy_challenge_xau --commit    (from strategies/)
+  # WORKING TF is H4: the runner must pull enough 15m history to form
+  #   >= EMA_SLOW(50)+Donchian(20) closed H4 bars, so WIN/DAYS_15M are enlarged
+  #   well past the defaults (otherwise get_signal stays silent).
+  # The exit is monitor-side trailing -> position_manager MUST be running.
+  # SAFETY: set DRY_RUN "true" to smoke-test (logs signals, places NO orders).
+  # ───────────────────────────────────────────────────────────────────────────
+  challenge_xau:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: kronos_challenge_xau
+      RESEARCH_WIN_15M: "1400"     # ~87 H4 bars of reach (>= 72 needed)
+      RESEARCH_DAYS_15M: "28"      # cover ~3-4 trading weeks incl. weekend gaps
+      # DRY_RUN: "true"            # uncomment to smoke-test without placing orders

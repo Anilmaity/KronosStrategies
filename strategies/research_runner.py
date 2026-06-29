@@ -137,6 +137,7 @@ def main():
                 zone_low=float(sig.entry_price),
                 zone_high=float(sig.entry_price),
                 max_hold_min=getattr(sig, "max_hold_min", None),
+                trailing=getattr(sig, "trailing", False),
             )
             log.info(
                 "[%s SIGNAL] %s @ %.2f | SL=%.2f TP=%.2f | maxhold=%s | %s",
