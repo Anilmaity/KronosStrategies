@@ -323,6 +323,107 @@ def test_prepare_bars_sorts_and_handles_empty():
     assert list(out["close"]) == [1.0, 2.0]                # sorted oldest->newest
 
 
+def test_challenge_dashboard_disabled_makes_no_db_calls():
+    # When disabled (no ids / sync off), every method returns None and never tries
+    # to connect — so a misconfigured dashboard can't break the bot.
+    from strategies.challenge.dashboard import ChallengeDashboard
+    d = ChallengeDashboard(strategy_id="", user_strategy_id="", user_broker_id="",
+                           currencypair_id="", enabled=False)
+    assert d.open_position("buy", 2000.0, 0.01, "t1") is None
+    assert d.conclude_position("p1", 10.0) is None
+    assert d.record_signal("BUY", 2000.0, 1990.0, None) is None
+    assert d.find_open_position_id() is None
+    d.update_live("p1", ltp=2000.0)   # no-op, must not raise
+
+
+def test_challenge_dashboard_cash_conversion():
+    # Broker dollars -> dashboard 'cash' unit (divide by XAUUSD contract size 100).
+    from strategies.challenge.dashboard import ChallengeDashboard
+    d = ChallengeDashboard(strategy_id="s", user_strategy_id="u", user_broker_id="b",
+                           currencypair_id="c", enabled=True, contract_size=100.0)
+    assert d._to_cash(250.0) == 2.5
+    assert d._to_cash(None) is None
+
+
+class _FakeDashboard:
+    """Records calls so tests can assert the runner drives the dashboard correctly."""
+    def __init__(self):
+        self.calls = []
+        self.next_id = "dash-1"
+    def open_position(self, side, entry, volume, broker_ticket=None):
+        self.calls.append(("open", side, round(entry, 2), volume, broker_ticket)); return self.next_id
+    def update_live(self, position_id, ltp=None, profit_loss=None):
+        self.calls.append(("update", position_id, ltp, profit_loss))
+    def conclude_position(self, position_id, realized_pnl, close_price=None, side=None, volume=None, reason="EXIT"):
+        self.calls.append(("conclude", position_id, realized_pnl))
+    def record_signal(self, side, entry, sl, tp, status="PLACED", reason="", rejection_reason="", signal_at=None, position_id=None):
+        self.calls.append(("signal", status, side, rejection_reason))
+    def find_open_position_id(self):
+        self.calls.append(("find",)); return None
+
+
+class _FakeBroker:
+    dry_run = False
+    def __init__(self, pnl=0.0):
+        self._pnl = pnl
+    def position_realized_pnl(self, position_id):
+        return self._pnl
+
+
+def _runner_with(dash, broker=None, equity_guard=True):
+    from strategies.challenge.broker import ChallengeBroker
+    from strategies.challenge.risk import ChallengeGuard as _G
+    from strategies.challenge.live_runner import Runner
+    b = broker or ChallengeBroker("", "", dry_run=True, label="t")
+    g = _G(5000.0, profit_target_pct=0.10, max_daily_dd_pct=0.05, max_overall_dd_pct=0.10, max_consec_losses=2)
+    g.start_new_day(5000.0)
+    return Runner(b, g, dashboard=dash)
+
+
+def _breakout_frame():
+    up = [2000 + i * 5 for i in range(1, 16)]
+    o, h, l, c = _flat_then(up)
+    b = _bars(o, h, l, c)
+    full = generate_signals(b, donchian_n=10, ema_fast=20, ema_slow=50, atr_n=14, atr_mult=3.0)
+    return b.iloc[: full[0].entry_index - 1 + 1]   # ends on the trigger bar
+
+
+def test_runner_records_dashboard_on_entry():
+    import strategies.challenge.live_runner as lr
+    lr.PARAMS = {"donchian_n": 10, "ema_fast": 20, "ema_slow": 50, "atr_n": 14, "atr_mult": 3.0}
+    dash = _FakeDashboard()
+    r = _runner_with(dash)
+    r._maybe_enter(_breakout_frame(), equity=5000.0)
+    assert r.position is not None
+    assert r.position.get("dash_id") == "dash-1"
+    kinds = [c[0] for c in dash.calls]
+    assert "open" in kinds                                   # apis_position created
+    assert ("signal", "PLACED", "BUY", "") in dash.calls     # Signals-tab row
+
+
+def test_runner_records_rejected_when_guard_blocks():
+    import strategies.challenge.live_runner as lr
+    lr.PARAMS = {"donchian_n": 10, "ema_fast": 20, "ema_slow": 50, "atr_n": 14, "atr_mult": 3.0}
+    dash = _FakeDashboard()
+    r = _runner_with(dash)
+    r.guard.record_trade(-30.0); r.guard.record_trade(-30.0)   # 2 consec losses -> blocked
+    r._maybe_enter(_breakout_frame(), equity=4940.0)
+    assert r.position is None
+    assert not any(c[0] == "open" for c in dash.calls)          # nothing opened
+    assert any(c[0] == "signal" and c[1] == "REJECTED" for c in dash.calls)
+
+
+def test_runner_concludes_dashboard_on_close():
+    dash = _FakeDashboard()
+    r = _runner_with(dash, broker=_FakeBroker(pnl=12.5))
+    r.position = {"id": "t1", "dash_id": "d1", "direction": "BUY", "stop": 1990.0,
+                  "extreme": 2010.0, "volume": 0.01, "atr": 5.0}
+    r._on_position_closed()
+    assert r.position is None
+    assert ("conclude", "d1", 12.5) in dash.calls
+    assert r.guard.day_realized == 12.5                        # PnL still recorded into guard
+
+
 def test_runner_enters_and_trails_with_dry_broker():
     from strategies.challenge.broker import ChallengeBroker
     from strategies.challenge.risk import ChallengeGuard as _G

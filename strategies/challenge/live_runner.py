@@ -45,6 +45,7 @@ from challenge.challenge_xau import (                    # noqa: E402
 )
 from challenge.risk import position_size, ChallengeGuard  # noqa: E402
 from challenge.broker import ChallengeBroker             # noqa: E402
+from challenge.dashboard import build_dashboard          # noqa: E402
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO,
@@ -111,11 +112,24 @@ def _prepare_bars(raw: pd.DataFrame) -> pd.DataFrame:
     return df.sort_values("time").reset_index(drop=True)
 
 
+class NoopDashboard:
+    """Dashboard that records nothing — used when DB sync is off / not injected, so
+    the runner's dashboard calls are always safe to make."""
+    def open_position(self, *a, **k): return None
+    def update_live(self, *a, **k): return None
+    def conclude_position(self, *a, **k): return None
+    def record_signal(self, *a, **k): return None
+    def find_open_position_id(self, *a, **k): return None
+
+
 class Runner:
-    def __init__(self, broker: ChallengeBroker, guard: ChallengeGuard):
+    def __init__(self, broker: ChallengeBroker, guard: ChallengeGuard, dashboard=None):
         self.broker = broker
         self.guard = guard
-        self.position: dict | None = None      # {id, direction, stop, extreme, volume}
+        # Best-effort dashboard writer (apis_position / StrategySignal). Decoupled
+        # and never raises, so a DB issue can't block trading. Defaults to no-op.
+        self.dashboard = dashboard if dashboard is not None else NoopDashboard()
+        self.position: dict | None = None      # {id, dash_id, direction, stop, extreme, volume}
         self.last_bar_seen: pd.Timestamp | None = None
         self.current_day: date | None = None
 
@@ -134,7 +148,8 @@ class Runner:
         entry = float(pos.get("openPrice", 0.0) or 0.0)
         stop = float(pos.get("stopLoss", 0.0) or 0.0) or entry
         self.position = {"id": pos.get("id"), "direction": direction, "stop": stop,
-                         "extreme": entry, "volume": float(pos.get("volume", 0.0) or 0.0)}
+                         "extreme": entry, "volume": float(pos.get("volume", 0.0) or 0.0),
+                         "dash_id": self.dashboard.find_open_position_id()}
         log.info("adopted existing broker position %s %s entry=%.2f stop=%.2f",
                  self.position["id"], direction, entry, stop)
 
@@ -145,6 +160,9 @@ class Runner:
             pnl = 0.0
             log.warning("position %s closed but realized PnL unreadable — recording 0", pid)
         self.guard.record_trade(pnl)
+        self.dashboard.conclude_position(self.position.get("dash_id") if self.position else None,
+                                         pnl, side=self.position.get("direction") if self.position else None,
+                                         volume=self.position.get("volume") if self.position else None)
         log.info("position %s closed | realized=%.2f | consec_losses=%d day_realized=%.2f",
                  pid, pnl, self.guard.consec_losses, self.guard.day_realized)
         self.position = None
@@ -166,14 +184,24 @@ class Runner:
             if self.broker.modify_sl(self.position["id"], new_stop):
                 log.info("trailed stop %s -> %.2f", self.position["id"], new_stop)
                 self.position["stop"] = new_stop
+        self.dashboard.update_live(self.position.get("dash_id"), ltp=float(last_bar["close"]))
 
     def _maybe_enter(self, completed: pd.DataFrame, equity: float) -> None:
+        # Evaluate the signal FIRST so guard/sizing rejections of a REAL signal are
+        # recorded on the dashboard (a quiet no-signal bar records nothing).
+        sig = signal_at_last_bar(completed, **PARAMS)
+        if sig is None:
+            return
+        tp = None  # trend-follow has no fixed TP (exit is the chandelier trail)
+
+        def _reject(reason: str) -> None:
+            self.dashboard.record_signal(sig.direction, sig.trigger_close, sig.sl, tp,
+                                         status="REJECTED", rejection_reason=reason)
+
         ok, reason = self.guard.can_trade(equity)
         if not ok:
             log.info("guard blocks entry: %s (equity=%.2f)", reason, equity)
-            return
-        sig = signal_at_last_bar(completed, **PARAMS)
-        if sig is None:
+            _reject(f"guard:{reason}")
             return
         vol = position_size(equity, RISK_PCT, sig.risk_per_unit,
                             max_trade_risk_pct=MAX_TRADE_RISK_PCT)
@@ -181,6 +209,7 @@ class Runner:
             log.warning("signal %s but sized volume is 0 (equity=%.2f risk_unit=%.2f, "
                         "even min lot exceeds the %.1f%% cap) — skip",
                         sig.direction, equity, sig.risk_per_unit, MAX_TRADE_RISK_PCT * 100)
+            _reject("sized_volume_0 (risk cap)")
             return
         # Don't open a trade whose worst-case (-1R) loss would breach the room left
         # in today's daily limit or the overall floor.
@@ -189,17 +218,23 @@ class Runner:
         if trade_risk > budget:
             log.info("signal %s skipped: -1R risk $%.0f exceeds remaining budget $%.0f",
                      sig.direction, trade_risk, budget)
+            _reject("risk_exceeds_remaining_budget")
             return
         side = "buy" if sig.direction == "BUY" else "sell"
         tid = self.broker.place_market(side, SYMBOL, vol, sig.sl, comment="challenge-h4")
         if not tid:
             log.error("entry order failed for %s", sig.direction)
+            _reject("broker_rejected")
             return
         entry_ref = sig.trigger_close
-        self.position = {"id": tid, "direction": sig.direction, "stop": sig.sl,
-                         "extreme": entry_ref, "volume": vol, "atr": sig.atr}
-        log.info("ENTER %s vol=%.2f stop=%.2f risk_unit=%.2f ticket=%s",
-                 sig.direction, vol, sig.sl, sig.risk_per_unit, tid)
+        dash_id = self.dashboard.open_position(side, entry_ref, vol, tid)
+        self.dashboard.record_signal(sig.direction, entry_ref, sig.sl, tp, status="PLACED",
+                                     reason=f"challenge-h4 breakout | SL {sig.sl}",
+                                     position_id=dash_id)
+        self.position = {"id": tid, "dash_id": dash_id, "direction": sig.direction,
+                         "stop": sig.sl, "extreme": entry_ref, "volume": vol, "atr": sig.atr}
+        log.info("ENTER %s vol=%.2f stop=%.2f risk_unit=%.2f ticket=%s dash=%s",
+                 sig.direction, vol, sig.sl, sig.risk_per_unit, tid, dash_id)
 
     def tick(self) -> None:
         completed = self._completed_bars()
@@ -271,7 +306,9 @@ def main() -> None:
     region = os.getenv("CHALLENGE_META_REGION", "")
     broker = ChallengeBroker(token, account, dry_run=DRY_RUN, label="challenge", region=region)
     guard = ChallengeGuard(INITIAL_BALANCE, **GUARD_KW)
-    Runner(broker, guard).run()
+    dashboard = build_dashboard()
+    log.info("dashboard sync: %s", "ON" if dashboard.enabled else "OFF (inert)")
+    Runner(broker, guard, dashboard=dashboard).run()
 
 
 if __name__ == "__main__":
