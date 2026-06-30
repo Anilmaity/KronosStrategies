@@ -293,6 +293,36 @@ def test_guard_new_day_resets_daily_counters():
 # ---------------------------------------------------------------------------
 # Runner glue (dry broker, no network) — enter then trail
 # ---------------------------------------------------------------------------
+def test_completed_bars_keeps_the_newest_closed_bar():
+    # tsdb_reader.fetch_candles returns ONLY completed candles (it filters the
+    # still-forming one). The runner must therefore NOT drop the last row — the
+    # newest bar IS the just-closed H4 bar we act on. Dropping it evaluated signals
+    # one H4 bar (~4h) late. Pin that _prepare_bars preserves the newest bar.
+    import strategies.challenge.live_runner as lr
+    raw = pd.DataFrame({
+        "time":  pd.to_datetime(["2026-06-29T08:00:00Z", "2026-06-29T12:00:00Z",
+                                 "2026-06-29T16:00:00Z"], utc=True),
+        "open":  [2000.0, 2001.0, 2002.0], "high": [2003.0, 2004.0, 2005.0],
+        "low":   [1999.0, 2000.0, 2001.0], "close": [2001.0, 2002.0, 2003.0],
+        "volume": [1.0, 1.0, 1.0],
+    })
+    out = lr._prepare_bars(raw)
+    assert len(out) == 3                                   # nothing dropped
+    assert pd.Timestamp(out["time"].iloc[-1]).hour == 16   # newest bar preserved
+
+
+def test_prepare_bars_sorts_and_handles_empty():
+    import strategies.challenge.live_runner as lr
+    assert lr._prepare_bars(pd.DataFrame()).empty
+    raw = pd.DataFrame({
+        "time":  pd.to_datetime(["2026-06-29T16:00:00Z", "2026-06-29T08:00:00Z"], utc=True),
+        "open":  [2.0, 1.0], "high": [2.0, 1.0], "low": [2.0, 1.0],
+        "close": [2.0, 1.0], "volume": [1.0, 1.0],
+    })
+    out = lr._prepare_bars(raw)
+    assert list(out["close"]) == [1.0, 2.0]                # sorted oldest->newest
+
+
 def test_runner_enters_and_trails_with_dry_broker():
     from strategies.challenge.broker import ChallengeBroker
     from strategies.challenge.risk import ChallengeGuard as _G

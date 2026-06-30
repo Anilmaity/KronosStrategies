@@ -95,6 +95,22 @@ GUARD_KW = dict(
 )
 
 
+def _prepare_bars(raw: pd.DataFrame) -> pd.DataFrame:
+    """Normalize raw OANDA candles into the frame the strategy evaluates.
+
+    `tsdb_reader.fetch_candles` returns ONLY completed candles (it filters out the
+    still-forming one), so we keep ALL rows — the newest is the just-closed H4 bar
+    we must act on. Do NOT drop it: an earlier `iloc[:-1]` here double-dropped
+    (OANDA already excludes the forming bar), which evaluated signals one H4 bar
+    (~4h) late and gave back the breakout edge.
+    """
+    if raw is None or raw.empty:
+        return pd.DataFrame()
+    df = raw.copy()
+    df["time"] = pd.to_datetime(df["time"], utc=True)
+    return df.sort_values("time").reset_index(drop=True)
+
+
 class Runner:
     def __init__(self, broker: ChallengeBroker, guard: ChallengeGuard):
         self.broker = broker
@@ -110,13 +126,7 @@ class Runner:
         return eq
 
     def _completed_bars(self) -> pd.DataFrame:
-        raw = fetch_candles(TF, DAYS, symbol=SYMBOL)
-        if raw is None or raw.empty:
-            return pd.DataFrame()
-        df = raw.copy()
-        df["time"] = pd.to_datetime(df["time"], utc=True)
-        df = df.sort_values("time").reset_index(drop=True)
-        return df.iloc[:-1].reset_index(drop=True)       # drop the still-forming bar
+        return _prepare_bars(fetch_candles(TF, DAYS, symbol=SYMBOL))
 
     def _adopt_broker_position(self, pos: dict) -> None:
         """On restart, take over an existing broker position so we keep trailing it."""
