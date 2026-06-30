@@ -1,0 +1,100 @@
+================================================================================
+KronosStrategies — Claude Code permissions reference
+Generated 2026-06-29
+================================================================================
+
+WHY THIS FILE
+-------------
+Two different layers can stop Claude from running a command:
+
+  1. permissions.allow  — classic Bash/tool allow-rules. A missing rule here
+     just means Claude asks before running (or is blocked in stricter modes).
+
+  2. autoMode.allow     — the AUTO-MODE CLASSIFIER. This is the safety layer
+     that flagged the live deploys this session ("Production Deploy",
+     "Production Reads", "Self-Modification"). It is SEPARATE from
+     permissions.allow: even with `Bash(ssh:*)` allowed, the classifier still
+     blocks an ssh command it judges to be a real-money production deploy
+     unless an autoMode.allow rule authorizes it.
+
+So: shell-shape rules go in `permissions.allow`; intent/authorization for
+risky prod actions goes in `autoMode.allow` (natural-language rules; keep
+"$defaults" first to inherit the built-in safety rules).
+
+Scope note: this file lives in .claude/settings.json (committed, team-wide). If
+you'd rather keep the real-money deploy authorization personal/uncommitted, put
+the autoMode.allow block in .claude/settings.local.json instead (gitignored) —
+arrays merge across both files.
+
+================================================================================
+READY-TO-PASTE settings.json  (current + anticipated future permissions)
+================================================================================
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh:*)",
+      "Bash(scp:*)",
+      "Bash(aws lightsail get-relational-database-master-user-password:*)",
+      "Bash(.venv/Scripts/python.exe manage.py migrate:*)",
+      "Bash(.venv/Scripts/python.exe manage.py showmigrations:*)",
+      "Bash(python -m db.migrate_env_creds_to_accounts:*)",
+      "Bash(.venv/Scripts/python.exe -m pytest:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)"
+    ]
+  },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "The operator has explicitly authorized the production rollout in docs/superpowers/RUNBOOK-2026-06-24-prod-rollout.md. Pre-approved prod actions: (1) fetch the kronos-strategies-db master password via `aws lightsail get-relational-database-master-user-password`; (2) run Django `manage.py showmigrations`/`migrate` against the live `tsdb` database; (3) SSH/scp to algorobos (ubuntu@13.126.204.82) to deploy backend and runner; (4) run `python -m   db.migrate_env_creds_to_accounts`. Allow these even inside compound commands that set DB_*/AWS_*/FIELD_ENCRYPTION_KEY env vars.",
+      "The operator authorizes Claude to deploy and operate the live trading bots on the algorobos box (ubuntu@13.126.204.82) for the `kronos` docker compose project. Pre-approved prod actions for the services `challenge_xau_h4`, `telegram_trader`, `position_manager`, and `challenge_xau`: SSH/scp to sync source files; `sudo docker compose -p kronos build|up -d|--force-recreate|restart|stop|down|logs|ps` scoped to those services; editing the box .env (CHALLENGE_*, DRY_RUN, META/OANDA/TG2 region+region-override values); and reading container state via `docker compose logs`, `docker inspect`, and `docker exec ... <non-secret read>`. This intentionally allows flipping live MetaAPI accounts (real-money trading) and reading live account state — the operator owns these accounts and has confirmed the deploys in-session.",
+      "Allow read-only diagnostics against the live algorobos box and its MetaAPI/OANDA integrations: probing account-information / provisioning / region endpoints and reading container logs to debug a deploy, provided no secret values (tokens, full env dumps, /proc/<pid>/environ) are printed to output."
+    ]
+  }
+}
+
+================================================================================
+WHAT EACH ENTRY COVERS
+================================================================================
+
+permissions.allow (shell-shape rules)
+  Bash(ssh:*) / Bash(scp:*) ........ deploy + file sync to algorobos
+  Bash(aws lightsail get-...password) ... fetch app-DB master password
+  manage.py migrate / showmigrations .... Django migrations on the live DB
+  python -m db.migrate_env_creds_to_accounts ... one-off creds migration
+  -m pytest ........................ run the test suite (usually already free)
+  git push / git commit ............ push branches / commit (usually free; here
+                                      for stricter permission modes)
+
+autoMode.allow (classifier authorizations — the real blockers this session)
+  Entry 1: June prod rollout (existing) — DB password, migrations, backend deploy.
+  Entry 2: NEW — the trading-bot deploys. This is the one that unblocks
+           `docker compose build`/`up`/`--force-recreate` for challenge_xau_h4
+           and telegram_trader, and editing CHALLENGE_*/DRY_RUN in the box .env.
+           It explicitly covers flipping a live MetaAPI account.
+  Entry 3: NEW — read-only live diagnostics (the account-information / region
+           probe that was blocked while debugging the 403), with a hard
+           guardrail against printing secrets.
+
+================================================================================
+WHAT IS DELIBERATELY *NOT* GRANTED (kept manual on purpose)
+================================================================================
+  - Dumping secrets: /proc/<pid>/environ, full container env, printing tokens.
+  - `docker compose down -v` / volume deletion (could wipe the tg_session login).
+  - Anything outside the algorobos host or the named compose services.
+  - Editing .claude/settings.json itself (self-modification stays manual — this
+    is why Claude generated this file for you to apply rather than applying it).
+
+================================================================================
+HOW TO APPLY
+================================================================================
+  1. Replace the contents of .claude/settings.json with the READY-TO-PASTE block
+     above (or merge the new autoMode.allow entries into your existing array).
+  2. Save. New tool calls pick it up; if it doesn't seem to take, open /hooks
+     once or restart the session to reload settings.
+  3. Then Claude can run the challenge_xau_h4 build/recreate + log checks itself
+     (no `!` prefix needed).
+
+To NARROW later: delete autoMode.allow entry 2 and/or 3 — Claude reverts to
+asking/blocking on those prod actions. To keep them personal-only, move entries
+2 and 3 to .claude/settings.local.json.

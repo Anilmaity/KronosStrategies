@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh:*)",
+      "Bash(scp:*)",
+      "Bash(aws lightsail get-relational-database-master-user-password:*)",
+      "Bash(.venv/Scripts/python.exe manage.py migrate:*)",
+      "Bash(.venv/Scripts/python.exe manage.py showmigrations:*)",
+      "Bash(python -m db.migrate_env_creds_to_accounts:*)",
+      "Bash(.venv/Scripts/python.exe -m pytest:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)"
+    ]
+  },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "The operator has explicitly authorized the production rollout in docs/superpowers/RUNBOOK-2026-06-24-prod-rollout.md. Pre-approved prod actions: (1) fetch the kronos-strategies-db master password via `aws lightsail get-relational-database-master-user-password`; (2) run Django `manage.py showmigrations`/`migrate` against the live `tsdb` database; (3) SSH/scp to algorobos (ubuntu@13.126.204.82) to deploy backend and runner; (4) run `python -m   db.migrate_env_creds_to_accounts`. Allow these even inside compound commands that set DB_*/AWS_*/FIELD_ENCRYPTION_KEY env vars.",
+      "The operator authorizes Claude to deploy and operate the live trading bots on the algorobos box (ubuntu@13.126.204.82) for the `kronos` docker compose project. Pre-approved prod actions for the services `challenge_xau_h4`, `telegram_trader`, `position_manager`, and `challenge_xau`: SSH/scp to sync source files; `sudo docker compose -p kronos build|up -d|--force-recreate|restart|stop|down|logs|ps` scoped to those services; editing the box .env (CHALLENGE_*, DRY_RUN, META/OANDA/TG2 region+region-override values); and reading container state via `docker compose logs`, `docker inspect`, and `docker exec ... <non-secret read>`. This intentionally allows flipping live MetaAPI accounts (real-money trading) and reading live account state — the operator owns these accounts and has confirmed the deploys in-session.",
+      "Allow read-only diagnostics against the live algorobos box and its MetaAPI/OANDA integrations: probing account-information / provisioning / region endpoints and reading container logs to debug a deploy, provided no secret values (tokens, full env dumps, /proc/<pid>/environ) are printed to output."
+    ]
+  }
+}
