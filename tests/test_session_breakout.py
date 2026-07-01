@@ -53,7 +53,8 @@ from strategies.backtest_strategies import kronos_session_breakout as sb
 def _uptrend_m5_frame(session_hour=7, break_out=True):
     """Build a CLOSED-bar M5 frame that (a) warms the EMA into +1 bias, (b) forms an
     OR in `session_hour`, (c) ends on a bar that breaks (or not) the OR high.
-    The frame ends with one EXTRA still-forming bar (get_signal drops it)."""
+    All rows are CLOSED bars — research_runner already strips the still-forming bar
+    before calling get_signal, so we do NOT append an extra trailing row here."""
     rows = []
     base = pd.Timestamp("2026-06-01T00:00:00Z")
     price = 2000.0
@@ -70,8 +71,6 @@ def _uptrend_m5_frame(session_hour=7, break_out=True):
     # breakout bar at :30 (closed) — high pierces or_hi if break_out else stays inside
     bh = or_hi + 3.0 if break_out else or_hi - 1.0
     rows.append((day + pd.Timedelta(hours=session_hour, minutes=30), price, bh, price-0.5, price+0.2))
-    # one extra still-forming bar to be dropped
-    rows.append((day + pd.Timedelta(hours=session_hour, minutes=35), price, price+0.1, price-0.1, price))
     return pd.DataFrame(rows, columns=["time","open","high","low","close"])
 
 def setup_function(_):
@@ -95,9 +94,9 @@ def test_no_signal_outside_session_hours():
     assert sb.get_signal(None, f, None, datetime(2026,6,5,9,30,tzinfo=timezone.utc)) is None
 
 def test_no_signal_before_or_complete():
-    # truncate so the last closed bar is at :15 (minute<30 -> OR incomplete)
+    # truncate so the last closed bar is at :25 (minute<30 -> OR incomplete)
     f = _uptrend_m5_frame(session_hour=7, break_out=True)
-    f = f.iloc[:-3]   # drop :30 closed bar, forming bar, and one OR bar -> last closed :15
+    f = f.iloc[:-1]   # drop the :30 breakout bar; last closed bar is now :25 (minute<30 -> OR incomplete)
     assert sb.get_signal(None, f, None, datetime(2026,6,5,7,25,tzinfo=timezone.utc)) is None
 
 def test_one_entry_per_session_guard():

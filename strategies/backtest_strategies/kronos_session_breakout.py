@@ -73,13 +73,15 @@ def opening_range(bars: pd.DataFrame, day, sh: int, or_min: int = _OR_MIN):
 
 
 def _closed_m5(w5m) -> pd.DataFrame:
-    """UTC-normalise, sort, and DROP the still-forming last M5 bar (strictly causal)."""
+    """UTC-normalise and sort. Do NOT drop the last bar: research_runner already
+    passes only CLOSED bars (it applies iloc[:-1] to the OANDA feed, which itself
+    excludes the still-forming bar). Dropping again would double-drop and evaluate
+    a bar ~10 min stale, missing the breakout bar."""
     if w5m is None or len(w5m) == 0:
         return pd.DataFrame()
     df = w5m.copy()
     df["time"] = pd.to_datetime(df["time"], utc=True)
-    df = df.sort_values("time").reset_index(drop=True)
-    return df.iloc[:-1].reset_index(drop=True)
+    return df.sort_values("time").reset_index(drop=True)
 
 
 def get_signal(w1m, w5m, w15m, now_utc) -> Signal | None:
