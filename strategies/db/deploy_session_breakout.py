@@ -26,6 +26,8 @@ from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from sqlalchemy import text  # noqa: E402
+
 from shared.models import Session, Strategy, UserStrategy, CurrencyPair, UserBroker
 
 SYMBOL = "XAU_USD"
@@ -89,11 +91,20 @@ def main(commit: bool) -> int:
 
         us = sess.query(UserStrategy).filter_by(strategy_id=strat.id, user_broker_id=user_broker.id).first()
         if us is None:
-            us = UserStrategy(id=uuid.uuid4(), name=f"{STRATEGY_NAME} live", is_active=True,
-                              multiplyer=1, deployed=True, strategy_id=strat.id,
-                              user_broker_id=user_broker.id)
-            sess.add(us); sess.flush()
-            print(f"[NEW] UserStrategy id={us.id} deployed=True active=True")
+            # Raw SQL: apis_userstrategy has a NOT NULL `archived` column the
+            # UserStrategy ORM model does not map, so an ORM insert omits it and
+            # violates the constraint. Set archived=FALSE explicitly.
+            new_us_id = uuid.uuid4()
+            sess.execute(text(
+                """
+                INSERT INTO apis_userstrategy
+                    (id, created_at, modified_at, name, is_active, multiplyer,
+                     deployed, strategy_id, user_broker_id, archived)
+                VALUES (:id, NOW(), NOW(), :name, TRUE, 1, TRUE, :sid, :ubid, FALSE)
+                """),
+                {"id": str(new_us_id), "name": f"{STRATEGY_NAME} live",
+                 "sid": str(strat.id), "ubid": str(user_broker.id)})
+            print(f"[NEW] UserStrategy id={new_us_id} deployed=True active=True archived=False")
         else:
             us.is_active = True; us.deployed = True
             print(f"[OK]  UserStrategy id={us.id} deployed/active")
