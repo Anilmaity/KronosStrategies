@@ -107,12 +107,12 @@ def get_signal(w1m, w5m, w15m, now_utc) -> Signal | None:
     rng = rng_hi - rng_lo
     b = bias_series(bars["close"])[i]
     hi = float(bars["high"].iloc[i]); lo = float(bars["low"].iloc[i])
-    if hi > rng_hi and b == 1:
+    if hi >= rng_hi and b == 1:
         _fired_sessions.add(key)
         return Signal(side="BUY", entry_price=rng_hi, stop_loss=rng_lo,
                       take_profit=round(rng_hi + _TP_MULT * rng, 2),
                       reason="SESSION_BREAKOUT_LONG", max_hold_min=_MAX_HOLD_MIN)
-    if lo < rng_lo and b == -1:
+    if lo <= rng_lo and b == -1:
         _fired_sessions.add(key)
         return Signal(side="SELL", entry_price=rng_lo, stop_loss=rng_hi,
                       take_profit=round(rng_lo - _TP_MULT * rng, 2),

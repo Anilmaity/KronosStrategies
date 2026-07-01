@@ -68,7 +68,7 @@ def _uptrend_m5_frame(session_hour=7, break_out=True):
         ts = day + pd.Timedelta(hours=session_hour, minutes=m)
         rows.append((ts, price, or_hi-0.5, or_lo+0.5, price))
     # breakout bar at :30 (closed) — high pierces or_hi if break_out else stays inside
-    bh = or_hi + 3.0 if break_out else or_hi - 0.5
+    bh = or_hi + 3.0 if break_out else or_hi - 1.0
     rows.append((day + pd.Timedelta(hours=session_hour, minutes=30), price, bh, price-0.5, price+0.2))
     # one extra still-forming bar to be dropped
     rows.append((day + pd.Timedelta(hours=session_hour, minutes=35), price, price+0.1, price-0.1, price))
@@ -95,9 +95,9 @@ def test_no_signal_outside_session_hours():
     assert sb.get_signal(None, f, None, datetime(2026,6,5,9,30,tzinfo=timezone.utc)) is None
 
 def test_no_signal_before_or_complete():
-    # truncate so the last closed bar is at :20 (minute<30 -> OR incomplete)
+    # truncate so the last closed bar is at :15 (minute<30 -> OR incomplete)
     f = _uptrend_m5_frame(session_hour=7, break_out=True)
-    f = f.iloc[:-3]   # drop :30 closed bar, forming bar, and one OR bar -> last closed :20
+    f = f.iloc[:-3]   # drop :30 closed bar, forming bar, and one OR bar -> last closed :15
     assert sb.get_signal(None, f, None, datetime(2026,6,5,7,25,tzinfo=timezone.utc)) is None
 
 def test_one_entry_per_session_guard():
