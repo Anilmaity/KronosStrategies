@@ -114,3 +114,14 @@ def test_bias_gate_blocks_counter_trend_long():
     f.loc[:319, "low"] = f.loc[:319, "close"] - 0.4
     sig = sb.get_signal(None, f, None, datetime(2026,6,5,7,30,tzinfo=timezone.utc))
     assert sig is None or sig.side != "BUY"
+
+
+def test_position_size_zero_on_nonpositive_width():
+    assert sb.position_size(5000, 0.0) == (0.0, 0.0)
+
+def test_fixed_002_lot_stop_stays_within_daily_limit():
+    # At the fixed 0.02 lot, a full-OR-width stop for a wide (8pt) OR must risk
+    # well under the $150 daily kill-switch: 0.02 lot = $2/pt -> 8pt = $16.
+    or_pts = 8.0
+    usd_per_pt_at_002 = 0.02 * (sb.USD_PER_POINT_PER_0_1_LOT / 0.1)   # $2.00
+    assert or_pts * usd_per_pt_at_002 <= 150.0

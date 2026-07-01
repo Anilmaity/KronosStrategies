@@ -118,3 +118,17 @@ def get_signal(w1m, w5m, w15m, now_utc) -> Signal | None:
                       take_profit=round(rng_lo - _TP_MULT * rng, 2),
                       reason="SESSION_BREAKOUT_SHORT", max_hold_min=_MAX_HOLD_MIN)
     return None
+
+
+def position_size(equity, or_width_points, *, risk_pct=0.008, risk_floor=40.0,
+                  min_lot=0.01, max_lot=0.50, lot_step=0.01):
+    """Lots so a full-OR-width stop risks ~max(risk_floor, risk_pct*equity). NOTE:
+    the Kronos engine uses a FIXED lot (Strategy.entry_quantity); this is provided for
+    parity with the spec and offline sizing checks, not wired into live sizing."""
+    risk_dollars = max(risk_floor, risk_pct * equity)
+    if or_width_points <= 0:
+        return 0.0, 0.0
+    raw = risk_dollars / (or_width_points * (USD_PER_POINT_PER_0_1_LOT / 0.1))
+    lot = max(min_lot, min(max_lot, round(raw / lot_step) * lot_step))
+    actual = or_width_points * (USD_PER_POINT_PER_0_1_LOT / 0.1) * lot
+    return round(lot, 2), round(actual, 2)
