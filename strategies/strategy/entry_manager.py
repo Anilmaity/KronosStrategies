@@ -58,6 +58,9 @@ _VARIATION_STRATEGY_NAME = {
     # per-leg time-exit via Signal.max_hold_min). Ported from TradingSkills
     # backtest/combined_suite_v2.py.
     "KRONOS_COMBINED_V2":    "Kronos Combined Suite v2",
+    # Session-breakout M5 ORB (backtest_strategies/kronos_session_breakout.py).
+    # Static SL/TP (no trailing) + 3h max-hold via Signal.max_hold_min.
+    "SESSION_BREAKOUT": "Session Breakout M5 ORB",
 }
 
 
