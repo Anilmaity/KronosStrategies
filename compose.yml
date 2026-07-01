@@ -66,29 +66,23 @@ services:
       TIGERDATA_URL: ${TIGERDATA_URL:-}
 
   # ───────────────────────────────────────────────────────────────────────────
-  # Challenge bot — XAUUSD H4 Donchian/EMA trend-follow with a 3xATR chandelier
-  # trail, risk-based sizing and a hard drawdown / kill-switch guard, trading a
-  # single funded/prop challenge account (FundingPips $5k 2-step). Self-contained:
-  # fetches H4 candles from OANDA, places orders on its OWN MetaAPI account via
-  # strategies/challenge/broker.py (separate from the Telegram copy-trader).
-  # Set CHALLENGE_DRY_RUN=true to run the loop without placing real orders.
+  # SESSION_BREAKOUT — the SINGLE live challenge strategy (replaces the two H4
+  # bots as of 2026-07-01). M5 bias-filtered opening-range breakout via the
+  # generic research_runner; orders route through entry_manager -> the DB-bound
+  # challenge UserBroker; static broker SL/TP + 3h max-hold. ~4 trades/day target.
   # ───────────────────────────────────────────────────────────────────────────
-  challenge_xau_h4:
+  session_breakout:
     build: ./strategies
     restart: always
-    command: python -m challenge.live_runner
+    command: python research_runner.py
     env_file: .env
     environment:
-      CHALLENGE_META_TOKEN:       ${CHALLENGE_META_TOKEN:-${META_API_TOKEN:-}}
-      CHALLENGE_META_ACCOUNT:     ${CHALLENGE_META_ACCOUNT:-}
-      CHALLENGE_META_REGION:      ${CHALLENGE_META_REGION:-}
-      CHALLENGE_SYMBOL:           ${CHALLENGE_SYMBOL:-XAU_USD}
-      CHALLENGE_INITIAL_BALANCE:  ${CHALLENGE_INITIAL_BALANCE:-5000}
-      CHALLENGE_RISK_PCT:         ${CHALLENGE_RISK_PCT:-0.01}
-      CHALLENGE_MAX_TRADE_RISK_PCT: ${CHALLENGE_MAX_TRADE_RISK_PCT:-0.025}
-      CHALLENGE_DRY_RUN:          ${CHALLENGE_DRY_RUN:-false}
-      OANDA_API_KEY:              ${OANDA_API_KEY:-}
-      OANDA_PRACTICE:             ${OANDA_PRACTICE:-true}
+      TSDB_TARGET:      ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL:    ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: kronos_session_breakout
+      RESEARCH_WIN_5M:  "600"      # >= n_long+slope_lk+2 = 290 closed M5 bars, with headroom
+      RESEARCH_DAYS_5M: "5"        # ~2 trading days of M5 across weekend gaps
+      META_REGION:      ${CHALLENGE_META_REGION:-london}
 
   # ───────────────────────────────────────────────────────────────────────────
   # Strategy services REMOVED 2026-06-24 (operator decision). The four heavy
