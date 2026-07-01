@@ -70,3 +70,51 @@ def opening_range(bars: pd.DataFrame, day, sh: int, or_min: int = _OR_MIN):
     if rng_hi - rng_lo <= 0:
         return None
     return rng_hi, rng_lo, idx[-1]
+
+
+def _closed_m5(w5m) -> pd.DataFrame:
+    """UTC-normalise, sort, and DROP the still-forming last M5 bar (strictly causal)."""
+    if w5m is None or len(w5m) == 0:
+        return pd.DataFrame()
+    df = w5m.copy()
+    df["time"] = pd.to_datetime(df["time"], utc=True)
+    df = df.sort_values("time").reset_index(drop=True)
+    return df.iloc[:-1].reset_index(drop=True)
+
+
+def get_signal(w1m, w5m, w15m, now_utc) -> Signal | None:
+    bars = _closed_m5(w5m)
+    n = len(bars)
+    if n < _N_LONG + _SLOPE_LK + 2:
+        return None
+    i = n - 1
+    last = bars["time"].iloc[i]
+    sh = int(last.hour)
+    if sh not in SESSION_HOURS:                      # spec §8.1 current-bar-hour gate
+        return None
+    if int(last.minute) < _OR_MIN:                   # OR must be complete
+        return None
+    day = last.date()
+    key = (day, sh)
+    if key in _fired_sessions:                       # one entry per (date, session hour)
+        return None
+    orr = opening_range(bars, day, sh, _OR_MIN)
+    if orr is None:
+        return None
+    rng_hi, rng_lo, or_last = orr
+    if i - or_last > _HOLD_BARS:                      # past the 3h hold window
+        return None
+    rng = rng_hi - rng_lo
+    b = bias_series(bars["close"])[i]
+    hi = float(bars["high"].iloc[i]); lo = float(bars["low"].iloc[i])
+    if hi > rng_hi and b == 1:
+        _fired_sessions.add(key)
+        return Signal(side="BUY", entry_price=rng_hi, stop_loss=rng_lo,
+                      take_profit=round(rng_hi + _TP_MULT * rng, 2),
+                      reason="SESSION_BREAKOUT_LONG", max_hold_min=_MAX_HOLD_MIN)
+    if lo < rng_lo and b == -1:
+        _fired_sessions.add(key)
+        return Signal(side="SELL", entry_price=rng_lo, stop_loss=rng_hi,
+                      take_profit=round(rng_lo - _TP_MULT * rng, 2),
+                      reason="SESSION_BREAKOUT_SHORT", max_hold_min=_MAX_HOLD_MIN)
+    return None
