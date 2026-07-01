@@ -457,3 +457,37 @@ def test_runner_enters_and_trails_with_dry_broker():
     higher = pd.Series({"high": 2200.0, "low": 2150.0, "close": 2190.0})
     r._trail(higher, current_atr=5.0)
     assert r.position["stop"] >= entry_stop
+
+
+# ---------------------------------------------------------------------------
+# Heartbeat — a quiet no-signal bar must still prove the runner is alive
+# ---------------------------------------------------------------------------
+def _flat_frame(bars: int = 75) -> pd.DataFrame:
+    """A long flat run with NO breakout -> signal_at_last_bar returns None."""
+    o, h, l, c = _flat_then([2000.0] * 5, span=bars - 5)
+    return _bars(o, h, l, c)
+
+
+def test_tick_logs_heartbeat_on_a_quiet_no_signal_bar(caplog):
+    import strategies.challenge.live_runner as lr
+    lr.PARAMS = {"donchian_n": 20, "ema_fast": 20, "ema_slow": 50, "atr_n": 22, "atr_mult": 3.0}
+    dash = _FakeDashboard()
+    r = _runner_with(dash)                       # dry broker -> equity falls back to 5000
+    r._completed_bars = lambda: _flat_frame(75)  # up-to-date bars, but no breakout
+    with caplog.at_level("INFO", logger="challenge-runner"):
+        r.tick()
+    assert r.position is None                     # confirm this really is a no-signal bar
+    assert "heartbeat" in caplog.text, \
+        f"expected an idle heartbeat log; got: {caplog.text!r}"
+
+
+def test_tick_does_not_reheartbeat_when_no_new_bar(caplog):
+    import strategies.challenge.live_runner as lr
+    lr.PARAMS = {"donchian_n": 20, "ema_fast": 20, "ema_slow": 50, "atr_n": 22, "atr_mult": 3.0}
+    r = _runner_with(_FakeDashboard())
+    r._completed_bars = lambda: _flat_frame(75)
+    r.tick()                                      # first tick: sees the bar, heartbeats
+    caplog.clear()
+    with caplog.at_level("INFO", logger="challenge-runner"):
+        r.tick()                                  # same bar, no new close -> silent, no spam
+    assert "heartbeat" not in caplog.text

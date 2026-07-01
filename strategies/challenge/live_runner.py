@@ -272,6 +272,13 @@ class Runner:
         else:
             self._maybe_enter(completed, equity)
 
+        # Heartbeat once per closed bar so an idle-but-healthy runner is visibly
+        # distinct from a dead one in the logs (a quiet no-signal bar otherwise
+        # logs nothing at all). Reflects post-decision state.
+        log.info("heartbeat | bar=%s | equity=%.2f | in_position=%s | consec_losses=%d",
+                 pd.Timestamp(last_time).strftime("%Y-%m-%d %H:%M"), equity,
+                 "yes" if self.position else "no", self.guard.consec_losses)
+
     def run(self) -> None:
         log.info("challenge-runner start | symbol=%s tf=%s risk=%.2f%% dry_run=%s params=%s",
                  SYMBOL, TF, RISK_PCT * 100, self.broker.dry_run, PARAMS)
