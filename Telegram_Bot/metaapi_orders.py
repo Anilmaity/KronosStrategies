@@ -537,8 +537,17 @@ class MetaApiClient:
                     else:
                         self.close_position(prev["ticket_id"])
                 return []
-            submitted.append({"tp_index": i, "tp": o_tp, "ticket_id": tid, "kind": kind,
-                              "volume": vol_each, "entry": entry, "sl": o_sl})
+            slice_rec = {"tp_index": i, "tp": o_tp, "ticket_id": tid, "kind": kind,
+                         "volume": vol_each, "entry": entry, "sl": o_sl}
+            # For a MARKET order MetaAPI returns positionId == orderId, so the
+            # ticket IS the broker position id — capture it now so a scalp that
+            # closes before we ever see it live still gets a history-deals lookup
+            # (else it falls back to the entry-moment snapshot and mislabels the
+            # outcome). A LIMIT ticket is an order id; its position id is only
+            # assigned on fill, so it's captured later when first seen live.
+            if kind == "market":
+                slice_rec["broker_position_id"] = tid
+            submitted.append(slice_rec)
             log.info("[%s:%s] %s order placed | TP%d=%s vol=%.2f ticket=%s",
                      msg_id, self.label, kind, i, o_tp, vol_each, tid)
         return submitted

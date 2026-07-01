@@ -94,6 +94,13 @@ SWEEP_INTERVAL_SEC = int(os.getenv("SWEEP_INTERVAL_SEC", "1800"))  # background 
 # transient empty read can't fake a close.
 BROKER_POLL_SEC = int(os.getenv("BROKER_POLL_SEC", "30"))
 ABSENT_CONFIRM_POLLS = int(os.getenv("ABSENT_CONFIRM_POLLS", "2"))
+# Once a filled slice leaves the broker, wait up to this many polls for its
+# history-deals to SETTLE before concluding. A fast scalp's only live snapshot
+# is the entry-moment unrealized (~ -spread); finalizing on it records a tiny
+# loss and mislabels a TP win as SL, so we prefer to wait for broker truth and
+# only fall back to the snapshot as a last resort (never blocking a close). Set
+# to 1 to disable the wait (fall back immediately when the deal isn't settled).
+DEAL_SETTLE_POLLS = int(os.getenv("DEAL_SETTLE_POLLS", "4"))
 _TAG_RE = re.compile(r"tg-(\d+)-tp(\d+)")
 
 
@@ -553,9 +560,18 @@ async def reconcile_broker() -> None:
                 if o["miss"] >= ABSENT_CONFIRM_POLLS:
                     if prev == "filled":
                         # Prefer the broker's TRUE realized PnL (history deals)
-                        # over the stale last-live snapshot; falls back to the
-                        # snapshot if deals aren't available/settled yet.
+                        # over the stale last-live snapshot. If the deal hasn't
+                        # settled yet, wait a few polls (DEAL_SETTLE_POLLS) and
+                        # retry rather than finalizing on the entry-moment
+                        # snapshot — which mislabels a TP win as SL and shows
+                        # exit==entry. Fall back to the snapshot only as a last
+                        # resort so a close is never lost.
                         pnl = await _slice_realized_pnl(loop, ACCOUNTS_BY_LABEL.get(label), o)
+                        if o.get("pnl_source") != "deal":
+                            o["settle_wait"] = o.get("settle_wait", 0) + 1
+                            if o["settle_wait"] < DEAL_SETTLE_POLLS:
+                                changed = True   # persist counter; retry next poll
+                                continue
                         reason = _infer_close_reason(o.get("last_price"), pnl, o["tp"], o["sl"])
                         o["broker_state"], o["realized_pnl"] = "closed", pnl
                         await loop.run_in_executor(None, db.record_slice_close,

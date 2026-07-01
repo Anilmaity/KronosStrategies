@@ -82,6 +82,7 @@ def _run_reconcile_with(monkeypatch, broker, dash):
     monkeypatch.setattr(lt, "ACCOUNTS_BY_LABEL", {"primary": broker})
     monkeypatch.setattr(lt, "APIS_BY_LABEL", {"primary": dash})
     monkeypatch.setattr(lt, "ABSENT_CONFIRM_POLLS", 1)
+    monkeypatch.setattr(lt, "DEAL_SETTLE_POLLS", 1)  # disable settle-wait: fall back at once
 
     db_calls = {}
     fake_db = types.SimpleNamespace(

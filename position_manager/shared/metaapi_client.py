@@ -222,6 +222,49 @@ def place_market_order(
     return None
 
 
+def get_position_realized_pnl(meta_position_id: str) -> dict | None:
+    """Broker-TRUE realized PnL + close price for a (closed) position.
+
+    Queries MetaAPI's history-deals endpoint for `meta_position_id` and
+    aggregates the realized components (profit + commission + swap) over all of
+    the position's deals — the broker's actual settled figure, which replaces
+    the OANDA-mid model PnL position_monitor computes. Each automation position
+    is a single-entry/single-exit position, so the full deal set for one
+    positionId is the whole realized PnL.
+
+    Returns {"realized_pnl": float, "close_price": float | None, "closed": bool}
+    — `closed` is True once an exit (DEAL_ENTRY_OUT) deal exists. Returns None on
+    dry_run, missing creds, empty/non-list history, or any API error, so the
+    caller falls back to its model figure and trading is never blocked by this
+    best-effort lookup.
+    """
+    if _DRY_RUN or not _TOKEN or not _ACCOUNT or not meta_position_id \
+            or meta_position_id == "dry-run":
+        return None
+    try:
+        url = (f"{_trading_url()}/users/current/accounts/{_ACCOUNT}"
+               f"/history-deals/position/{meta_position_id}")
+        resp = requests.get(url, headers=_headers(), timeout=_TIMEOUT)
+        resp.raise_for_status()
+        deals = resp.json()
+        if not isinstance(deals, list) or not deals:
+            return None
+        realized = 0.0
+        for d in deals:
+            for k in ("profit", "commission", "swap"):
+                v = d.get(k)
+                if v is not None:
+                    realized += float(v)
+        out_deals = [d for d in deals if str(d.get("entryType", "")).endswith("OUT")]
+        ref = out_deals[-1] if out_deals else deals[-1]
+        close_price = float(ref["price"]) if ref.get("price") is not None else None
+        return {"realized_pnl": round(realized, 2), "close_price": close_price,
+                "closed": bool(out_deals)}
+    except Exception:
+        log.exception("[MetaAPI] history-deals fetch failed for position %s", meta_position_id)
+        return None
+
+
 def close_position_by_id(meta_position_id: str) -> bool:
     """
     Close an open MetaAPI position by its positionId.

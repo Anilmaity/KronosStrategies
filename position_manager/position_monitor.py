@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shared.tsdb_reader import fetch_latest_ltp
 from shared.models import Session, Position, Trigger, Order, UserStrategy, CurrencyPair
 from shared.market_timing import is_market_closed_utc
-from shared.metaapi_client import close_position_by_id
+from shared.metaapi_client import close_position_by_id, get_position_realized_pnl
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Config
@@ -63,6 +63,28 @@ def _realized_pnl(position: Position, close_price: float, qty: float) -> float:
     elif avg_sell > 0:       # SHORT position
         return (avg_sell - close_price) * qty
     return 0.0
+
+
+def _resolve_realized_close(model_realized: float, model_close_price: float,
+                            broker_pid: str | None,
+                            lookup=get_position_realized_pnl) -> tuple[float, float, str]:
+    """Prefer the broker's SETTLED realized PnL + close price over the OANDA-mid
+    model figure position_monitor computes from its own trigger price.
+
+    The model figure ignores fill slippage, spread, commission and swap, so a
+    trade modelled as +$56 can be ~$0 or negative in the real account. When the
+    broker's history-deals lookup returns a settled (closed) deal we record that;
+    otherwise we keep the model so a close is never lost waiting on the broker.
+    Returns (realized_pnl, close_price, source) where source is 'broker'|'model'.
+    """
+    if broker_pid and broker_pid != "dry-run":
+        deal = lookup(broker_pid)
+        if deal and deal.get("closed"):
+            cp = deal.get("close_price")
+            return (deal["realized_pnl"],
+                    cp if cp is not None else model_close_price,
+                    "broker")
+    return model_realized, model_close_price, "model"
 
 
 def _get_user_broker_id(sess, position: Position) -> uuid.UUID | None:
@@ -165,17 +187,32 @@ def _check_triggers(current_price: float) -> None:
                 # Mark this trigger as triggered
                 trigger.status = "TRIGGERED"
 
-                # Close order
-                user_broker_id = _get_user_broker_id(sess, pos)
                 close_qty = float(trigger.quantity)
+
+                # Reconcile against BROKER TRUTH. The OANDA-mid trigger price is a
+                # model close; the broker's settled deal (real fill/close price +
+                # commission + swap) is what actually hit the account. Prefer it,
+                # so the dashboard stops showing profit the account never earned.
+                model_realized = _realized_pnl(pos, current_price, close_qty)
+                entry_order = (
+                    sess.query(Order)
+                    .filter_by(position_id=pos.id, condition="ENTRY")
+                    .first()
+                )
+                broker_pid = entry_order.broker_order_id if entry_order else None
+                realized, close_price, source = _resolve_realized_close(
+                    model_realized, current_price, broker_pid)
+
+                # Close order (recorded at the resolved close price)
+                user_broker_id = _get_user_broker_id(sess, pos)
                 close_order = Order(
                     id=uuid.uuid4(),
                     symbol=SYMBOL,
-                    price=Decimal(str(current_price)),
+                    price=Decimal(str(close_price)),
                     condition=label,
                     side=trigger.side,
                     quantity=trigger.quantity,
-                    amount=Decimal(str(round(current_price * close_qty, 2))),
+                    amount=Decimal(str(round(close_price * close_qty, 2))),
                     order_type="MARKET",
                     status="EXECUTED",
                     reason=label,
@@ -185,10 +222,10 @@ def _check_triggers(current_price: float) -> None:
                 sess.add(close_order)
 
                 # Update position
-                realized = _realized_pnl(pos, current_price, close_qty)
                 pos.realized_profit_loss = Decimal(
                     str(round(float(pos.realized_profit_loss) + realized, 2))
                 )
+                pos.ltp = Decimal(str(close_price))
                 pos.quantity = Decimal("0")
                 pos.profit_loss = Decimal("0")
 
@@ -198,8 +235,8 @@ def _check_triggers(current_price: float) -> None:
                         other.status = "CANCELLED"
 
                 log.info(
-                    "[CLOSE] pos=%s | reason=%s | close_price=%.2f | realized_pnl=%.2f",
-                    pos.id, trigger.trigger_type, current_price, realized,
+                    "[CLOSE] pos=%s | reason=%s | close_price=%.2f | realized_pnl=%.2f (%s)",
+                    pos.id, trigger.trigger_type, close_price, realized, source,
                 )
                 break  # one close per position per tick
 
