@@ -175,6 +175,7 @@ class UserStrategy(BaseModel):
     created_at = Column(DateTime, default=get_kolkata_time)
     multiplyer = Column(Integer, default=1)
     deployed   = Column(Boolean, default=False)
+    archived   = Column(Boolean, default=False, nullable=False)  # mirror of Django migration 0006
 
     strategy_id = Column(
         UUID(as_uuid=True),
