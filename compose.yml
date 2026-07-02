@@ -115,3 +115,64 @@ services:
       SYMBOL:           XAU_USD
       MANAGER_LOOP_SEC: "60"
       DRY_RUN:          "true"     # safe first deploy: log intended flips only
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Strategy Manager v1 child strategies (design spec 2026-07-02 §4).
+  # Each is a research_runner service over backtest_strategies/s9N_*.py.
+  # DB rows first:  python -m db.deploy_manager --commit   (from strategies/)
+  # ALL THREE ship with DRY_RUN=true (PAPER): full pipeline — DB rows, audit —
+  # but NO broker orders. Additionally their UserStrategy rows are seeded
+  # is_active=False, so nothing fires until the user arms them in the manager
+  # tab AND (for S95/S96) DRY_RUN is lifted after a positive held-out backtest.
+  # S97 (scalper slot) stays DRY_RUN=true permanently in v1 — doctrine.
+  # ───────────────────────────────────────────────────────────────────────────
+
+  # S95 — London/NY 15-min opening-range breakout on M5 close. Works off the
+  # 5m window only; defaults are already ample but pinned here for clarity.
+  s95_session_breakout:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: s95_session_breakout
+      RESEARCH_WIN_5M: "160"       # ~13h of M5 — covers session open + range
+      RESEARCH_DAYS_5M: "2"
+      DRY_RUN: "true"              # PAPER until held-out backtest passes
+
+  # S96 — H1 Donchian(24) continuation, EMA20/50 agreement, chandelier trail.
+  # H1 is resampled from the 15m window: needs >= (EMA50+Donchian24+2)*4 = 304
+  # CLOSED 15m bars, so WIN/DAYS_15M are enlarged well past the defaults
+  # (otherwise get_signal stays silent — same gotcha as challenge_xau).
+  s96_h1_momentum:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: s96_h1_momentum
+      RESEARCH_WIN_15M: "600"      # >= 304 needed for 76 closed H1 bars
+      RESEARCH_DAYS_15M: "10"      # cover ~1.5 trading weeks incl. weekend gaps
+      DRY_RUN: "true"              # PAPER until held-out backtest passes
+
+  # S97 — M5 snap-fade with M15-derived HTF (H4/H1) ICT bias. PAPER-ONLY in v1
+  # (edge unproven at honest costs; maker-fill re-audit pending). The HTF bias
+  # resamples the 15m window to H4: needs >= 12*16 = 192 CLOSED 15m bars.
+  s97_snap_scalper:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: s97_snap_scalper_m5
+      RESEARCH_WIN_5M: "120"       # >= 64 needed for the 60-bar rolling std
+      RESEARCH_DAYS_5M: "2"
+      RESEARCH_WIN_15M: "400"      # >= 192 needed for 12 closed H4 bars
+      RESEARCH_DAYS_15M: "7"
+      DRY_RUN: "true"              # PAPER-ONLY in v1 — do not lift (doctrine)
