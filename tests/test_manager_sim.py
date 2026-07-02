@@ -209,6 +209,10 @@ from backtest.manager_sim_engine import load_frames, run_sim, SimResult, STRAT_S
 START = pd.Timestamp("2026-04-06", tz="UTC")
 END   = pd.Timestamp("2026-04-10 21:00", tz="UTC")
 
+# Shallow slice_rows override keeps the three loop-level tests fast.
+# Production (CLI) uses SimConfig's live-faithful defaults.
+_SHALLOW = {"1d": 40, "4h": 60, "1h": 80, "15m": 50, "5m": 20, "1m": 20}
+
 
 def _write_synthetic_cache(cache_dir, start=None, days=30, mutate_after=None):
     """Synthetic XAU tape: drift + fast sine (period 7 min, amplitude 3 pts)
@@ -248,8 +252,8 @@ def _write_synthetic_cache(cache_dir, start=None, days=30, mutate_after=None):
 def test_run_sim_smoke_and_gating_structure(tmp_path):
     _write_synthetic_cache(tmp_path)
     frames = load_frames(tmp_path, START, END)
-    gated   = run_sim(frames, _cfg(gated=True))
-    ungated = run_sim(frames, _cfg(gated=False))
+    gated   = run_sim(frames, _cfg(gated=True,  slice_rows=_SHALLOW))
+    ungated = run_sim(frames, _cfg(gated=False, slice_rows=_SHALLOW))
     # structural invariants, not P&L values:
     assert set(t.strategy for t in ungated.trades) <= {s.name for s in STRAT_SPECS}
     assert len(gated.trades) <= len(ungated.trades)          # gating only removes entries
@@ -262,13 +266,18 @@ def test_no_look_ahead(tmp_path):
     T_mid = pd.Timestamp("2026-04-08 12:00", tz="UTC")
     _write_synthetic_cache(tmp_path)
     frames = load_frames(tmp_path, START, T_mid)
-    baseline = run_sim(frames, _cfg(gated=True, end=T_mid)).regime_rows
+    baseline = run_sim(frames, _cfg(gated=True, end=T_mid, slice_rows=_SHALLOW)).regime_rows
 
     poisoned_dir = tmp_path / "poisoned"
     poisoned_dir.mkdir()
-    _write_synthetic_cache(poisoned_dir, mutate_after=T_mid)
+    # Poison starts ONE MINUTE before T_mid so that the forming higher-TF bars
+    # at the last evaluation instant (bars whose open < T_mid but whose close
+    # depends on data at T_mid+) carry poisoned aggregated values.
+    # With FIX 2 (closed-bar cursors) those forming bars are excluded → PASS.
+    # Without FIX 2 (old searchsorted(now_ts, "right")) they ARE included → FAIL.
+    _write_synthetic_cache(poisoned_dir, mutate_after=T_mid - pd.Timedelta("1min"))
     frames2 = load_frames(poisoned_dir, START, T_mid)
-    poisoned = run_sim(frames2, _cfg(gated=True, end=T_mid)).regime_rows
+    poisoned = run_sim(frames2, _cfg(gated=True, end=T_mid, slice_rows=_SHALLOW)).regime_rows
 
     assert baseline == poisoned  # future bars must not change the past
 
@@ -279,7 +288,7 @@ def test_kill_switch_trips_and_resets_next_day(tmp_path):
     position still exits while the switch is tripped."""
     _write_synthetic_cache(tmp_path)
     frames = load_frames(tmp_path, START, END)
-    res = run_sim(frames, _cfg(gated=True, kill_switch_usd=0.01))
+    res = run_sim(frames, _cfg(gated=True, kill_switch_usd=0.01, slice_rows=_SHALLOW))
     assert res.kill_trips, "expected at least one kill-switch trip"
     trip_day = res.kill_trips[0]
     # entries on the trip day must all precede the trip (evaluate_gates gates same-day)

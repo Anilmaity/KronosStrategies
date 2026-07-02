@@ -19,7 +19,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))        # strategies/
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))  # repo root
 
 import pandas as pd
 
@@ -100,7 +101,7 @@ def _write_outputs(result, prefix: str, output_dir: Path) -> None:
             for t in result.trades
         ]
         pd.DataFrame(rows).to_csv(trades_path, index=False)
-        print(f"    trades ({len(result.trades):,}) → {trades_path}")
+        print(f"    trades ({len(result.trades):,}) -> {trades_path}")
     else:
         print("    no trades fired")
 
@@ -109,7 +110,7 @@ def _write_outputs(result, prefix: str, output_dir: Path) -> None:
     with open(regime_path, "w") as fh:
         for row in result.regime_rows:
             fh.write(json.dumps(row) + "\n")
-    print(f"    regime rows ({len(result.regime_rows):,}) → {regime_path}")
+    print(f"    regime rows ({len(result.regime_rows):,}) -> {regime_path}")
 
     # Summary JSON
     summary = {
@@ -131,7 +132,7 @@ def _write_outputs(result, prefix: str, output_dir: Path) -> None:
     summary_path = output_dir / f"{prefix}_summary.json"
     with open(summary_path, "w") as fh:
         json.dump(summary, fh, indent=2)
-    print(f"    summary → {summary_path}")
+    print(f"    summary -> {summary_path}")
 
 
 def main() -> None:
