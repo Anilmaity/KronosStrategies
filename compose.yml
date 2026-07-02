@@ -96,3 +96,22 @@ services:
       RESEARCH_WIN_15M: "1400"     # ~87 H4 bars of reach (>= 72 needed)
       RESEARCH_DAYS_15M: "28"      # cover ~3-4 trading weeks incl. weekend gaps
       # DRY_RUN: "true"            # uncomment to smoke-test without placing orders
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Strategy Manager — regime-aware meta-controller (60s loop). Computes the
+  # market regime (D1/H4 bias, vol & trend regime, session), persists
+  # RegimeSnapshot rows, and — when ManagerConfig.master_mode=ON — gates the
+  # ARMED child strategies by flipping UserStrategy.is_active per policy.
+  # Ships with master_mode=OFF (auto-created row) AND DRY_RUN=true: fully
+  # observable, flips nothing. Remove DRY_RUN only after on-box verification.
+  # ───────────────────────────────────────────────────────────────────────────
+  strategy_manager:
+    build: ./strategy_manager
+    restart: always
+    env_file: .env
+    environment:
+      TSDB_TARGET:      ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL:    ${TIGERDATA_URL:-}
+      SYMBOL:           XAU_USD
+      MANAGER_LOOP_SEC: "60"
+      DRY_RUN:          "true"     # safe first deploy: log intended flips only
