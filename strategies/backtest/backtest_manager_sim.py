@@ -30,8 +30,9 @@ from backtest.manager_sim_engine import (
     run_sim,
 )
 
-CACHE_DIR  = Path(__file__).resolve().parent / "results" / "bars_cache"
-OUTPUT_DIR = Path(__file__).resolve().parent / "results"
+CACHE_DIR        = Path(__file__).resolve().parent / "results" / "bars_cache"
+OUTPUT_DIR       = Path(__file__).resolve().parent / "results"
+MANAGER_SIM_DIR  = OUTPUT_DIR / "manager_sim"
 
 
 def parse_args() -> argparse.Namespace:
@@ -58,6 +59,13 @@ def parse_args() -> argparse.Namespace:
                     help="Regime evaluation cadence in minutes (default 5)")
     ap.add_argument("--cache-dir",       default=str(CACHE_DIR),
                     help="Directory containing is_XAU_USD_*.parquet files")
+    ap.add_argument("--sensitivity",     action="store_true", default=False,
+                    help=(
+                        "Run 6 sensitivity variants (vol thresholds ×2, ER thresholds ×2, "
+                        "session windows ±30 min) after the base run. "
+                        "OFF by default — each variant is a full re-run (~44 min each), "
+                        "so the full grid takes ~4.4 h. Recommended as an overnight job."
+                    ))
     return ap.parse_args()
 
 
@@ -146,14 +154,16 @@ def main() -> None:
     frames = load_frames(cache_dir, start, end)
     print(f"  1m bars in window: {len(frames['1m']):,}")
 
-    stamp = datetime.utcnow().strftime("%Y%m%d_%H%M")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
     modes = ["gated", "ungated"] if args.mode == "both" else [args.mode]
 
+    results: dict[str, object] = {}
     for mode_str in modes:
         gated = mode_str == "gated"
         cfg   = _make_cfg(args, gated)
         print(f"\nRunning {mode_str} …")
         result = run_sim(frames, cfg)
+        results[mode_str] = result
 
         prefix = f"manager_sim_{stamp}_{mode_str}"
         _write_outputs(result, prefix, OUTPUT_DIR)
@@ -168,6 +178,34 @@ def main() -> None:
             print(f"  kill-switch trips: {result.kill_trips}")
         for name, pct in result.paused_pct.items():
             print(f"  paused {name}: {pct:.1f}%")
+
+    # ── Decision report (--mode both only) ───────────────────────────────────
+    if args.mode == "both" and "gated" in results and "ungated" in results:
+        from backtest.manager_sim_report import write_report, run_sensitivity  # lazy import
+
+        sensitivity: list[tuple[str, float]] | None = None
+        if args.sensitivity:
+            gated_cfg = _make_cfg(args, gated=True)
+            print(
+                "\nRunning sensitivity analysis (6 variants) — "
+                "this may take several hours at production depths …"
+            )
+            sens_data = run_sensitivity(frames, gated_cfg)
+            sensitivity = [(d["variant"], d["combined_net_usd"]) for d in sens_data]
+            for d in sens_data:
+                print(
+                    f"  {d['variant']:20s}: net=${d['combined_net_usd']:+.2f}"
+                    f"  n={d['n_trades']}  WR={d['win_rate']:.1f}%"
+                )
+
+        report_path = write_report(
+            gated=results["gated"],
+            ungated=results["ungated"],
+            cfg=_make_cfg(args, gated=True),
+            out_dir=MANAGER_SIM_DIR,
+            sensitivity=sensitivity,
+        )
+        print(f"\nDecision report  → {report_path}")
 
     print("\nDone.")
 
