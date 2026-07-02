@@ -285,8 +285,9 @@ def _regime_distribution(
 ) -> tuple[dict[str, float], dict[str, float], dict[str, float], float]:
     """Return (vol_pct, trend_pct, session_pct, flip_rate_per_day).
 
-    flip_rate counts combined transitions across vol_regime + trend_regime +
-    session, divided by the number of calendar days spanned.
+    flip_rate counts evaluation ticks where any classification field changed
+    (d1_bias, h4_bias, vol_regime, trend_regime, session), divided by the
+    number of calendar days spanned.
     """
     n = len(regime_rows)
     if n == 0:
@@ -296,9 +297,11 @@ def _regime_distribution(
     trend_counts:   dict[str, int] = {}
     session_counts: dict[str, int] = {}
     flips = 0
-    prev_vol = prev_trend = prev_session = None
+    prev_d1 = prev_h4 = prev_vol = prev_trend = prev_session = None
 
     for row in regime_rows:
+        d1 = row.get("d1_bias",     "UNKNOWN")
+        h4 = row.get("h4_bias",     "UNKNOWN")
         v  = row.get("vol_regime",   "UNKNOWN")
         tr = row.get("trend_regime", "UNKNOWN")
         s  = row.get("session",      "UNKNOWN")
@@ -308,10 +311,11 @@ def _regime_distribution(
         session_counts[s] = session_counts.get(s, 0) + 1
 
         if prev_vol is not None:
-            if v  != prev_vol:     flips += 1
-            if tr != prev_trend:   flips += 1
-            if s  != prev_session: flips += 1
-        prev_vol, prev_trend, prev_session = v, tr, s
+            # Count one flip if ANY classification field changed
+            if (d1 != prev_d1 or h4 != prev_h4 or v != prev_vol or
+                tr != prev_trend or s != prev_session):
+                flips += 1
+        prev_d1, prev_h4, prev_vol, prev_trend, prev_session = d1, h4, v, tr, s
 
     try:
         first_ts = pd.Timestamp(regime_rows[0]["time"])
@@ -514,7 +518,7 @@ def _build_markdown(
             flag = "  **WARNING: >12/day average — HIGH CHURN**"
         lines += [
             "",
-            f"**Regime flip rate (vol + trend + session):** {flip_rate:.1f} changes/day{flag}",
+            f"**Regime flip rate:** {flip_rate:.1f} changes/day (a 'flip' = any classification field changing between consecutive evaluations){flag}",
             "",
         ]
     else:
@@ -527,6 +531,8 @@ def _build_markdown(
 
     lines += [
         "## Month-by-Month Net USD (Gated vs Ungated)",
+        "",
+        "Trades are bucketed by exit_time (a trade entered in April that exits in May counts in May).",
         "",
         "| Month | Strategy | Gated $ | Ungated $ | Delta $ |",
         "|-------|----------|--------:|----------:|--------:|",
