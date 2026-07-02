@@ -1,5 +1,5 @@
-﻿"""Offline event-loop simulator for the Strategy Manager (spec 2026-07-02).
-Imports PRODUCTION compute_regime + POLICIES â€” never copies them."""
+"""Offline event-loop simulator for the Strategy Manager (spec 2026-07-02).
+Imports PRODUCTION compute_regime + POLICIES — never copies them."""
 from __future__ import annotations
 
 import logging
@@ -94,7 +94,7 @@ def evaluate_gates(snap, now_utc: datetime, guard: GuardState,
     return out
 
 
-# â”€â”€ Position lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Position lifecycle ─────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -135,8 +135,8 @@ def open_position(sig: Signal, strat_name: str, now: datetime,
     """Apply entry friction and initialise a SimPosition.
 
     Entry friction (spread/2 + slippage) worsens the fill:
-      BUY  â†’ pays more  (entry_px = sig.entry_price + friction)
-      SELL â†’ receives less (entry_px = sig.entry_price - friction)
+      BUY  → pays more  (entry_px = sig.entry_price + friction)
+      SELL → receives less (entry_px = sig.entry_price - friction)
 
     SL/TP levels stay exactly as signalled.
     trail_dist is fixed at |sig.entry_price - sig.stop_loss| and never changes.
@@ -170,13 +170,13 @@ def step_position(
 ) -> tuple[SimPosition | None, TradeRecord | None]:
     """Advance an open position by one 1-minute bar.
 
-    Check order (prevents intra-bar look-ahead â€” ratchet from this bar's
+    Check order (prevents intra-bar look-ahead — ratchet from this bar's
     high/low is applied LAST and only takes effect on the NEXT bar):
 
-      1. SL touch  â€” checked against the PRE-UPDATE stop level
-      2. TP touch  â€” only for non-trailing positions; also pre-update
-      3. TIME exit â€” when elapsed >= max_hold_min (bar close price)
-      4. Trailing ratchet update â€” new sl/hwm applied to future bars only
+      1. SL touch  — checked against the PRE-UPDATE stop level
+      2. TP touch  — only for non-trailing positions; also pre-update
+      3. TIME exit — when elapsed >= max_hold_min (bar close price)
+      4. Trailing ratchet update — new sl/hwm applied to future bars only
 
     Exit friction worsens every exit by cfg.entry_friction_pts (same magnitude
     as entry friction):
@@ -192,7 +192,7 @@ def step_position(
     # Snapshot stop level BEFORE any ratchet update (prevents look-ahead).
     pre_sl = pos.sl
 
-    # â”€â”€ 1. SL touch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── 1. SL touch ───────────────────────────────────────────────────────────
     # Strict comparison (</>): a bar whose low/high exactly equals the stop is
     # NOT treated as a hit (avoids false exits on round-number wicks).
     sl_hit = (bar["low"] < pre_sl) if is_buy else (bar["high"] > pre_sl)
@@ -216,7 +216,7 @@ def step_position(
             gate_reason="",
         )
 
-    # â”€â”€ 2. TP touch (static positions only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── 2. TP touch (static positions only) ───────────────────────────────────
     if not pos.trailing:
         tp_hit = (bar["high"] >= pos.tp) if is_buy else (bar["low"] <= pos.tp)
         if tp_hit:
@@ -237,7 +237,7 @@ def step_position(
                 gate_reason="",
             )
 
-    # â”€â”€ 3. Time exit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── 3. Time exit ──────────────────────────────────────────────────────────
     if pos.max_hold_min is not None:
         elapsed_min = (now - pos.entry_time).total_seconds() / 60.0
         if elapsed_min >= pos.max_hold_min:
@@ -259,7 +259,7 @@ def step_position(
                 gate_reason="",
             )
 
-    # â”€â”€ 4. Trailing ratchet update (applies to NEXT bar's SL check) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── 4. Trailing ratchet update (applies to NEXT bar's SL check) ───────────
     if pos.trailing:
         if is_buy:
             new_hwm = max(pos.hwm, bar["high"])
@@ -272,21 +272,39 @@ def step_position(
     return pos, None
 
 
-# â”€â”€ Event loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Event loop ─────────────────────────────────────────────────────────────────
 
-# Pandas Timedelta strings for each TF â€” used by the closed-bar cursor logic.
+# Pandas Timedelta strings for each TF — used by the closed-bar cursor logic.
 # A bar is OPEN-stamped: the bar at time T covers [T, T + _TF_DELTA[tf]).
 # We include a bar only if it has CLOSED by the time we process the current
 # 1m bar (whose open == now_ts, treated as just-closed):
-#   open + delta <= now_ts + 1min  â†”  open <= cutoff - delta
+#   open + delta <= now_ts + 1min  ↔  open <= cutoff - delta
 # where cutoff = now_ts + 1min.
 _TF_DELTA: dict[str, str] = {
     "1m": "1min", "5m": "5min", "15m": "15min",
     "1h": "1h",   "4h": "4h",   "1d":  "1D",
 }
 
-# Row counts for each TF slice â€” live-faithful defaults live on SimConfig.slice_rows.
-# (Tests pass shallow overrides {1d:40, â€¦} for speed; production uses the defaults.)
+
+def _closed_bar_cursor(times: pd.Series, tf: str, now_ts: pd.Timestamp) -> int:
+    """Return the slice cursor for a TF series including only CLOSED bars.
+
+    ``now_ts`` is the open time of the 1m bar being processed, treated as
+    just-closed.  Bars are OPEN-stamped, so a TF bar covering
+    [open, open + tf_delta) may be included only once it has closed:
+
+        open + tf_delta <= now_ts + 1min   (cutoff)
+        <=>  open <= cutoff - tf_delta
+
+    For 1m this reduces to ``open <= now_ts`` (the pre-FIX-2 behaviour).
+    ``df.iloc[0:cursor]`` then contains exactly the closed bars.
+    """
+    cutoff = now_ts + pd.Timedelta("1min")
+    return int(times.searchsorted(cutoff - pd.Timedelta(_TF_DELTA[tf]), side="right"))
+
+
+# Row counts for each TF slice — live-faithful defaults live on SimConfig.slice_rows.
+# (Tests pass shallow overrides {1d:40, …} for speed; production uses the defaults.)
 
 # Strategy window widths passed to get_signal.
 # _WIN_5M raised to 300 so SESSION_BREAKOUT (needs EMA(240) = 240 M5 bars
@@ -369,7 +387,7 @@ def run_sim(
     df1m = frames["1m"]
     t1m = df1m["time"]  # pd.Series[DatetimeTZDtype[UTC]]
 
-    # Find the 1m bar index range [start, end) â€” closed bars only.
+    # Find the 1m bar index range [start, end) — closed bars only.
     i_start = int(t1m.searchsorted(start_ts, side="left"))
     i_end   = int(t1m.searchsorted(end_ts,   side="left"))
 
@@ -403,18 +421,9 @@ def run_sim(
         now_ts = t1m.iloc[i]           # pd.Timestamp UTC
         now    = now_ts.to_pydatetime()  # Python datetime (tz-aware UTC)
 
-        # Advance per-TF cursors — closed-bar semantics.
-        # Bars are OPEN-stamped; a TF bar may only be used once it has CLOSED.
-        # Closed condition: open_time + tf_delta <= now_ts + 1min (cutoff).
-        # Equivalently: include bars with open_time <= cutoff - tf_delta.
-        # For 1m this reduces to open_time <= now_ts (same as before).
-        cutoff = now_ts + pd.Timedelta("1min")
-        cursors = {
-            tf: int(tf_series[tf].searchsorted(
-                cutoff - pd.Timedelta(_TF_DELTA[tf]), side="right"
-            ))
-            for tf in tf_series
-        }
+        # Advance per-TF cursors — closed-bar semantics (see _closed_bar_cursor).
+        cursors = {tf: _closed_bar_cursor(tf_series[tf], tf, now_ts)
+                   for tf in tf_series}
 
         # Day-boundary tracking: reset daily P&L accumulator.
         today = now.strftime("%Y-%m-%d")
@@ -425,7 +434,7 @@ def run_sim(
             # guard.kill_tripped_date == today, so once today advances the
             # trip no longer gates entries (no explicit clear needed).
 
-        # â”€â”€ Regime evaluation (at cadence; also on the very first bar) â”€â”€â”€â”€â”€â”€â”€â”€
+        # ── Regime evaluation (at cadence; also on the very first bar) ────────
         if snap is None or (now.minute % cfg.regime_cadence_min == 0):
             frames_slice = {
                 tf: frames[tf].iloc[
@@ -475,7 +484,7 @@ def run_sim(
         if snap is None:
             continue
 
-        # â”€â”€ Strategy windows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ── Strategy windows ───────────────────────────────────────────────────
         w1m  = df1m.iloc[max(0, cursors["1m"]  - _WIN_1M) :cursors["1m"]]
         w5m  = frames["5m"].iloc[max(0, cursors["5m"]  - _WIN_5M) :cursors["5m"]]
         w15m = frames["15m"].iloc[max(0, cursors["15m"] - _WIN_15M):cursors["15m"]]
@@ -489,7 +498,7 @@ def run_sim(
             if not gates[spec.name][0]:
                 gate_paused[spec.name] += 1
 
-        # â”€â”€ Per-strategy step â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ── Per-strategy step ──────────────────────────────────────────────────
         for spec in specs:
             pos = open_positions.get(spec.name)
 
@@ -522,7 +531,7 @@ def run_sim(
                         new_pos.gate_reason = reason
                         open_positions[spec.name] = new_pos
 
-    # â”€â”€ Mark still-open positions as OPEN at sim end â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Mark still-open positions as OPEN at sim end ──────────────────────────
     if i_end > i_start:
         last_bar   = df1m.iloc[i_end - 1]
         last_time  = t1m.iloc[i_end - 1].to_pydatetime()

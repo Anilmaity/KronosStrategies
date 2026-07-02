@@ -273,13 +273,106 @@ def test_no_look_ahead(tmp_path):
     # Poison starts ONE MINUTE before T_mid so that the forming higher-TF bars
     # at the last evaluation instant (bars whose open < T_mid but whose close
     # depends on data at T_mid+) carry poisoned aggregated values.
-    # With FIX 2 (closed-bar cursors) those forming bars are excluded → PASS.
-    # Without FIX 2 (old searchsorted(now_ts, "right")) they ARE included → FAIL.
+    # NOTE: on this synthetic tape the poisoned forming D1 bar still maps to
+    # d1_bias="ranging", so this end-to-end check does NOT discriminate the
+    # cursor bug by itself.  The discriminating tests are
+    # test_closed_bar_cursor_excludes_forming_bars and
+    # test_forming_bars_never_reach_regime_or_windows below.
     _write_synthetic_cache(poisoned_dir, mutate_after=T_mid - pd.Timedelta("1min"))
     frames2 = load_frames(poisoned_dir, START, T_mid)
     poisoned = run_sim(frames2, _cfg(gated=True, end=T_mid, slice_rows=_SHALLOW)).regime_rows
 
     assert baseline == poisoned  # future bars must not change the past
+
+
+def test_closed_bar_cursor_excludes_forming_bars():
+    """Direct unit test of the FIX-2 cursor helper (discriminating test).
+
+    A TF bar is included iff open + tf_delta <= now_ts + 1min:
+      - a bar whose close lands EXACTLY on the cutoff is included
+      - a bar opening 1 minute later (still forming at now_ts) is excluded
+    The old ``searchsorted(now_ts, side="right")`` cursor includes the forming
+    bar on every TF above 1m, so this test FAILS with the old cursor.
+    """
+    from backtest.manager_sim_engine import _closed_bar_cursor, _TF_DELTA
+
+    now_ts = pd.Timestamp("2026-04-08 11:59", tz="UTC")
+    one_min = pd.Timedelta("1min")
+
+    for tf in ["5m", "15m", "1h", "4h", "1d"]:
+        delta = pd.Timedelta(_TF_DELTA[tf])
+        closed_open  = now_ts + one_min - delta   # closes exactly at cutoff
+        forming_open = closed_open + one_min      # closes 1min past cutoff
+        times = pd.Series([closed_open - delta, closed_open, forming_open])
+        cur = _closed_bar_cursor(times, tf, now_ts)
+        assert cur == 2, (
+            f"{tf}: cursor {cur} != 2 — forming bar (open={forming_open}) "
+            f"leaked into the visible slice at now={now_ts}"
+        )
+
+    # 1m reduces to the old behaviour: bar with open == now_ts is included,
+    # the next 1m bar is not.
+    times = pd.Series([now_ts - one_min, now_ts, now_ts + one_min])
+    assert _closed_bar_cursor(times, "1m", now_ts) == 2
+
+
+def test_forming_bars_never_reach_regime_or_windows(tmp_path, monkeypatch):
+    """End-to-end discriminating test for FIX 2, independent of regime semantics.
+
+    Poison every 1m bar with time > T_mid - 1min, so the forming D1 bar of the
+    final day aggregates poisoned closes all day.  Stub compute_regime and the
+    strategy get_signal to inspect the exact frames run_sim hands them, and
+    assert the poison value NEVER appears in any regime slice or w1m/w5m/w15m
+    window.  With the old ``searchsorted(now_ts, "right")`` cursor the forming
+    (poisoned) D1 bar is included in the 1d slice at every cadence tick of the
+    final day, so this test FAILS when FIX 2 is reverted.
+    """
+    from dataclasses import dataclass as _dc, field as _field
+    import backtest.manager_sim_engine as eng
+
+    T_mid = pd.Timestamp("2026-04-08 12:00", tz="UTC")
+    _write_synthetic_cache(tmp_path, mutate_after=T_mid - pd.Timedelta("1min"))
+    frames = load_frames(tmp_path, START, T_mid)
+
+    POISON = 99999.0
+    slice_poison: list[tuple[str, str]] = []
+    window_poison: list[tuple[str, str]] = []
+
+    @_dc
+    class _FakeSnap:
+        d1_bias: str = "ranging"
+        h4_bias: str = "neutral"
+        vol_regime: str = "NORMAL"
+        trend_regime: str = "RANGING"
+        session: str = "LONDON"
+        market_closed: bool = False
+        details: dict = _field(default_factory=dict)
+
+    def fake_compute_regime(frames_slice, now_utc):
+        for tf, fs in frames_slice.items():
+            if len(fs) and float(fs["close"].max()) >= POISON:
+                slice_poison.append((tf, now_utc.isoformat()))
+        return _FakeSnap()
+
+    monkeypatch.setattr(eng, "compute_regime", fake_compute_regime)
+
+    def probe_get_signal(w1m, w5m, w15m, now_utc):
+        for name, w in (("w1m", w1m), ("w5m", w5m), ("w15m", w15m)):
+            if len(w) and float(w["close"].max()) >= POISON:
+                window_poison.append((name, now_utc.isoformat()))
+        return None
+
+    probe = SimpleNamespace(NAME="PROBE", get_signal=probe_get_signal)
+    specs = [eng.StratSpec("PROBE", probe, "trending", {})]
+
+    run_sim(frames, _cfg(gated=False, end=T_mid, slice_rows=_SHALLOW), specs=specs)
+
+    assert not slice_poison, (
+        f"forming/poisoned bars leaked into regime slices: {slice_poison[:5]}"
+    )
+    assert not window_poison, (
+        f"forming/poisoned bars leaked into strategy windows: {window_poison[:5]}"
+    )
 
 
 def test_kill_switch_trips_and_resets_next_day(tmp_path):
