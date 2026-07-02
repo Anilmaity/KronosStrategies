@@ -15,7 +15,7 @@ fetch_candles() in shared/tsdb_reader.py already paginates internally (up to
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -52,7 +52,7 @@ def _max_market_gap_minutes(df: pd.DataFrame) -> float:
     prev_hour = t.shift(1).dt.hour
     prev_dow = t.shift(1).dt.dayofweek
     # bars that follow the daily/weekly close legitimately gap
-    mask &= ~(prev_hour == 20)          # 20:xx -> next bar after 21:00 break
+    mask &= ~(prev_hour == 20)          # 20:xx -> next bar after 21:00 break (US-DST EDT = 21:00 UTC; winter data would use 21)
     mask &= ~(prev_dow == 4)            # Friday close -> Sunday reopen
     return float(gaps[mask].max())
 
@@ -82,9 +82,9 @@ def backfill(symbol: str, dry_run: bool) -> None:
             gap = _max_market_gap_minutes(
                 merged[merged["time"] >= pd.Timestamp("2026-04-01", tz="UTC")]
             )
-            # 600-min threshold: holiday closures (e.g. Memorial Day ~215 min,
-            # Good Friday ~240 min) are legitimate; genuine outages are > 10 h.
-            if gap > 600:
+            # 250-min threshold: legitimate holiday closures (e.g. Memorial Day 2026: 215 min observed)
+            # are caught with buffer; genuine outages are > 4 h and fail loudly.
+            if gap > 250:
                 raise SystemExit(f"FATAL: {gap:.0f}-minute market-hours gap in 1m data")
             print(f"[{tf}] max market-hours gap (post 2026-04-01): {gap:.1f} min  OK")
         if not dry_run:
