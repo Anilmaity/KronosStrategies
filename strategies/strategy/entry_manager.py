@@ -67,6 +67,8 @@ _VARIATION_STRATEGY_NAME = {
     # Strategy Manager v1 children (backtest_strategies/s9N_*.py; design spec
     # docs/superpowers/specs/2026-07-02-strategy-manager-design.md §4).
     # S97 is the PAPER-only scalper slot — its service runs with DRY_RUN=true.
+        # Live M5 ORB deployed directly on the box (pre-manager lineage).
+    "SESSION_BREAKOUT": "Session Breakout M5 ORB",
     "KRONOS_S95_SESSION_BREAKOUT": "S95 Session Breakout",
     "KRONOS_S96_H1_MOMENTUM":      "S96 H1 Momentum",
     "KRONOS_S97_SNAP_SCALPER":     "S97 Snap Scalper M5 (paper)",

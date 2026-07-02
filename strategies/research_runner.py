@@ -55,8 +55,22 @@ logging.basicConfig(
 )
 log = logging.getLogger("research_runner")
 
-_last_1m_time:  object          = None
-_last_entry_ts: datetime | None = None
+# Idle-liveness heartbeat: the loop below `continue`s silently on every quiet
+# reason (no new bar, out of session, cooldown, no signal), so a healthy idle
+# runner otherwise looks dead. Emit a throttled heartbeat instead of nothing.
+HEARTBEAT_SEC = int(os.getenv("RESEARCH_HEARTBEAT_SEC", "900"))
+
+_last_1m_time:      object          = None
+_last_entry_ts:     datetime | None = None
+_last_heartbeat_ts: datetime | None = None
+
+
+def _should_heartbeat(now: datetime, last: datetime | None, interval_s: int) -> bool:
+    """True when a liveness heartbeat is due: never logged before, or at least
+    `interval_s` seconds have elapsed since the last one."""
+    if last is None:
+        return True
+    return (now - last).total_seconds() >= interval_s
 
 
 def _is_new_1m(candles) -> bool:
@@ -71,7 +85,7 @@ def _is_new_1m(candles) -> bool:
 
 
 def main():
-    global _last_entry_ts
+    global _last_entry_ts, _last_heartbeat_ts
 
     if not MODULE:
         sys.exit("RESEARCH_STRATEGY env var required (e.g., s01_ote_fib)")
@@ -96,6 +110,14 @@ def main():
                 time.sleep(POLL_INTERVAL)
                 continue
 
+            now_utc = datetime.now(timezone.utc)
+            if _should_heartbeat(now_utc, _last_heartbeat_ts, HEARTBEAT_SEC):
+                _last_heartbeat_ts = now_utc
+                log.info("[%s HEARTBEAT] alive | last_entry=%s | cooldown=%ds",
+                         name,
+                         _last_entry_ts.strftime("%Y-%m-%d %H:%M") if _last_entry_ts else "none",
+                         cfg.cooldown_s)
+
             c1m  = fetch_candles("1m",  days=DAYS_1M,  symbol=SYMBOL)
             c5m  = fetch_candles("5m",  days=DAYS_5M,  symbol=SYMBOL)
             c15m = fetch_candles("15m", days=DAYS_15M, symbol=SYMBOL)
@@ -103,8 +125,6 @@ def main():
             if c1m.empty or not _is_new_1m(c1m):
                 time.sleep(POLL_INTERVAL)
                 continue
-
-            now_utc = datetime.now(timezone.utc)
 
             if not in_session(now_utc, cfg):
                 time.sleep(POLL_INTERVAL)
@@ -137,7 +157,6 @@ def main():
                 zone_low=float(sig.entry_price),
                 zone_high=float(sig.entry_price),
                 max_hold_min=getattr(sig, "max_hold_min", None),
-                trailing=getattr(sig, "trailing", False),
             )
             log.info(
                 "[%s SIGNAL] %s @ %.2f | SL=%.2f TP=%.2f | maxhold=%s | %s",
