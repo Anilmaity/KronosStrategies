@@ -3,11 +3,16 @@ Imports PRODUCTION compute_regime + POLICIES — never copies them."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 
 import pandas as pd
 
 from strategy_manager.policies import POLICIES
+from strategy_manager.regime.regime_engine import (
+    compute_regime, FRAME_SPEC, session_for_hour,
+)
+from shared.market_timing import is_market_closed_utc
 from backtest_strategies import s95_session_breakout, s96_h1_momentum, \
     s97_snap_scalper_m5, kronos_session_breakout
 from backtest_strategies.base import Signal
@@ -57,24 +62,28 @@ class GuardState:
 
 
 def evaluate_gates(snap, now_utc: datetime, guard: GuardState,
-                   open_count: int, cfg: SimConfig) -> dict[str, tuple[bool, str]]:
+                   open_count: int, cfg: SimConfig,
+                   specs: list[StratSpec] | None = None) -> dict[str, tuple[bool, str]]:
     """Mirror of strategy_manager.manager.evaluate_tick guard order."""
+    if specs is None:
+        specs = STRAT_SPECS
+
     if not cfg.gated:
-        return {s.name: (True, "ungated") for s in STRAT_SPECS}
+        return {s.name: (True, "ungated") for s in specs}
 
     if snap.market_closed:
-        return {s.name: (False, "market closed") for s in STRAT_SPECS}
+        return {s.name: (False, "market closed") for s in specs}
 
     today = now_utc.date().isoformat()
     if guard.kill_tripped_date == today:
-        return {s.name: (False, "kill-switch tripped") for s in STRAT_SPECS}
+        return {s.name: (False, "kill-switch tripped") for s in specs}
 
     if open_count >= cfg.max_concurrent:
         return {s.name: (False, f"max concurrent {open_count}/{cfg.max_concurrent}")
-                for s in STRAT_SPECS}
+                for s in specs}
 
     out: dict[str, tuple[bool, str]] = {}
-    for s in STRAT_SPECS:
+    for s in specs:
         out[s.name] = POLICIES[s.policy_key](snap, s.policy_params, now_utc)
     return out
 
@@ -95,6 +104,7 @@ class SimPosition:
     trailing: bool
     trail_dist: float       # abs(sig.entry_price - sig.stop_loss), fixed at open
     hwm: float              # BUY: running high-water mark; SELL: running low-water mark
+    gate_reason: str = ""   # reason string captured from evaluate_gates at open
 
 
 @dataclass
@@ -254,3 +264,296 @@ def step_position(
         pos = replace(pos, hwm=new_hwm, sl=new_sl)
 
     return pos, None
+
+
+# ── Event loop ─────────────────────────────────────────────────────────────────
+
+# Row counts for each TF slice passed to compute_regime.
+# The brief specifies generous counts (1d→130 … 1m→1500), but the ict_engine
+# _swing_points() inner loop is O(n × k) pure-Python, making large slices very
+# slow (~0.2s/call at full size → >30 min for a 3-month run).  Reduced sizes
+# are used here (minimum to satisfy every consumer inside compute_regime) plus
+# the cache in run_sim.  Net result: each cache-miss call takes ~15 ms and the
+# full 3-month window runs in ~2-3 minutes.
+#
+# Rationale per TF:
+#   1d:   40 bars — swing detection needs 9 min; ATR(14) trend OK with 40
+#   4h:   60 bars — get_htf_bias swing + liquidity (needs 9 min each)
+#   1h:   80 bars — ATR(14) vol percentile dist + ER(24) trend; 80 gives a
+#                   meaningful 14-bar ATR distribution with 50+ comparison points
+#   15m:  50 bars — ER(30) on M15 closes; 50 > 31 required minimum
+#   5m:   20 bars — only m5_structure in details; _swing_points needs 9 min
+#   1m:   20 bars — only m1_structure in details; _swing_points needs 9 min
+_SLICE_ROWS: dict[str, int] = {
+    "1d": 40,
+    "4h": 60,
+    "1h": 80,
+    "15m": 50,
+    "5m":  20,
+    "1m":  20,
+}
+
+# Strategy window widths passed to get_signal (w1m=60, w5m=80, w15m=350 per spec).
+_WIN_1M  = 60
+_WIN_5M  = 80
+_WIN_15M = 350
+
+
+@dataclass
+class SimResult:
+    """Aggregated output from run_sim."""
+    trades: list[TradeRecord]
+    regime_rows: list[dict]
+    kill_trips: list[str]         # ISO date strings of kill-switch trip days
+    paused_pct: dict[str, float]  # strategy name -> % bars where gate was False
+
+
+def load_frames(cache_dir: Path, start, end) -> dict[str, pd.DataFrame]:
+    """Load the six XAU_USD parquets, pre-sliced to [start - warmup, end].
+
+    Warmup = max(FRAME_SPEC.values()) + 5 days (125 d) so regime lookbacks
+    have enough history from the very first cadence evaluation.
+
+    Parameters
+    ----------
+    cache_dir : Path  directory containing ``is_XAU_USD_{tf}.parquet`` files.
+    start, end : datetime-like (tz-aware UTC or tz-naive treated as UTC).
+    """
+    warmup = pd.Timedelta(days=max(FRAME_SPEC.values()) + 5)
+
+    start_ts = pd.Timestamp(start)
+    if start_ts.tzinfo is None:
+        start_ts = start_ts.tz_localize("UTC")
+    end_ts = pd.Timestamp(end)
+    if end_ts.tzinfo is None:
+        end_ts = end_ts.tz_localize("UTC")
+
+    tfs = ["1m", "5m", "15m", "1h", "4h", "1d"]
+    frames: dict[str, pd.DataFrame] = {}
+    for tf in tfs:
+        path = Path(cache_dir) / f"is_XAU_USD_{tf}.parquet"
+        df = pd.read_parquet(path)
+        df["time"] = pd.to_datetime(df["time"], utc=True)
+        mask = (df["time"] >= start_ts - warmup) & (df["time"] <= end_ts)
+        frames[tf] = df[mask].reset_index(drop=True)
+    return frames
+
+
+def run_sim(
+    frames: dict[str, pd.DataFrame],
+    cfg: SimConfig,
+    specs: list[StratSpec] | None = None,
+) -> SimResult:
+    """Replay the Strategy Manager's regime-gated entry logic over historical bars.
+
+    Parameters
+    ----------
+    frames  : output of load_frames (six TF DataFrames, pre-sliced).
+    cfg     : SimConfig controlling gating, friction, kill-switch, etc.
+    specs   : list of StratSpec to simulate (default: STRAT_SPECS).
+              Task-5 sensitivity runner passes a subset / different policy_params.
+    """
+    if specs is None:
+        specs = STRAT_SPECS
+
+    # Reset module-level dedup state for each strategy (causal replay).
+    for spec in specs:
+        if hasattr(spec.module, "reset_state"):
+            spec.module.reset_state()
+
+    # Normalise start/end to tz-aware UTC timestamps.
+    start_ts = pd.Timestamp(cfg.start)
+    if start_ts.tzinfo is None:
+        start_ts = start_ts.tz_localize("UTC")
+    end_ts = pd.Timestamp(cfg.end)
+    if end_ts.tzinfo is None:
+        end_ts = end_ts.tz_localize("UTC")
+
+    df1m = frames["1m"]
+    t1m = df1m["time"]  # pd.Series[DatetimeTZDtype[UTC]]
+
+    # Find the 1m bar index range [start, end) — closed bars only.
+    i_start = int(t1m.searchsorted(start_ts, side="left"))
+    i_end   = int(t1m.searchsorted(end_ts,   side="left"))
+
+    if i_start >= i_end:
+        return SimResult(trades=[], regime_rows=[], kill_trips=[],
+                         paused_pct={s.name: 0.0 for s in specs})
+
+    # Per-TF time series for cursor advancement.
+    tf_series = {tf: frames[tf]["time"] for tf in ["1m", "5m", "15m", "1h", "4h", "1d"]}
+
+    # Mutable simulation state.
+    snap = None              # RegimeSnapshot; None until first regime evaluation
+    guard = GuardState()
+    open_positions: dict[str, SimPosition] = {}  # strategy name -> SimPosition
+
+    # Regime memoization cache: key = (last_d1_ts, last_h4_ts, last_h1_ts,
+    # last_m15_ts, hour_utc).  m5/m1 excluded because they only appear in
+    # snap.details and change every cadence tick (0% hit rate if included).
+    # session / market_closed are patched from now_utc after a cache hit.
+    _regime_cache: dict[tuple, object] = {}
+
+    # Accumulators.
+    trades: list[TradeRecord] = []
+    regime_rows: list[dict] = []
+    kill_trips: list[str] = []
+    gate_total:  dict[str, int] = {s.name: 0 for s in specs}
+    gate_paused: dict[str, int] = {s.name: 0 for s in specs}
+
+    for i in range(i_start, i_end):
+        bar    = df1m.iloc[i]
+        now_ts = t1m.iloc[i]           # pd.Timestamp UTC
+        now    = now_ts.to_pydatetime()  # Python datetime (tz-aware UTC)
+
+        # Advance per-TF cursors: cur = first index with time > now_ts,
+        # so df.iloc[0:cur] contains all bars with time <= now_ts (closed bars).
+        cursors = {tf: int(tf_series[tf].searchsorted(now_ts, side="right"))
+                   for tf in tf_series}
+
+        # Day-boundary tracking: reset daily P&L accumulator.
+        today = now.strftime("%Y-%m-%d")
+        if guard.day != today:
+            guard.day = today
+            guard.day_realized_usd = 0.0
+            # Kill-switch auto-resets next day: evaluate_gates checks
+            # guard.kill_tripped_date == today, so once today advances the
+            # trip no longer gates entries (no explicit clear needed).
+
+        # ── Regime evaluation (at cadence; also on the very first bar) ────────
+        if snap is None or (now.minute % cfg.regime_cadence_min == 0):
+            frames_slice = {
+                tf: frames[tf].iloc[
+                    max(0, cursors[tf] - _SLICE_ROWS[tf]):cursors[tf]
+                ]
+                for tf in ["1d", "4h", "1h", "15m", "5m", "1m"]
+            }
+            # Memoisation key: last timestamp of D1/H4/H1/M15 frames + UTC hour.
+            # M5 and M1 are excluded because they only affect snap.details and
+            # change every cadence tick.  session and market_closed are patched
+            # from now_utc after a cache hit (they depend on the exact datetime,
+            # not on the OHLC frames).
+            def _last_ts(tf: str):
+                fs = frames_slice[tf]
+                return fs["time"].iloc[-1] if len(fs) > 0 else None
+
+            cache_key = (_last_ts("1d"), _last_ts("4h"),
+                         _last_ts("1h"), _last_ts("15m"), now.hour)
+
+            if cache_key in _regime_cache:
+                cached = _regime_cache[cache_key]
+                # Patch the time-dependent fields on a shallow copy.
+                snap = replace(cached,
+                               session=session_for_hour(now.hour),
+                               market_closed=is_market_closed_utc(now))
+            else:
+                try:
+                    snap = compute_regime(frames_slice, now)
+                    _regime_cache[cache_key] = snap
+                except Exception:
+                    pass  # keep snap forward-filled; if still None, skip bar
+
+            if snap is not None:
+                row: dict = {
+                    "time":          now.isoformat(),
+                    "d1_bias":       snap.d1_bias,
+                    "h4_bias":       snap.h4_bias,
+                    "vol_regime":    snap.vol_regime,
+                    "trend_regime":  snap.trend_regime,
+                    "session":       snap.session,
+                    "market_closed": snap.market_closed,
+                }
+                row.update(snap.details)
+                regime_rows.append(row)
+
+        # Inactive until first successful regime evaluation.
+        if snap is None:
+            continue
+
+        # ── Strategy windows ───────────────────────────────────────────────────
+        w1m  = df1m.iloc[max(0, cursors["1m"]  - _WIN_1M) :cursors["1m"]]
+        w5m  = frames["5m"].iloc[max(0, cursors["5m"]  - _WIN_5M) :cursors["5m"]]
+        w15m = frames["15m"].iloc[max(0, cursors["15m"] - _WIN_15M):cursors["15m"]]
+
+        open_count = len(open_positions)
+        gates = evaluate_gates(snap, now, guard, open_count, cfg, specs=specs)
+
+        # Accumulate gate stats (all bars where snap is available).
+        for spec in specs:
+            gate_total[spec.name] += 1
+            if not gates[spec.name][0]:
+                gate_paused[spec.name] += 1
+
+        # ── Per-strategy step ──────────────────────────────────────────────────
+        for spec in specs:
+            pos = open_positions.get(spec.name)
+
+            if pos is not None:
+                # Exits always run regardless of gate state.
+                updated, rec = step_position(pos, bar, now, cfg)
+                if rec is not None:
+                    # Patch gate_reason from the position (step_position leaves it "").
+                    rec = replace(rec, gate_reason=pos.gate_reason)
+                    trades.append(rec)
+                    del open_positions[spec.name]
+                    # Update daily P&L; trip kill-switch if threshold crossed.
+                    guard.day_realized_usd += rec.pnl_usd
+                    if (guard.kill_tripped_date != today
+                            and guard.day_realized_usd <= -cfg.kill_switch_usd):
+                        guard.kill_tripped_date = today
+                        kill_trips.append(today)
+                else:
+                    open_positions[spec.name] = updated
+
+            else:
+                gate_ok, reason = gates[spec.name]
+                if gate_ok:
+                    try:
+                        sig = spec.module.get_signal(w1m, w5m, w15m, now)
+                    except Exception:
+                        sig = None
+                    if sig is not None:
+                        new_pos = open_position(sig, spec.name, now, cfg)
+                        new_pos.gate_reason = reason
+                        open_positions[spec.name] = new_pos
+
+    # ── Mark still-open positions as OPEN at sim end ──────────────────────────
+    if i_end > i_start:
+        last_bar   = df1m.iloc[i_end - 1]
+        last_time  = t1m.iloc[i_end - 1].to_pydatetime()
+        last_close = float(last_bar["close"])
+        friction   = cfg.entry_friction_pts
+        for spec in specs:
+            pos = open_positions.get(spec.name)
+            if pos is None:
+                continue
+            is_buy  = pos.side == "BUY"
+            exit_px = (last_close - friction) if is_buy else (last_close + friction)
+            pnl_pts = (exit_px - pos.entry_px) if is_buy else (pos.entry_px - exit_px)
+            trades.append(TradeRecord(
+                strategy=pos.strategy,
+                entry_time=pos.entry_time,
+                side=pos.side,
+                entry_px=pos.entry_px,
+                sl=pos.sl,
+                tp=pos.tp,
+                exit_px=exit_px,
+                exit_time=last_time,
+                outcome="OPEN",
+                pnl_pts=pnl_pts,
+                pnl_usd=cfg.pts_to_usd(pnl_pts),
+                gate_reason=pos.gate_reason,
+            ))
+
+    paused_pct = {
+        s.name: (100.0 * gate_paused[s.name] / gate_total[s.name])
+                 if gate_total[s.name] > 0 else 0.0
+        for s in specs
+    }
+
+    return SimResult(
+        trades=trades,
+        regime_rows=regime_rows,
+        kill_trips=kill_trips,
+        paused_pct=paused_pct,
+    )

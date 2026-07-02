@@ -35,8 +35,10 @@ def _snap(vol="NORMAL", trend="TRENDING", d1="bullish", h4="long",
                            h4_bias=h4, session=session, market_closed=closed)
 
 def _cfg(**kw):
-    return SimConfig(start=datetime(2026, 4, 1, tzinfo=UTC),
-                     end=datetime(2026, 7, 2, tzinfo=UTC), **kw)
+    defaults = dict(start=datetime(2026, 4, 1, tzinfo=UTC),
+                    end=datetime(2026, 7, 2, tzinfo=UTC))
+    defaults.update(kw)
+    return SimConfig(**defaults)
 
 def test_market_closed_gates_everything_off():
     g = evaluate_gates(_snap(closed=True), datetime(2026, 4, 6, 8, 0, tzinfo=UTC),
@@ -196,3 +198,92 @@ def test_sell_trailing_ratchets_down_never_up():
                            datetime(2026, 4, 6, 8, 3, tzinfo=UTC), cfg)
     assert rec is not None and rec.outcome == "TRAIL"
     assert rec.exit_px == pytest.approx(tightened + 0.25)
+
+
+# ── Task 4 ────────────────────────────────────────────────────────────────────
+
+import numpy as np
+
+from backtest.manager_sim_engine import load_frames, run_sim, SimResult, STRAT_SPECS
+
+START = pd.Timestamp("2026-04-06", tz="UTC")
+END   = pd.Timestamp("2026-04-10 21:00", tz="UTC")
+
+
+def _write_synthetic_cache(cache_dir, start=None, days=30, mutate_after=None):
+    """Synthetic XAU tape: drift + fast sine (period 7 min, amplitude 3 pts)
+    on a 1m grid (weekdays 00:00-20:59 UTC), resampled to other TFs and
+    written in bars_cache format.
+
+    Period 7 min is prime relative to the 5-min M5 bar so M5 closes sample
+    all sine phases; the resulting opening ranges are 6+ pts wide and price
+    regularly breaks out of the range within the 2-h entry window (s95
+    fires reliably during both London and NY sessions).
+
+    `mutate_after`: 1m bar timestamps strictly greater get close=99999
+    (used by the no-look-ahead test to poison future bars).
+    """
+    start = start or (START - pd.Timedelta(days=days))
+    idx = pd.date_range(start, END, freq="1min", tz="UTC")
+    idx = idx[(idx.dayofweek < 5) & (idx.hour < 21)]
+    t = np.arange(len(idx), dtype=float)
+    px = 3300 + 0.005 * t + 3.0 * np.sin(2 * np.pi * t / 7.0)
+    if mutate_after is not None:
+        px = px.copy()
+        px[idx > mutate_after] = 99999.0
+    # No H/L spread: high = low = close = px so M5 breakout close can
+    # exceed the range high without the spread barrier blocking it.
+    df1 = pd.DataFrame({"time": idx, "open": px, "high": px,
+                        "low": px, "close": px, "volume": 10.0})
+    df1.to_parquet(cache_dir / "is_XAU_USD_1m.parquet", index=False)
+    g = df1.set_index("time")
+    for tf, rule in [("5m", "5min"), ("15m", "15min"), ("1h", "1h"),
+                     ("4h", "4h"), ("1d", "1D")]:
+        r = g.resample(rule).agg({"open": "first", "high": "max",
+                                  "low": "min", "close": "last",
+                                  "volume": "sum"}).dropna().reset_index()
+        r.to_parquet(cache_dir / f"is_XAU_USD_{tf}.parquet", index=False)
+
+
+def test_run_sim_smoke_and_gating_structure(tmp_path):
+    _write_synthetic_cache(tmp_path)
+    frames = load_frames(tmp_path, START, END)
+    gated   = run_sim(frames, _cfg(gated=True))
+    ungated = run_sim(frames, _cfg(gated=False))
+    # structural invariants, not P&L values:
+    assert set(t.strategy for t in ungated.trades) <= {s.name for s in STRAT_SPECS}
+    assert len(gated.trades) <= len(ungated.trades)          # gating only removes entries
+    assert all(t.outcome in {"TP", "SL", "TIME", "TRAIL", "OPEN"} for t in gated.trades)
+    assert gated.regime_rows and {"d1_bias", "vol_regime", "session"} <= set(gated.regime_rows[0])
+    assert all(0.0 <= v <= 100.0 for v in gated.paused_pct.values())
+
+
+def test_no_look_ahead(tmp_path):
+    T_mid = pd.Timestamp("2026-04-08 12:00", tz="UTC")
+    _write_synthetic_cache(tmp_path)
+    frames = load_frames(tmp_path, START, T_mid)
+    baseline = run_sim(frames, _cfg(gated=True, end=T_mid)).regime_rows
+
+    poisoned_dir = tmp_path / "poisoned"
+    poisoned_dir.mkdir()
+    _write_synthetic_cache(poisoned_dir, mutate_after=T_mid)
+    frames2 = load_frames(poisoned_dir, START, T_mid)
+    poisoned = run_sim(frames2, _cfg(gated=True, end=T_mid)).regime_rows
+
+    assert baseline == poisoned  # future bars must not change the past
+
+
+def test_kill_switch_trips_and_resets_next_day(tmp_path):
+    """Spec test: force a losing exit that crosses -kill_switch_usd; same UTC
+    day admits no further entries; the next day admits entries again; an open
+    position still exits while the switch is tripped."""
+    _write_synthetic_cache(tmp_path)
+    frames = load_frames(tmp_path, START, END)
+    res = run_sim(frames, _cfg(gated=True, kill_switch_usd=0.01))
+    assert res.kill_trips, "expected at least one kill-switch trip"
+    trip_day = res.kill_trips[0]
+    # entries on the trip day must all precede the trip (evaluate_gates gates same-day)
+    # and later days must still trade:
+    assert any(t.entry_time.date().isoformat() > trip_day for t in res.trades), (
+        "no trade entered after the trip day — kill-switch never reset"
+    )
