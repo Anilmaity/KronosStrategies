@@ -10,6 +10,10 @@ from __future__ import annotations
 
 import os
 import sys
+import pytest
+import pandas as pd
+from datetime import datetime, timezone
+from types import SimpleNamespace
 
 _STRAT_DIR = os.path.normpath(
     os.path.join(os.path.dirname(__file__), "..", "strategies")
@@ -18,9 +22,6 @@ if _STRAT_DIR not in sys.path:
     sys.path.insert(0, _STRAT_DIR)
 
 # ── Task 2 ────────────────────────────────────────────────────────────────────
-
-from datetime import datetime, timezone
-from types import SimpleNamespace
 
 from backtest.manager_sim_engine import (
     GuardState, SimConfig, evaluate_gates, STRAT_SPECS,
@@ -81,9 +82,6 @@ def test_ungated_mode_all_true_despite_guards():
 
 # ── Task 3 ────────────────────────────────────────────────────────────────────
 
-import pytest
-import pandas as pd
-
 from backtest.manager_sim_engine import open_position, step_position
 from backtest_strategies.base import Signal
 
@@ -95,6 +93,12 @@ def _bar(ts, o, h, l, c):
 
 def _buy_sig(entry=100.0, sl=98.0, tp=103.0, hold=None, trailing=False):
     return Signal(side="BUY", entry_price=entry, stop_loss=sl,
+                  take_profit=tp, reason="t", max_hold_min=hold,
+                  trailing=trailing)
+
+
+def _sell_sig(entry=100.0, sl=102.0, tp=97.0, hold=None, trailing=False):
+    return Signal(side="SELL", entry_price=entry, stop_loss=sl,
                   take_profit=tp, reason="t", max_hold_min=hold,
                   trailing=trailing)
 
@@ -154,3 +158,41 @@ def test_trailing_exit_outcome_is_trail():
     _, rec = step_position(pos, _bar("2026-04-06 08:02", 104.8, 104.9, 103.0, 103.2),
                            datetime(2026, 4, 6, 8, 2, tzinfo=UTC), cfg)
     assert rec is not None and rec.outcome == "TRAIL"
+
+
+def test_sell_sl_touch_exits_conservatively():
+    cfg = _cfg()
+    pos = open_position(_sell_sig(), "X", datetime(2026, 4, 6, 8, 0, tzinfo=UTC), cfg)
+    pos2, rec = step_position(pos, _bar("2026-04-06 08:01", 100, 102.5, 99.5, 101),
+                              datetime(2026, 4, 6, 8, 1, tzinfo=UTC), cfg)
+    assert pos2 is None and rec.outcome == "SL"
+    assert rec.exit_px == pytest.approx(102.0 + 0.25)
+
+
+def test_sell_tp_exit_cost_arithmetic():
+    cfg = _cfg()
+    pos = open_position(_sell_sig(), "X", datetime(2026, 4, 6, 8, 0, tzinfo=UTC), cfg)
+    _, rec = step_position(pos, _bar("2026-04-06 08:01", 99, 99.5, 96.8, 97.2),
+                           datetime(2026, 4, 6, 8, 1, tzinfo=UTC), cfg)
+    assert rec.outcome == "TP"
+    # entry_px = 100.0 - 0.25 = 99.75, exit_px = 97.0 + 0.25 = 97.25
+    # pnl_pts = 99.75 - 97.25 = 2.5 -> $5.00 at 0.02 lots
+    assert rec.pnl_pts == pytest.approx(2.5)
+    assert rec.pnl_usd == pytest.approx(5.0)
+
+
+def test_sell_trailing_ratchets_down_never_up():
+    cfg = _cfg()
+    pos = open_position(_sell_sig(sl=101.0, tp=70.0, trailing=True), "X",
+                        datetime(2026, 4, 6, 8, 0, tzinfo=UTC), cfg)
+    pos, rec = step_position(pos, _bar("2026-04-06 08:01", 100, 100.2, 98.0, 98.2),
+                             datetime(2026, 4, 6, 8, 1, tzinfo=UTC), cfg)
+    assert rec is None and pos.sl == pytest.approx(98.0 + pos.trail_dist)
+    tightened = pos.sl
+    pos, rec = step_position(pos, _bar("2026-04-06 08:02", 98.2, 98.8, 98.1, 98.5),
+                             datetime(2026, 4, 6, 8, 2, tzinfo=UTC), cfg)
+    assert rec is None and pos.sl == pytest.approx(tightened)  # never loosens
+    _, rec = step_position(pos, _bar("2026-04-06 08:03", 98.5, 99.6, 98.4, 99.4),
+                           datetime(2026, 4, 6, 8, 3, tzinfo=UTC), cfg)
+    assert rec is not None and rec.outcome == "TRAIL"
+    assert rec.exit_px == pytest.approx(tightened + 0.25)
