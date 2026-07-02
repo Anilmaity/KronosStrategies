@@ -77,3 +77,80 @@ def test_ungated_mode_all_true_despite_guards():
                        GuardState(kill_tripped_date="2026-04-06"), 99,
                        _cfg(gated=False))
     assert all(v[0] is True for v in g.values())
+
+
+# ── Task 3 ────────────────────────────────────────────────────────────────────
+
+import pytest
+import pandas as pd
+
+from backtest.manager_sim_engine import open_position, step_position
+from backtest_strategies.base import Signal
+
+
+def _bar(ts, o, h, l, c):
+    return pd.Series({"time": pd.Timestamp(ts, tz="UTC"),
+                      "open": o, "high": h, "low": l, "close": c})
+
+
+def _buy_sig(entry=100.0, sl=98.0, tp=103.0, hold=None, trailing=False):
+    return Signal(side="BUY", entry_price=entry, stop_loss=sl,
+                  take_profit=tp, reason="t", max_hold_min=hold,
+                  trailing=trailing)
+
+
+def test_entry_friction_applied():
+    pos = open_position(_buy_sig(), "X", datetime(2026, 4, 6, 8, 0, tzinfo=UTC), _cfg())
+    assert pos.entry_px == pytest.approx(100.25)   # 100 + 0.15 + 0.10
+
+
+def test_sl_beats_tp_when_bar_spans_both():
+    cfg = _cfg()
+    pos = open_position(_buy_sig(), "X", datetime(2026, 4, 6, 8, 0, tzinfo=UTC), cfg)
+    pos2, rec = step_position(pos, _bar("2026-04-06 08:01", 100, 104, 97, 102),
+                              datetime(2026, 4, 6, 8, 1, tzinfo=UTC), cfg)
+    assert pos2 is None and rec.outcome == "SL"
+    assert rec.exit_px == pytest.approx(98.0 - 0.25)
+
+
+def test_tp_exit_and_cost_arithmetic():
+    cfg = _cfg()
+    pos = open_position(_buy_sig(), "X", datetime(2026, 4, 6, 8, 0, tzinfo=UTC), cfg)
+    _, rec = step_position(pos, _bar("2026-04-06 08:01", 100, 103.5, 99.5, 103),
+                           datetime(2026, 4, 6, 8, 1, tzinfo=UTC), cfg)
+    assert rec.outcome == "TP"
+    # gross 3.0 pts minus 0.5 round trip = 2.5 pts -> $5.00 at 0.02 lots
+    assert rec.pnl_pts == pytest.approx(2.5)
+    assert rec.pnl_usd == pytest.approx(5.0)
+
+
+def test_time_exit():
+    cfg = _cfg()
+    pos = open_position(_buy_sig(hold=30), "X", datetime(2026, 4, 6, 8, 0, tzinfo=UTC), cfg)
+    _, rec = step_position(pos, _bar("2026-04-06 08:31", 100, 100.4, 99.8, 100.2),
+                           datetime(2026, 4, 6, 8, 31, tzinfo=UTC), cfg)
+    assert rec.outcome == "TIME"
+
+
+def test_trailing_ratchets_up_never_down():
+    cfg = _cfg()
+    pos = open_position(_buy_sig(sl=99.0, tp=130.0, trailing=True), "X",
+                        datetime(2026, 4, 6, 8, 0, tzinfo=UTC), cfg)
+    pos, rec = step_position(pos, _bar("2026-04-06 08:01", 100, 102, 100, 101.8),
+                             datetime(2026, 4, 6, 8, 1, tzinfo=UTC), cfg)
+    assert rec is None and pos.sl == pytest.approx(102 - pos.trail_dist)
+    tightened = pos.sl
+    pos, rec = step_position(pos, _bar("2026-04-06 08:02", 101.8, 101.9, 101.0, 101.5),
+                             datetime(2026, 4, 6, 8, 2, tzinfo=UTC), cfg)
+    assert rec is None and pos.sl == pytest.approx(tightened)  # never loosens
+
+
+def test_trailing_exit_outcome_is_trail():
+    cfg = _cfg()
+    pos = open_position(_buy_sig(sl=99.0, tp=130.0, trailing=True), "X",
+                        datetime(2026, 4, 6, 8, 0, tzinfo=UTC), cfg)
+    pos, _ = step_position(pos, _bar("2026-04-06 08:01", 100, 105, 100, 104.8),
+                           datetime(2026, 4, 6, 8, 1, tzinfo=UTC), cfg)
+    _, rec = step_position(pos, _bar("2026-04-06 08:02", 104.8, 104.9, 103.0, 103.2),
+                           datetime(2026, 4, 6, 8, 2, tzinfo=UTC), cfg)
+    assert rec is not None and rec.outcome == "TRAIL"
