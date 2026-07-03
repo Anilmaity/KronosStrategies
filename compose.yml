@@ -142,7 +142,7 @@ services:
       RESEARCH_DAYS_5M: "2"
       DRY_RUN: "true"              # PAPER until held-out backtest passes
 
-  # S96 — H1 Donchian(24) continuation, EMA20/50 agreement, chandelier trail.
+  # S96 — pure M5 EMA9/21 crossover momentum, chandelier trail (rewritten 2026-07-03).
   # H1 is resampled from the 15m window: needs >= (EMA50+Donchian24+2)*4 = 304
   # CLOSED 15m bars, so WIN/DAYS_15M are enlarged well past the defaults
   # (otherwise get_signal stays silent — same gotcha as challenge_xau).

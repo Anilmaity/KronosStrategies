@@ -89,9 +89,10 @@ ROSTER = [
         "momentum",
         "trending",
         {},
-        "H1 Donchian(24) close-through continuation with EMA20/50 agreement, "
-        "1.5xATR chandelier trailing stop, 2880-min backstop. Managed slot: "
-        "momentum (backtest_strategies/s96_h1_momentum.py).",
+        "Pure M5 EMA9/21 crossover momentum: cross event on the last closed "
+        "M5 bar, either direction, 1.5xATR(14,M5) chandelier trailing stop, "
+        "480-min backstop. Managed slot: momentum "
+        "(backtest_strategies/s96_h1_momentum.py).",
     ),
     (
         "S97 Snap Scalper M5 (paper)",
