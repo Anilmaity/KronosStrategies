@@ -22,23 +22,41 @@ For each trade:
                  = bar_close - friction  (SELL)
   friction       = 0.25 (spread/2=0.15 + slippage=0.10)
 
-Phantom guard:
-  BUY:  new_entry_px >= tp  → phantom (market already past TP)  → drop
-  SELL: new_entry_px <= tp  → phantom                            → drop
+Phantom guards (dropped trades are counted as phantoms, never booked):
+  Beyond-TP — all trades:
+    BUY:  new_entry_px >= tp  → phantom (market already past TP)  → drop
+    SELL: new_entry_px <= tp  → phantom                            → drop
+  Beyond-SL — NON-TRAILING trades only:
+    BUY:  new_entry_px <= sl  → phantom (market already through the stop;
+    SELL: new_entry_px >= sl     live is stopped out instantly)    → drop
+  Trailing strategies are exempt from the SL guard here because their CSV
+  ``sl`` column is the ratcheted trail stop at exit, not the signal stop.
+  (The engine's own guard in run_sim applies the SL guard to trailing
+  strategies too, using sig.stop_loss at detection time.)
 
-PnL recomputation for kept trades (all outcome types including TRAIL):
+PnL recomputation for kept trades:
   BUY:  new_pnl_pts = exit_px − new_entry_px
   SELL: new_pnl_pts = new_entry_px − exit_px
   new_pnl_usd = new_pnl_pts × lots × 100
 
-Note on TRAIL trades: the trailing SL exit price depends only on signal
-parameters (sl, trail_dist = abs(sig.entry_price - sig.stop_loss)) and market
-highs/lows — not on the actual fill price.  Therefore the correction is exact
-(not an approximation) even for TRAIL outcomes: exit_px is unchanged, and
-new_pnl is recomputed directly from the corrected entry and unchanged exit.
-The spec calls this an "approximation" because trail-stop seeds could
-theoretically shift, but the engine anchors trail_dist to the signal's
-(entry_price, stop_loss) pair, so exit_px is truly independent of fill.
+Limitation — TRAIL exits are NOT correctable from the CSVs
+----------------------------------------------------------
+The trailing exit path is fill-path-dependent: the trail seeds its
+high-water mark from the entry fill, so a different fill changes every
+subsequent ratchet, the exit bar, and the exit price.  This CSV-level
+correction replaces the entry but keeps the ORIGINAL exit, which is
+internally inconsistent for TRAIL trades — their "corrected" numbers must
+not be quoted as results.
+
+Concretely for S96 (the only trailing strategy in the roster): S96's
+sig.entry_price is the last CLOSED H1 bar's close — up to ~1 hour stale.
+On crash days (e.g. 2026-06-17: five consecutive BUYs at an identical stale
+4379.8 while the market traded ~4264–4272) the correction refills at market
+but keeps exits anchored to stops derived from the phantom entry,
+converting phantom losers into phantom winners.  The S96 corrected numbers
+are therefore artifacts in BOTH directions.  S96's real number requires an
+engine re-run with market fills + both phantom guards; this script cannot
+produce one.
 
 Output
 ------
@@ -72,6 +90,11 @@ USD_PER_PT_LIVE = LOTS_LIVE * 100.0   # $1.00 / pt
 
 PHANTOM_EXAMPLE = "2026-07-01T14:00:00+00:00"   # the canonical phantom trade
 
+# Strategies whose Signal.trailing=True.  Their CSV `sl` column is the
+# ratcheted trail stop at exit (not the signal stop), so the beyond-SL
+# phantom guard is not applicable at CSV level.
+TRAILING_STRATEGIES = {"KRONOS_S96_H1_MOMENTUM"}
+
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -96,8 +119,11 @@ def _correct_trades(df: pd.DataFrame, bar_closes: dict[str, float]) -> pd.DataFr
     """Apply fill-realism correction; returns augmented DataFrame.
 
     New columns: corrected_entry_px, new_pnl_pts, new_pnl_usd_sim,
-                 new_pnl_usd_live, bar_close, phantom.
+                 new_pnl_usd_live, bar_close, phantom, phantom_kind.
     Phantom rows have NaN pnl values.
+
+    phantom_kind: "TP" (fill beyond take-profit — all trades) or
+                  "SL" (fill beyond the signal stop — non-trailing only).
     """
     records = []
     for _, row in df.iterrows():
@@ -106,7 +132,9 @@ def _correct_trades(df: pd.DataFrame, bar_closes: dict[str, float]) -> pd.DataFr
 
         side = row["side"]
         tp   = float(row["tp"])
+        sl   = float(row["sl"])
         ep   = float(row["exit_px"])
+        is_trailing = str(row["strategy"]) in TRAILING_STRATEGIES
 
         if bar_close is None:
             # Fallback: keep original (should not happen for committed run)
@@ -115,21 +143,25 @@ def _correct_trades(df: pd.DataFrame, bar_closes: dict[str, float]) -> pd.DataFr
                        new_pnl_pts=float(row["pnl_pts"]),
                        new_pnl_usd_sim=float(row["pnl_usd"]),
                        new_pnl_usd_live=float(row["pnl_usd"]) / 2.0,
-                       bar_close=None, phantom=False)
+                       bar_close=None, phantom=False, phantom_kind="")
             records.append(rec)
             continue
 
         if side == "BUY":
             new_entry_px = bar_close + FRICTION
-            phantom      = new_entry_px >= tp
+            phantom_tp   = new_entry_px >= tp
+            phantom_sl   = (not is_trailing) and new_entry_px <= sl
         else:
             new_entry_px = bar_close - FRICTION
-            phantom      = new_entry_px <= tp
+            phantom_tp   = new_entry_px <= tp
+            phantom_sl   = (not is_trailing) and new_entry_px >= sl
+        phantom = phantom_tp or phantom_sl
 
         rec = row.to_dict()
         rec["bar_close"] = bar_close
         rec["corrected_entry_px"] = new_entry_px
         rec["phantom"] = phantom
+        rec["phantom_kind"] = "TP" if phantom_tp else ("SL" if phantom_sl else "")
 
         if phantom:
             rec["new_pnl_pts"]      = float("nan")
@@ -358,11 +390,15 @@ def build_report_section(res: dict) -> str:
 Original sim filled at `sig.entry_price ± 0.25 friction`.  Live entry_manager
 places MARKET orders — by the time the 1m bar closes the breakout has already
 run.  Corrected entry = detection-bar 1m close ± 0.25 friction.
-Phantom guard: if corrected entry already blows through TP (BUY: entry >= TP;
-SELL: entry <= TP) the trade is dropped entirely (live never opens it).
-Exit prices are unchanged for all outcome types; for TRAIL exits this is exact
-because trail_dist = abs(sig.entry_price - sig.stop_loss) is anchored to signal
-parameters, not the fill.
+Phantom guards (dropped trades, never booked): beyond-TP (BUY: entry >= TP;
+SELL: entry <= TP) for all trades, and beyond-SL (BUY: entry <= SL;
+SELL: entry >= SL) for non-trailing trades (trailing rows carry a ratcheted
+stop in the CSV, so the signal stop is not recoverable there).
+Exit prices are kept unchanged, which is NOT valid for TRAIL exits: the trail
+seeds from the entry fill, so TRAIL exits are fill-path-dependent and cannot
+be corrected from the CSVs.  S96 (trailing) corrected values are artifacts in
+both directions and must not be quoted as results — S96's real number requires
+an engine re-run with market fills + both phantom guards.
 
 **Phantom example — 2026-07-01T14:00 SESSION_BREAKOUT:**
 

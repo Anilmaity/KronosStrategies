@@ -541,13 +541,22 @@ def run_sim(
                         bar_close = float(bar["close"])
                         friction = cfg.entry_friction_pts
                         # Phantom guard: if the market fill has already blown
-                        # through TP the trade is un-tradeable live (live entry
-                        # manager would place a MARKET order and instantly close
-                        # or be rejected).  Skip it without booking any P&L.
+                        # through TP (instant close as a phantom winner) or
+                        # through SL (instant stop-out as a phantom loser) the
+                        # trade is un-tradeable live (live entry manager would
+                        # place a MARKET order that is immediately closed or
+                        # rejected).  Skip it without booking any P&L.
+                        # The SL side also applies to trailing strategies: the
+                        # trail seeds hwm from the entry fill, so a fill at or
+                        # beyond the signal stop is phantom-stopped immediately.
                         if sig.side == "BUY":
-                            phantom = bar_close + friction >= sig.take_profit
+                            fill = bar_close + friction
+                            phantom = (fill >= sig.take_profit
+                                       or fill <= sig.stop_loss)
                         else:
-                            phantom = bar_close - friction <= sig.take_profit
+                            fill = bar_close - friction
+                            phantom = (fill <= sig.take_profit
+                                       or fill >= sig.stop_loss)
                         if not phantom:
                             new_pos = open_position(
                                 sig, spec.name, now, cfg, fill_price=bar_close

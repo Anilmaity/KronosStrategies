@@ -214,7 +214,8 @@ END   = pd.Timestamp("2026-04-10 21:00", tz="UTC")
 _SHALLOW = {"1d": 40, "4h": 60, "1h": 80, "15m": 50, "5m": 20, "1m": 20}
 
 
-def _write_synthetic_cache(cache_dir, start=None, days=30, mutate_after=None):
+def _write_synthetic_cache(cache_dir, start=None, days=30, mutate_after=None,
+                           const_px=None):
     """Synthetic XAU tape: drift + fast sine (period 7 min, amplitude 3 pts)
     on a 1m grid (weekdays 00:00-20:59 UTC), resampled to other TFs and
     written in bars_cache format.
@@ -226,12 +227,18 @@ def _write_synthetic_cache(cache_dir, start=None, days=30, mutate_after=None):
 
     `mutate_after`: 1m bar timestamps strictly greater get close=99999
     (used by the no-look-ahead test to poison future bars).
+
+    `const_px`: when given, the whole tape is flat at that price (used by the
+    beyond-SL phantom-guard test to pin the detection-bar close).
     """
     start = start or (START - pd.Timedelta(days=days))
     idx = pd.date_range(start, END, freq="1min", tz="UTC")
     idx = idx[(idx.dayofweek < 5) & (idx.hour < 21)]
     t = np.arange(len(idx), dtype=float)
-    px = 3300 + 0.005 * t + 3.0 * np.sin(2 * np.pi * t / 7.0)
+    if const_px is not None:
+        px = np.full(len(idx), float(const_px))
+    else:
+        px = 3300 + 0.005 * t + 3.0 * np.sin(2 * np.pi * t / 7.0)
     if mutate_after is not None:
         px = px.copy()
         px[idx > mutate_after] = 99999.0
@@ -424,6 +431,54 @@ def test_phantom_beyond_tp_skipped_in_run_sim(tmp_path):
     result = run_sim(frames, _cfg(gated=False, slice_rows=_SHALLOW), specs=specs)
     assert len(result.trades) == 0, (
         f"Phantom entries must be skipped; got {len(result.trades)} trade(s)"
+    )
+
+
+def test_phantom_beyond_sl_skipped_in_run_sim(tmp_path, monkeypatch):
+    """run_sim must skip BUY entries where bar_close + friction <= sig.stop_loss.
+
+    BUY signal entry_price=100, sl=98, tp=110, but the detection bar closes at
+    97.5: the market fill (97.5 + 0.25 = 97.75) is already at/below the signal
+    stop, so live would be stopped out instantly — a phantom loser.  Mirror of
+    the beyond-TP guard (the guard also protects trailing strategies, whose
+    trail seeds hwm from the entry fill).  compute_regime is stubbed so the
+    flat tape cannot silently disable entries via a failed regime evaluation
+    (which would make the test pass vacuously).
+    """
+    from dataclasses import dataclass as _dc, field as _field
+    import backtest.manager_sim_engine as eng
+
+    _write_synthetic_cache(tmp_path, const_px=97.5)
+    frames = load_frames(tmp_path, START, END)
+
+    @_dc
+    class _FakeSnap:
+        d1_bias: str = "ranging"
+        h4_bias: str = "neutral"
+        vol_regime: str = "NORMAL"
+        trend_regime: str = "RANGING"
+        session: str = "LONDON"
+        market_closed: bool = False
+        details: dict = _field(default_factory=dict)
+
+    monkeypatch.setattr(eng, "compute_regime", lambda fs, now: _FakeSnap())
+
+    calls = {"n": 0}
+
+    def get_signal(w1m, w5m, w15m, now):
+        calls["n"] += 1
+        return Signal(side="BUY", entry_price=100.0, stop_loss=98.0,
+                      take_profit=110.0, reason="beyond-sl", max_hold_min=None,
+                      trailing=False)
+
+    probe = SimpleNamespace(NAME="BEYOND_SL", get_signal=get_signal)
+    specs = [eng.StratSpec("BEYOND_SL", probe, "trending", {})]
+    result = run_sim(frames, _cfg(gated=False, slice_rows=_SHALLOW), specs=specs)
+
+    assert calls["n"] > 0, "strategy was never consulted — test would be vacuous"
+    assert len(result.trades) == 0, (
+        f"Beyond-SL phantom entries must be skipped (no position, no trade); "
+        f"got {len(result.trades)} trade(s)"
     )
 
 
