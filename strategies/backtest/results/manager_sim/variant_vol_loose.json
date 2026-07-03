@@ -1,0 +1,15 @@
+{
+  "variant": "vol_loose",
+  "label": "vol(20/70/90)",
+  "trades": 102,
+  "net_usd": 66.34,
+  "max_dd_usd": 460.92,
+  "wr": 49.0196,
+  "pf": 1.051014,
+  "per_strategy_net": {
+    "KRONOS_S95_SESSION_BREAKOUT": 0.76,
+    "KRONOS_S96_H1_MOMENTUM": 89.29,
+    "KRONOS_S97_SNAP_SCALPER": -35.5,
+    "SESSION_BREAKOUT": 11.79
+  }
+}

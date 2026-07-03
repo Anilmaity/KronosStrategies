@@ -183,3 +183,50 @@ collect-mode grid rendering with cond-4 PASS and sign-flip FAIL cases.
 
 `pytest tests/test_manager_sim.py tests/test_manager_sim_report.py
 tests/test_manager_sim_variant.py -q` => 47 passed (37 existing + 10 new).
+
+---
+
+## Task 6c — corrected-engine base run + sensitivity grid (2026-07-03, final)
+
+### Corrected-engine base run (market fills, native — supersedes AMENDED CSV correction)
+
+`--mode both`, faithful slice depths, 2026-04-01 → 2026-07-02 (exclusive).
+Report: `results/manager_sim/summary_20260703_054509.md` (AUTHORITATIVE).
+
+| Mode | Trades | WR% | PF | Net USD | Max DD $ |
+|------|-------:|----:|---:|--------:|---------:|
+| Gated | 105 | 49.5 | 1.10 | +131.42 | 464.26 |
+| Ungated | 254 | 42.5 | 1.03 | +109.58 | 794.46 |
+
+Engine-native gated net matches the CSV-corrected estimate exactly
+(+$131.42), validating the correction methodology for gated. Ungated,
+however, is +$109.58 native vs the CSV correction's negative estimate —
+the path-dependent TRAIL/kill-switch terms the CSV pass could not fix
+were material on the ungated book. S96 real numbers (the open question):
+gated +$89.29 (10 trades), ungated +$208.22 (81 trades) — gating pauses
+S96 98.2% of the time and REDUCES its return; its value in the gated book
+is DD control, not P&L. One ungated kill-switch trip (2026-05-07).
+
+### Sensitivity grid (6 parallel per-process variants, manager_sim_variant.py)
+
+Artifact: `results/manager_sim/sensitivity_parallel.md` + `variant_*.json`.
+Base delta (G-U) +$21.84. Variant nets: er_loose +$136.78, er_tight
++$192.53, vol_loose +$66.34, vol_tight +$172.73, win_minus30 +$23.03,
+win_plus30 +$71.57. Variant deltas (V-U): 3 of 6 NEGATIVE (vol_loose
+-$43.24, win_minus30 -$86.55, win_plus30 -$38.01).
+
+**Rubric condition 4: FAIL.** No return plateau (+$23…+$193 around +$131).
+Max DD is a plateau: every variant $400-524 vs ungated $794.
+
+### Final verdict
+
+Rubric (all-4-conditions) says DO NOT recommend master ON for live.
+**RECOMMEND arm PAPER**: the return edge (+$22/3mo) is inside parameter
+noise, but the drawdown reduction (~40-50%) is robust across every
+perturbation. Re-evaluate after >=3 months of gated paper fills.
+
+### Post-run fix
+
+cp1252 UnicodeEncodeError in collect-mode `print(md)` (U+2212 in G−U/V−U
+labels) — replaced with ASCII, same class as 49dca3f. File output was
+unaffected (UTF-8); only the console echo crashed.

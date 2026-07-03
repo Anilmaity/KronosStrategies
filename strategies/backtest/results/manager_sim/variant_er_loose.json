@@ -1,0 +1,15 @@
+{
+  "variant": "er_loose",
+  "label": "er(0.30/0.15)",
+  "trades": 107,
+  "net_usd": 136.78,
+  "max_dd_usd": 523.9,
+  "wr": 49.5327,
+  "pf": 1.101814,
+  "per_strategy_net": {
+    "KRONOS_S95_SESSION_BREAKOUT": 0.76,
+    "KRONOS_S96_H1_MOMENTUM": 94.65,
+    "KRONOS_S97_SNAP_SCALPER": -43.32,
+    "SESSION_BREAKOUT": 84.69
+  }
+}

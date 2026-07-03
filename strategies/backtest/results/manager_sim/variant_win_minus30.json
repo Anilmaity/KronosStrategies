@@ -1,0 +1,15 @@
+{
+  "variant": "win_minus30",
+  "label": "windows -30min",
+  "trades": 115,
+  "net_usd": 23.03,
+  "max_dd_usd": 494.97,
+  "wr": 47.8261,
+  "pf": 1.015869,
+  "per_strategy_net": {
+    "KRONOS_S95_SESSION_BREAKOUT": 0.76,
+    "KRONOS_S96_H1_MOMENTUM": 89.29,
+    "KRONOS_S97_SNAP_SCALPER": -43.32,
+    "SESSION_BREAKOUT": -23.7
+  }
+}

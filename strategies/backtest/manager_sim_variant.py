@@ -160,10 +160,10 @@ def collect(glob_pat: str, base_gated_csv, base_ungated_csv, out_md) -> str:
         + ".",
         "",
         f"Base combined net USD — gated: **{g_net:+.2f}**, "
-        f"ungated: **{u_net:+.2f}**, delta (G−U): **{delta:+.2f}**.",
+        f"ungated: **{u_net:+.2f}**, delta (G-U): **{delta:+.2f}**.",
         "",
         "| Variant | Label | Trades | Net USD | Delta vs Base Gated |"
-        " Variant Delta (V−U) | Max DD $ | WR% | PF |",
+        " Variant Delta (V-U) | Max DD $ | WR% | PF |",
         "|---------|-------|-------:|--------:|--------------------:|"
         "--------------------:|---------:|----:|---:|",
     ]
