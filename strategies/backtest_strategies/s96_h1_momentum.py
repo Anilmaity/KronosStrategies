@@ -1,27 +1,32 @@
 """
-Kronos S96 -- H1 Donchian(24) Momentum Continuation (chandelier trailing)
--------------------------------------------------------------------------
-Momentum child strategy for the Strategy Manager roster
-(docs/superpowers/specs/2026-07-02-strategy-manager-design.md §4).
+Kronos S96 -- pure M5 EMA9/21 crossover momentum (chandelier trailing)
+----------------------------------------------------------------------
+Momentum child strategy for the Strategy Manager roster. Logic rewritten
+in place 2026-07-03 (spec: docs/superpowers/specs/
+2026-07-03-s96-m5-ema-cross-design.md); the previous H1 Donchian(24)
+continuation lives in git history. NAME keeps the historical
+"KRONOS_S96_H1_MOMENTUM" identifier -- it is the strategy's DB identity
+(entry_manager variation map, deploy_manager roster, ManagedStrategy
+momentum slot, compose service env) and must not change.
 
-Design (zero discretion), evaluated on the last CLOSED H1 bar (resampled
-from the 15m runner window, dropping the still-forming bucket -- strictly
-causal, same pattern as kronos_challenge_xau):
+Design (zero discretion), evaluated on the last closed M5 bar of w5m
+(same window convention as s97_snap_scalper_m5):
 
-  bias  : EMA20 > EMA50 on H1 (long-only) / EMA20 < EMA50 (short-only)
-  entry : H1 close through the prior-24-bar Donchian high (long) / low
-          (short), in the bias direction -- close-through continuation.
-  stop  : hard initial stop = entry -/+ 1.5 x ATR(14, H1); trailing=True so
-          position_monitor ratchets a chandelier stop off the high/low-water
-          mark (trail distance = |entry - stop|). The TP emitted is only a
-          far broker backstop, never a realistic cap.
-  time  : max_hold_min = 2880 (2 days) backstop.
+  entry : EMA9/EMA21 crossover EVENT on M5 closes -- fast crosses above
+          slow on the last bar -> BUY; fast crosses below slow -> SELL.
+          Pure crossover: both directions, no HTF filter, no session
+          window. Chop protection is the Strategy Manager's TRENDING +
+          H4-bias gating policy, enforced by the manager, not here.
+  stop  : hard initial stop = entry -/+ 1.5 x ATR(14, M5); trailing=True
+          so position_monitor ratchets a chandelier stop off the
+          high/low-water mark (trail distance = |entry - stop|). The TP
+          emitted is only a far broker backstop, never a realistic cap.
+  time  : max_hold_min = 480 (8 hours) backstop.
 
-The live research_runner must pull enough 15m history to form >= 76 closed
-H1 bars (set RESEARCH_WIN_15M / RESEARCH_DAYS_15M accordingly).
-
-Manager gating policy (spec §4): run when trend_regime=TRENDING and
-h4_bias != neutral -- enforced by the manager, not here.
+The 2026-07-02 backtest verdict (H1 Donchian, test PF 1.445) does NOT
+apply to this logic. live_eligible was revoked with the rewrite
+(db/revoke_s96_live_eligibility.py); re-validate through the backtest
+harness before arming live.
 """
 from __future__ import annotations
 
@@ -32,98 +37,71 @@ import pandas as pd
 from backtest_strategies.base import Signal, StrategyConfig
 from backtest_strategies._kronos_indicators import ema, atr
 
-NAME = "KRONOS_S96_H1_MOMENTUM"
+NAME = "KRONOS_S96_H1_MOMENTUM"  # historical DB identity -- do not change
 CONFIG = StrategyConfig(
     name=NAME,
-    description="H1 Donchian(24) close-through continuation with EMA20/50 "
-                "agreement, 1.5xATR(14,H1) chandelier trailing stop, "
-                "2880-min time backstop.",
-    cooldown_s=3600,           # one H1 bar: at most one entry per closed bar
-    session_start_hour=None,   # momentum runs around the clock
+    description="Pure M5 EMA9/21 crossover: cross event on the last closed "
+                "M5 bar, either direction, 1.5xATR(14,M5) chandelier "
+                "trailing stop, 480-min time backstop.",
+    cooldown_s=300,            # one M5 bar; a cross is an event, this is a backstop
+    session_start_hour=None,   # runs around the clock -- the manager gates it
     session_end_hour=None,
     max_concurrent_positions=1,
 )
 
 # ── Knobs ─────────────────────────────────────────────────────────────────────
-_DONCH    = 24     # Donchian lookback (prior bars, excluding current)
-_EMA_FAST = 20
-_EMA_SLOW = 50
+_EMA_FAST = 9
+_EMA_SLOW = 21
 _ATR_N    = 14
 _K_ATR    = 1.5    # initial-stop distance == chandelier trail multiple
 _FAR_ATR  = 30.0   # broker placeholder TP distance (never realistically hit)
-_MAX_HOLD_MIN = 2880
+_MAX_HOLD_MIN = 480
 
-# Minimum closed H1 bars: EMA_SLOW stabilisation + Donchian lookback.
-_MIN_H1 = _EMA_SLOW + _DONCH + 2
-
-
-def _resample_h1(w15m: pd.DataFrame) -> pd.DataFrame:
-    """Resample a 15m window to H1 OHLC (UTC buckets), dropping the last
-    still-forming bucket so every returned bar is CLOSED."""
-    t = pd.to_datetime(w15m["time"], utc=True)
-    df = pd.DataFrame(
-        {
-            "open":  w15m["open"].astype(float).to_numpy(),
-            "high":  w15m["high"].astype(float).to_numpy(),
-            "low":   w15m["low"].astype(float).to_numpy(),
-            "close": w15m["close"].astype(float).to_numpy(),
-        },
-        index=t,
-    )
-    h1 = (
-        df.resample("1h", label="left", closed="left")
-        .agg({"open": "first", "high": "max", "low": "min", "close": "last"})
-        .dropna()
-    )
-    return h1.iloc[:-1] if len(h1) else h1
+# Minimum M5 bars: EMA21 + ATR14 stabilisation with headroom.
+_MIN_M5 = 120
 
 
-def get_signal(w1m, w5m, w15m: pd.DataFrame, now_utc: datetime) -> Signal | None:
-    if w15m is None or len(w15m) < _MIN_H1 * 4:  # 4 fifteen-min bars per H1
+def get_signal(w1m, w5m: pd.DataFrame, w15m, now_utc: datetime) -> Signal | None:
+    if w5m is None or len(w5m) < _MIN_M5:
         return None
 
-    h1 = _resample_h1(w15m)
-    if len(h1) < _MIN_H1:
-        return None
-
-    c = h1["close"].reset_index(drop=True)
-    h = h1["high"].reset_index(drop=True)
-    lo = h1["low"].reset_index(drop=True)
-
+    c = w5m["close"].astype(float).reset_index(drop=True)
     ef = ema(c, _EMA_FAST)
     es = ema(c, _EMA_SLOW)
-    a = atr(h1.reset_index(drop=True), _ATR_N)
+    a = atr(w5m.reset_index(drop=True), _ATR_N)
 
     i = len(c) - 1
     A = float(a.iloc[i])
     if not (A > 0):
         return None
-    if pd.isna(ef.iloc[i]) or pd.isna(es.iloc[i]):
+    if (pd.isna(ef.iloc[i]) or pd.isna(es.iloc[i])
+            or pd.isna(ef.iloc[i - 1]) or pd.isna(es.iloc[i - 1])):
         return None
 
-    donch_hi = float(h.iloc[i - _DONCH:i].max())
-    donch_lo = float(lo.iloc[i - _DONCH:i].min())
+    f_now, s_now = float(ef.iloc[i]), float(es.iloc[i])
+    f_prev, s_prev = float(ef.iloc[i - 1]), float(es.iloc[i - 1])
     close = float(c.iloc[i])
-    up = float(ef.iloc[i]) > float(es.iloc[i])
-    down = float(ef.iloc[i]) < float(es.iloc[i])
 
-    if close > donch_hi and up:
+    cross_up = f_prev <= s_prev and f_now > s_now
+    cross_dn = f_prev >= s_prev and f_now < s_now
+
+    if cross_up:
         return Signal(
             side="BUY",
             entry_price=close,
             stop_loss=round(close - _K_ATR * A, 2),
             take_profit=round(close + _FAR_ATR * A, 2),  # broker backstop only
-            reason="S96_H1_MOMO_LONG",
+            reason="S96_M5_CROSS_LONG",
             max_hold_min=_MAX_HOLD_MIN,
             trailing=True,
         )
-    if close < donch_lo and down:
+    if cross_dn:
         return Signal(
             side="SELL",
             entry_price=close,
             stop_loss=round(close + _K_ATR * A, 2),
             take_profit=round(close - _FAR_ATR * A, 2),  # broker backstop only
-            reason="S96_H1_MOMO_SHORT",
+            reason="S96_M5_CROSS_SHORT",
             max_hold_min=_MAX_HOLD_MIN,
             trailing=True,
         )

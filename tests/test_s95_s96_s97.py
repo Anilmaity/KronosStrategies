@@ -5,7 +5,7 @@ Unit tests for the three Strategy Manager v1 child strategies
 (docs/superpowers/specs/2026-07-02-strategy-manager-design.md §4):
 
   s95_session_breakout  — London/NY opening-range breakout (M5)
-  s96_h1_momentum       — H1 Donchian(24) continuation, chandelier trailing
+  s96_h1_momentum       — pure M5 EMA9/21 crossover, chandelier trailing
   s97_snap_scalper_m5   — M5 snap-fade with HTF structure bias (PAPER slot)
 
 All synthetic: hand-built M5/15m DataFrames, tz-naive UTC time column.
@@ -211,85 +211,114 @@ def test_s95_config_contract():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# S96 — H1 Donchian momentum continuation
+# S96 — pure M5 EMA9/21 crossover momentum
 # ══════════════════════════════════════════════════════════════════════════════
 
-_N_15M = 1400  # comfortably clears the 76-closed-H1-bar requirement
+def _m5_v_frame(direction: str, n_pre: int = 130, n_post: int = 60,
+                step: float = 0.3) -> pd.DataFrame:
+    """V-shaped M5 closes: `n_pre` bars trending against `direction`, then
+    `n_post` bars trending with it. For direction='up' that's a downtrend
+    followed by an uptrend, which forces EMA9 to cross above EMA21 somewhere
+    after the turn (mirror for 'down')."""
+    sign = 1.0 if direction == "up" else -1.0
+    incs = [-sign * step] * n_pre + [sign * step] * n_post
+    closes = 2000.0 + np.cumsum(incs)
+    rows = []
+    for k in range(len(closes)):
+        c = float(closes[k])
+        o = float(closes[k - 1]) if k else 2000.0
+        rows.append(dict(time=_DAY + pd.Timedelta(minutes=5 * k), open=o,
+                         high=max(o, c) + 0.2, low=min(o, c) - 0.2,
+                         close=c, volume=100.0))
+    return pd.DataFrame(rows)
 
 
-def test_s96_uptrend_breakout_emits_trailing_buy():
-    # Per-H1 drift (4 x 0.2 = 0.8) must exceed the intrabar range (0.5) so the
-    # H1 close actually clears the prior Donchian high.
-    w15m = _ramp_15m(_N_15M, start=2000.0, step_per_bar=0.2)
-    sig = s96.get_signal(None, None, w15m, _utc(12))
+def _m5_cross_window(direction: str) -> pd.DataFrame:
+    """Truncate the V-frame at the FIRST bar where EMA9 crosses EMA21 in
+    `direction` after the turn, so the cross event lands exactly on the
+    last bar of the returned window."""
+    df = _m5_v_frame(direction)
+    c = df["close"].astype(float)
+    ef = c.ewm(span=9, adjust=False, min_periods=9).mean()
+    es = c.ewm(span=21, adjust=False, min_periods=21).mean()
+    if direction == "up":
+        crossed = (ef > es) & (ef.shift(1) <= es.shift(1))
+    else:
+        crossed = (ef < es) & (ef.shift(1) >= es.shift(1))
+    crossed = crossed.fillna(False)
+    turn = 130  # n_pre
+    idx = [j for j in crossed[crossed].index if j > turn][0]
+    out = df.iloc[: idx + 1].reset_index(drop=True)
+    assert len(out) >= 120, "helper must clear the strategy warmup guard"
+    return out
+
+
+def test_s96_cross_up_emits_trailing_buy():
+    w5m = _m5_cross_window("up")
+    sig = s96.get_signal(None, w5m, None, _utc(12))
     assert sig is not None and isinstance(sig, Signal)
     assert sig.side == "BUY"
     assert sig.trailing is True
-    assert sig.max_hold_min == 2880
+    assert sig.max_hold_min == 480
     assert sig.stop_loss < sig.entry_price              # hard SL below entry
     assert sig.take_profit > sig.entry_price            # far backstop above
     assert (sig.entry_price - sig.stop_loss) > 0        # 1.5xATR trail distance
-    assert "S96" in sig.reason
+    assert sig.reason == "S96_M5_CROSS_LONG"
 
 
-def test_s96_downtrend_breakdown_emits_trailing_sell():
-    w15m = _ramp_15m(_N_15M, start=2000.0, step_per_bar=-0.2)
-    sig = s96.get_signal(None, None, w15m, _utc(12))
+def test_s96_cross_down_emits_trailing_sell():
+    w5m = _m5_cross_window("down")
+    sig = s96.get_signal(None, w5m, None, _utc(12))
     assert sig is not None
     assert sig.side == "SELL"
     assert sig.trailing is True
     assert sig.stop_loss > sig.entry_price              # SL above for a short
     assert sig.take_profit < sig.entry_price
+    assert sig.reason == "S96_M5_CROSS_SHORT"
 
 
-def test_s96_requires_ema_agreement():
-    # Long downtrend (EMA20 << EMA50), then one huge H1 spike that closes
-    # above the prior-24-bar Donchian high. Breakout without bias agreement
-    # -> no trade.
-    w15m = _ramp_15m(_N_15M - 8, start=2400.0, step_per_bar=-0.25)
-    last = w15m.iloc[-1]
-    px = float(last["close"])
-    t = last["time"]
-    rows = []
-    for k in range(8):                                  # two H1 buckets of spike
-        t = t + pd.Timedelta(minutes=15)
-        o = px
-        c = px + 6.5 if k < 4 else px                   # spike then flat
-        rows.append(dict(time=t, open=o, high=max(o, c) + 0.5,
-                         low=min(o, c) - 0.5, close=c, volume=100.0))
-        px = c
-    w15m = pd.concat([w15m, pd.DataFrame(rows)], ignore_index=True)
-    assert s96.get_signal(None, None, w15m, _utc(12)) is None
+def test_s96_cross_is_an_event_not_a_state():
+    # The FULL V-frame runs well past the cross: on its last bar EMA9 is
+    # already above EMA21 on both bars (state, no event) -> no signal.
+    w5m = _m5_v_frame("up")
+    sig = s96.get_signal(None, w5m, None, _utc(12))
+    assert sig is None
 
 
 def test_s96_flat_market_no_signal():
-    w15m = _ramp_15m(_N_15M, start=2000.0, step_per_bar=0.0)
-    assert s96.get_signal(None, None, w15m, _utc(12)) is None
+    # Constant closes: EMAs identical, no strict cross either way.
+    rows = []
+    for k in range(150):
+        rows.append(dict(time=_DAY + pd.Timedelta(minutes=5 * k), open=2000.0,
+                         high=2000.2, low=1999.8, close=2000.0, volume=100.0))
+    w5m = pd.DataFrame(rows)
+    assert s96.get_signal(None, w5m, None, _utc(12)) is None
 
 
 def test_s96_insufficient_history():
-    w15m = _ramp_15m(80, start=2000.0, step_per_bar=0.1)
-    assert s96.get_signal(None, None, w15m, _utc(12)) is None
+    short = _m5_v_frame("up").iloc[:100].reset_index(drop=True)  # < _MIN_M5
+    assert s96.get_signal(None, short, None, _utc(12)) is None
     assert s96.get_signal(None, None, None, _utc(12)) is None
 
 
-def test_s96_sl_distance_tracks_atr():
-    w15m = _ramp_15m(_N_15M, start=2000.0, step_per_bar=0.2, rng=0.5)
-    sig = s96.get_signal(None, None, w15m, _utc(12))
+def test_s96_sl_distance_tracks_m5_atr():
+    w5m = _m5_cross_window("up")
+    sig = s96.get_signal(None, w5m, None, _utc(12))
     assert sig is not None
-    # ATR(14, H1) of the ramp: each H1 bar has range ~ (4*0.2 + 2*0.5) = 1.8
-    # plus close-to-close gaps; SL distance must be 1.5x that ballpark and
-    # strictly positive, sane (not 100x price).
+    # Each synthetic M5 bar has range ~ (0.3 + 2*0.2) = 0.7 -> ATR(14) ~ 0.7,
+    # SL distance ~ 1.5 x 0.7 ~ 1.05. Ballpark-assert sane, not degenerate.
     dist = sig.entry_price - sig.stop_loss
-    assert 0.5 < dist < 10.0
+    assert 0.3 < dist < 3.0
+    # Far-TP backstop is ~30x ATR: at least 10x the SL distance.
+    assert (sig.take_profit - sig.entry_price) > 10 * dist
 
 
 def test_s96_config_contract():
-    assert s96.NAME == "KRONOS_S96_H1_MOMENTUM"
+    assert s96.NAME == "KRONOS_S96_H1_MOMENTUM"          # DB identity — unchanged
     assert s96.NAME in _VARIATION_STRATEGY_NAME
     cfg = s96.CONFIG
     assert cfg.name == s96.NAME
-    assert cfg.cooldown_s >= 3600                       # one H1 bar
+    assert cfg.cooldown_s == 300                         # one M5 bar backstop
     assert cfg.session_start_hour is None and cfg.session_end_hour is None
     assert cfg.max_concurrent_positions == 1
 
@@ -411,7 +440,7 @@ def test_all_signals_have_hard_sl_and_sane_geometry(monkeypatch):
     monkeypatch.setattr(s97, "_htf_bias", lambda w: "short")
     sigs = [
         s95.get_signal(None, _s95_window(7, 0, breakout_close=2004.8), None, _utc(7, 40)),
-        s96.get_signal(None, None, _ramp_15m(_N_15M, 2000.0, 0.2), _utc(12)),
+        s96.get_signal(None, _m5_cross_window("up"), None, _utc(12)),
         s97.get_signal(None, _m5_noise(last_two_increments=(1.5, 1.5)), None, _utc(5)),
     ]
     for sig in sigs:
