@@ -3,11 +3,14 @@ Deploy the Strategy Manager v1 roster into the live Kronos DB.
 
 Design spec: docs/superpowers/specs/2026-07-02-strategy-manager-design.md (§4, §5).
 
+The scalper slot is intentionally EMPTY: S98 ZScore MR M15 was pulled after its
+train-set validation FAILED (spec 2026-07-03), and no strategy replaced it. The
+quiet_mr policy stays registered but unused; the S98 module/tests remain in-tree.
+
 Inserts (idempotently):
-  - apis_strategy + apis_userstrategy rows for the three new child strategies
+  - apis_strategy + apis_userstrategy rows for the two new child strategies
         "S95 Session Breakout"        (backtest_strategies/s95_session_breakout.py)
         "S96 H1 Momentum"             (backtest_strategies/s96_h1_momentum.py)
-        "S98 ZScore MR M15 (paper)"   (backtest_strategies/s98_zscore_mr_m15.py)
     Names MUST match entry_manager._VARIATION_STRATEGY_NAME values.
     UserStrategy rows are seeded deployed=True but **is_active=False** — the
     Strategy Manager starts them when (and only when) the user arms them and
@@ -15,11 +18,11 @@ Inserts (idempotently):
   - apis_managedstrategy rows placing each UserStrategy under manager control:
         s95 -> slot=session  policy=session_vol   live_eligible=False
         s96 -> slot=momentum policy=trending      live_eligible=False
-        s98 -> slot=scalper  policy=quiet_mr      live_eligible=False (PAPER-only)
+        (scalper slot empty -- S98 failed validation, spec 2026-07-03)
         challenge_xau -> slot=trend policy=always_on live_eligible=True
           (only if a deployed UserStrategy for "Challenge XAU H4 Trend" exists;
            its is_active is NOT touched — it keeps trading exactly as today).
-    live_eligible stays False for the three new ones until the held-out
+    live_eligible stays False for the two new ones until the held-out
     backtest (spec §8) produces a positive test-set expectancy.
   - apis_managerconfig default row (master_mode=OFF, kill $150, max 3 open).
 
@@ -93,17 +96,6 @@ ROSTER = [
         "M5 bar, either direction, 1.5xATR(14,M5) chandelier trailing stop, "
         "480-min backstop. Managed slot: momentum "
         "(backtest_strategies/s96_h1_momentum.py).",
-    ),
-    (
-        "S98 ZScore MR M15 (paper)",
-        "KRONOS_S98_ZSCORE_MR",
-        "scalper",
-        "quiet_mr",
-        {"window": [3.0, 9.0], "vol_regimes": ["LOW", "NORMAL"]},
-        "M15 z-score mean reversion: enter on |z| crossing 2.0 (SMA50/std50), "
-        "TP at the mean, hard SL at z=3.5, ADF stationarity gate, 240-min "
-        "time exit, 03:00-09:00 UTC. PAPER-ONLY (spec 2026-07-03). "
-        "backtest_strategies/s98_zscore_mr_m15.py.",
     ),
 ]
 
@@ -297,7 +289,7 @@ def seed(sess) -> int:
                 us.is_active = False
                 print(f"[RETIRE] {variation}: UserStrategy {us.id} de-deployed")
 
-    # ── The three new children ────────────────────────────────────────────────
+    # ── The two new children ──────────────────────────────────────────────────
     for name, variation, slot, policy_key, policy_params, description in ROSTER:
         strat = _ensure_strategy(sess, cp, name, variation, description)
         us = _ensure_user_strategy(sess, strat, user_broker)

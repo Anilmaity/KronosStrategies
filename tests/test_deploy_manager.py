@@ -8,10 +8,11 @@ All offline: in-memory SQLite via create_all on the mirrored metadata
 (create_engine in shared.models is lazy — importing never connects).
 
 Covers:
-  * seed() creates the 3 child Strategy+UserStrategy pairs with
-    entry_quantity=0.01, deployed=True, is_active=False
+  * seed() creates the 2 child Strategy+UserStrategy pairs with
+    entry_quantity=0.01, deployed=True, is_active=False (scalper slot empty
+    since S98 failed train validation, spec 2026-07-03)
   * ManagedStrategy rows carry the spec slot/policy mapping, arm_mode=OFF,
-    live_eligible=False for all three new children
+    live_eligible=False for both new children
   * CHALLENGE_XAU adoption (slot=trend/always_on/live_eligible=True) when a
     deployed UserStrategy exists — and graceful skip when it doesn't
   * default ManagerConfig row (master OFF, -$150, max 3)
@@ -62,7 +63,6 @@ UserStrategy = deploy_manager.UserStrategy
 NEW_NAMES = [
     "S95 Session Breakout",
     "S96 H1 Momentum",
-    "S98 ZScore MR M15 (paper)",
 ]
 
 
@@ -148,7 +148,6 @@ def test_seed_managed_rows_match_spec(db):
     expected = {
         "S95 Session Breakout":        ("session",  "session_vol"),
         "S96 H1 Momentum":             ("momentum", "trending"),
-        "S98 ZScore MR M15 (paper)":   ("scalper",  "quiet_mr"),
     }
     for name, (slot, policy_key) in expected.items():
         strat = db.query(Strategy).filter_by(name=name).one()
@@ -213,12 +212,14 @@ def test_challenge_adopted_when_deployed(db):
 def test_challenge_skipped_when_absent(db):
     assert deploy_manager.seed(db) == 0
     db.commit()
-    # Only the three children got managed rows.
-    assert db.query(ManagedStrategy).count() == 3
+    # Only the two children got managed rows (scalper slot empty since S98
+    # failed validation, spec 2026-07-03).
+    assert db.query(ManagedStrategy).count() == 2
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Retire of a pulled roster strategy (S97 -> S98 swap)
+# Retire of a pulled roster strategy (S97 retired; scalper slot left empty
+# after S98 failed train validation, spec 2026-07-03)
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _add_retired_s97(sess) -> UserStrategy:
@@ -260,15 +261,15 @@ def test_retire_pulls_s97(db):
     db.refresh(s97_us)
     assert s97_us.deployed is False
     assert s97_us.is_active is False
-    # The manager roster now holds the three current children only.
-    assert db.query(ManagedStrategy).count() == 3
+    # The manager roster now holds the two current children only.
+    assert db.query(ManagedStrategy).count() == 2
 
 
 def test_retire_noop_when_absent(db):
     # No S97 rows present -> retire pass is a clean no-op, seed still succeeds.
     assert deploy_manager.seed(db) == 0
     db.commit()
-    assert db.query(ManagedStrategy).count() == 3
+    assert db.query(ManagedStrategy).count() == 2
 
 
 # ──────────────────────────────────────────────────────────────────────────────
