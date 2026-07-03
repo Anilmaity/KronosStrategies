@@ -62,7 +62,7 @@ UserStrategy = deploy_manager.UserStrategy
 NEW_NAMES = [
     "S95 Session Breakout",
     "S96 H1 Momentum",
-    "S97 Snap Scalper M5 (paper)",
+    "S98 ZScore MR M15 (paper)",
 ]
 
 
@@ -148,7 +148,7 @@ def test_seed_managed_rows_match_spec(db):
     expected = {
         "S95 Session Breakout":        ("session",  "session_vol"),
         "S96 H1 Momentum":             ("momentum", "trending"),
-        "S97 Snap Scalper M5 (paper)": ("scalper",  "quiet_fade"),
+        "S98 ZScore MR M15 (paper)":   ("scalper",  "quiet_mr"),
     }
     for name, (slot, policy_key) in expected.items():
         strat = db.query(Strategy).filter_by(name=name).one()
@@ -214,6 +214,60 @@ def test_challenge_skipped_when_absent(db):
     assert deploy_manager.seed(db) == 0
     db.commit()
     # Only the three children got managed rows.
+    assert db.query(ManagedStrategy).count() == 3
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Retire of a pulled roster strategy (S97 -> S98 swap)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _add_retired_s97(sess) -> UserStrategy:
+    """Seed a live-looking S97 (Strategy + deployed/active UserStrategy +
+    ManagedStrategy) so the retire pass has something to pull."""
+    cp = sess.query(CurrencyPair).filter_by(symbol="XAU_USD").one()
+    ub = sess.query(UserBroker).first()
+    strat = Strategy(
+        id=uuid.uuid4(),
+        name="S97 Snap Scalper M5 (paper)",
+        currencypair_id=cp.id,
+        entry_quantity=Decimal("0.01"),
+        json_data={"variation": "KRONOS_S97_SNAP_SCALPER"},
+    )
+    us = UserStrategy(
+        id=uuid.uuid4(), name="s97 managed", deployed=True, is_active=True,
+        strategy_id=strat.id, user_broker_id=ub.id,
+    )
+    m = ManagedStrategy(
+        id=uuid.uuid4(), user_strategy_id=us.id, slot="scalper",
+        policy_key="quiet_fade", arm_mode="OFF",
+    )
+    sess.add_all([strat, us, m])
+    sess.commit()
+    return us
+
+
+def test_retire_pulls_s97(db):
+    s97_us = _add_retired_s97(db)
+    assert deploy_manager.seed(db) == 0
+    db.commit()
+
+    # ManagedStrategy row for the retired strategy is deleted.
+    assert (
+        db.query(ManagedStrategy).filter_by(user_strategy_id=s97_us.id).first()
+        is None
+    ), "retired S97 ManagedStrategy must be removed"
+    # UserStrategy de-deployed and de-activated.
+    db.refresh(s97_us)
+    assert s97_us.deployed is False
+    assert s97_us.is_active is False
+    # The manager roster now holds the three current children only.
+    assert db.query(ManagedStrategy).count() == 3
+
+
+def test_retire_noop_when_absent(db):
+    # No S97 rows present -> retire pass is a clean no-op, seed still succeeds.
+    assert deploy_manager.seed(db) == 0
+    db.commit()
     assert db.query(ManagedStrategy).count() == 3
 
 

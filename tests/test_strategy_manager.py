@@ -210,7 +210,7 @@ def test_policy_quiet_fade(snap_kw, now, expected):
 
 def test_policy_registry_complete():
     assert set(policies.POLICIES) == {
-        "always_on", "session_vol", "trending", "quiet_fade"}
+        "always_on", "session_vol", "trending", "quiet_fade", "quiet_mr"}
 
 
 # ──────────────────────────────────────────────────────────────────────────────

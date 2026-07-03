@@ -17,7 +17,7 @@ from strategy_manager.regime.regime_engine import (
 )
 from shared.market_timing import is_market_closed_utc
 from backtest_strategies import s95_session_breakout, s96_h1_momentum, \
-    s97_snap_scalper_m5, kronos_session_breakout
+    s98_zscore_mr_m15, kronos_session_breakout
 from backtest_strategies.base import Signal
 
 
@@ -55,7 +55,7 @@ class StratSpec:
 STRAT_SPECS: list[StratSpec] = [
     StratSpec(s95_session_breakout.NAME, s95_session_breakout, "session_vol", {}),
     StratSpec(s96_h1_momentum.NAME, s96_h1_momentum, "trending", {}),
-    StratSpec(s97_snap_scalper_m5.NAME, s97_snap_scalper_m5, "quiet_fade", {}),
+    StratSpec(s98_zscore_mr_m15.NAME, s98_zscore_mr_m15, "quiet_mr", {}),
     StratSpec(kronos_session_breakout.NAME, kronos_session_breakout, "session_vol", {}),
 ]
 

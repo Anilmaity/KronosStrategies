@@ -7,7 +7,7 @@ Inserts (idempotently):
   - apis_strategy + apis_userstrategy rows for the three new child strategies
         "S95 Session Breakout"        (backtest_strategies/s95_session_breakout.py)
         "S96 H1 Momentum"             (backtest_strategies/s96_h1_momentum.py)
-        "S97 Snap Scalper M5 (paper)" (backtest_strategies/s97_snap_scalper_m5.py)
+        "S98 ZScore MR M15 (paper)"   (backtest_strategies/s98_zscore_mr_m15.py)
     Names MUST match entry_manager._VARIATION_STRATEGY_NAME values.
     UserStrategy rows are seeded deployed=True but **is_active=False** — the
     Strategy Manager starts them when (and only when) the user arms them and
@@ -15,7 +15,7 @@ Inserts (idempotently):
   - apis_managedstrategy rows placing each UserStrategy under manager control:
         s95 -> slot=session  policy=session_vol   live_eligible=False
         s96 -> slot=momentum policy=trending      live_eligible=False
-        s97 -> slot=scalper  policy=quiet_fade    live_eligible=False (PAPER-only v1)
+        s98 -> slot=scalper  policy=quiet_mr      live_eligible=False (PAPER-only)
         challenge_xau -> slot=trend policy=always_on live_eligible=True
           (only if a deployed UserStrategy for "Challenge XAU H4 Trend" exists;
            its is_active is NOT touched — it keeps trading exactly as today).
@@ -95,15 +95,24 @@ ROSTER = [
         "(backtest_strategies/s96_h1_momentum.py).",
     ),
     (
-        "S97 Snap Scalper M5 (paper)",
-        "KRONOS_S97_SNAP_SCALPER",
+        "S98 ZScore MR M15 (paper)",
+        "KRONOS_S98_ZSCORE_MR",
         "scalper",
-        "quiet_fade",
+        "quiet_mr",
         {"window": [3.0, 9.0], "vol_regimes": ["LOW", "NORMAL"]},
-        "M5 snap-fade toward the mean with M15-derived HTF ICT bias, hard SL, "
-        "30-min time exit, 03:00-09:00 UTC. PAPER-ONLY in v1 (doctrine: edge "
-        "unproven at honest costs). backtest_strategies/s97_snap_scalper_m5.py.",
+        "M15 z-score mean reversion: enter on |z| crossing 2.0 (SMA50/std50), "
+        "TP at the mean, hard SL at z=3.5, ADF stationarity gate, 240-min "
+        "time exit, 03:00-09:00 UTC. PAPER-ONLY (spec 2026-07-03). "
+        "backtest_strategies/s98_zscore_mr_m15.py.",
     ),
+]
+
+# Strategies pulled from the roster: their UserStrategy is de-deployed and the
+# ManagedStrategy row deleted so the manager never gates them again. Identified
+# by strategy name (this file's canonical lookup key; the variation tag lives
+# in Strategy.json_data, not a column). (name, variation) for readable prints.
+RETIRED_STRATEGIES = [
+    ("S97 Snap Scalper M5 (paper)", "KRONOS_S97_SNAP_SCALPER"),
 ]
 
 
@@ -261,6 +270,32 @@ def seed(sess) -> int:
     print(f"[OK]  Binding to UserBroker={user_broker.id} ({user_broker.status}) "
           f"-- verify this is the intended account.")
     print(f"[OK]  Fixed entry_quantity = {ENTRY_QTY} lot per child strategy")
+
+    # ── Retire strategies pulled from the roster ──────────────────────────────
+    # De-deploy the UserStrategy and delete its ManagedStrategy so the manager
+    # never gates it again. Lookup by name (this file's canonical key), then
+    # UserStrategy by strategy_id and ManagedStrategy by user_strategy_id --
+    # exactly the query style of _ensure_user_strategy / _ensure_managed.
+    for name, variation in RETIRED_STRATEGIES:
+        strat = sess.query(Strategy).filter_by(name=name).first()
+        if strat is None:
+            print(f"[RETIRE] {variation}: Strategy '{name}' not found (ok)")
+            continue
+        us_rows = sess.query(UserStrategy).filter_by(strategy_id=strat.id).all()
+        if not us_rows:
+            print(f"[RETIRE] {variation}: no UserStrategy found (ok)")
+            continue
+        for us in us_rows:
+            m = (sess.query(ManagedStrategy)
+                 .filter_by(user_strategy_id=us.id).first())
+            if m is not None:
+                sess.delete(m)
+                print(f"[RETIRE] {variation}: ManagedStrategy removed "
+                      f"(UserStrategy {us.id})")
+            if us.deployed or us.is_active:
+                us.deployed = False
+                us.is_active = False
+                print(f"[RETIRE] {variation}: UserStrategy {us.id} de-deployed")
 
     # ── The three new children ────────────────────────────────────────────────
     for name, variation, slot, policy_key, policy_params, description in ROSTER:

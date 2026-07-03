@@ -66,12 +66,17 @@ _VARIATION_STRATEGY_NAME = {
     "CHALLENGE_XAU":         "Challenge XAU H4 Trend",
     # Strategy Manager v1 children (backtest_strategies/s9N_*.py; design spec
     # docs/superpowers/specs/2026-07-02-strategy-manager-design.md §4).
-    # S97 is the PAPER-only scalper slot — its service runs with DRY_RUN=true.
+    # S97 (KRONOS_S97_SNAP_SCALPER) was retired from the roster 2026-07-03 and
+    # replaced in the scalper slot by S98 (M15 z-score MR). Its name mapping is
+    # kept for historical Position/Order rows; deploy_manager de-deploys its
+    # UserStrategy so no new S97 signals route. S98 is the PAPER-only scalper
+    # slot — its service runs with DRY_RUN=true.
         # Live M5 ORB deployed directly on the box (pre-manager lineage).
     "SESSION_BREAKOUT": "Session Breakout M5 ORB",
     "KRONOS_S95_SESSION_BREAKOUT": "S95 Session Breakout",
     "KRONOS_S96_H1_MOMENTUM":      "S96 H1 Momentum",
     "KRONOS_S97_SNAP_SCALPER":     "S97 Snap Scalper M5 (paper)",
+    "KRONOS_S98_ZSCORE_MR":        "S98 ZScore MR M15 (paper)",
 }
 
 

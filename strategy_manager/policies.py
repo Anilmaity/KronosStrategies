@@ -37,6 +37,10 @@ SESSION_VOL_REGIMES = ["NORMAL", "HIGH"]
 QUIET_FADE_WINDOW = [3.0, 9.0]
 QUIET_FADE_VOL_REGIMES = ["LOW", "NORMAL"]
 
+# quiet_mr (S98): 03:00-09:00 UTC, calm vol, NON-trending tape, bias-agnostic
+QUIET_MR_WINDOW = [3.0, 9.0]
+QUIET_MR_VOL_REGIMES = ["LOW", "NORMAL"]
+
 
 def _hour_float(now_utc: datetime) -> float:
     """UTC wall-clock as a fractional hour (06:45 -> 6.75)."""
@@ -104,9 +108,33 @@ def policy_quiet_fade(snap, params: dict, now_utc: datetime) -> tuple[bool, str]
     return False, "quiet_fade: " + "; ".join(why)
 
 
+def policy_quiet_mr(snap, params: dict, now_utc: datetime) -> tuple[bool, str]:
+    """Scalper slot (S98 z-score MR): quiet, non-trending Asia/early-London
+    tape. Bias-agnostic -- mean reversion trades both directions; the
+    efficiency-ratio trend gate replaces quiet_fade's d1-bias gate."""
+    window = params.get("window", QUIET_MR_WINDOW)
+    vol_ok_in = params.get("vol_regimes", QUIET_MR_VOL_REGIMES)
+    hf = _hour_float(now_utc)
+    in_win = float(window[0]) <= hf < float(window[1])
+    vol_ok = snap.vol_regime in vol_ok_in
+    not_trending = snap.trend_regime != "TRENDING"
+    if in_win and vol_ok and not_trending:
+        return True, (f"quiet_mr: {hf:.2f}h UTC, vol={snap.vol_regime}, "
+                      f"trend={snap.trend_regime}")
+    why = []
+    if not in_win:
+        why.append(f"{hf:.2f}h outside {window}")
+    if not vol_ok:
+        why.append(f"vol={snap.vol_regime} not in {vol_ok_in}")
+    if not not_trending:
+        why.append(f"trend={snap.trend_regime} is TRENDING")
+    return False, "quiet_mr: " + "; ".join(why)
+
+
 POLICIES = {
     "always_on": policy_always_on,
     "session_vol": policy_session_vol,
     "trending": policy_trending,
     "quiet_fade": policy_quiet_fade,
+    "quiet_mr": policy_quiet_mr,
 }

@@ -59,20 +59,26 @@ def test_max_concurrent_blocks_new_entries():
 def test_policies_route_correctly():
     # 08:00 UTC LONDON, NORMAL vol, TRENDING, bullish d1, long h4:
     # session_vol in window -> s95 & SESSION_BREAKOUT True;
-    # trending -> s96 True; quiet_fade (3-9h, LOW/NORMAL, directional) -> s97 True
+    # trending -> s96 True; quiet_mr (3-9h, LOW/NORMAL, NON-trending) is gated
+    # here because the tape is TRENDING -> s98 False.
     g = evaluate_gates(_snap(), datetime(2026, 4, 6, 8, 0, tzinfo=UTC),
                        GuardState(), 0, _cfg())
     assert g["KRONOS_S95_SESSION_BREAKOUT"][0] is True
     assert g["KRONOS_S96_H1_MOMENTUM"][0] is True
-    assert g["KRONOS_S97_SNAP_SCALPER"][0] is True
+    assert g["KRONOS_S98_ZSCORE_MR"][0] is False   # quiet_mr gated: TRENDING
     assert g["SESSION_BREAKOUT"][0] is True
+    # quiet_mr routes True on a quiet, non-trending tape in the same window.
+    g2 = evaluate_gates(_snap(trend="MIXED"),
+                        datetime(2026, 4, 6, 8, 0, tzinfo=UTC),
+                        GuardState(), 0, _cfg())
+    assert g2["KRONOS_S98_ZSCORE_MR"][0] is True
 
 def test_policy_pauses_outside_window():
-    # 11:00 UTC: outside session_vol windows and outside quiet_fade window
+    # 11:00 UTC: outside session_vol windows and outside quiet_mr window
     g = evaluate_gates(_snap(), datetime(2026, 4, 6, 11, 0, tzinfo=UTC),
                        GuardState(), 0, _cfg())
     assert g["KRONOS_S95_SESSION_BREAKOUT"][0] is False
-    assert g["KRONOS_S97_SNAP_SCALPER"][0] is False
+    assert g["KRONOS_S98_ZSCORE_MR"][0] is False
     assert g["KRONOS_S96_H1_MOMENTUM"][0] is True  # trending is time-free
 
 def test_ungated_mode_all_true_despite_guards():
