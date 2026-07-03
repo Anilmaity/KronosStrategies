@@ -1,0 +1,55 @@
+{
+  "total_score": 54,
+  "verdict": "Refine",
+  "dimensions": [
+    {
+      "name": "Sample Size",
+      "score": 15,
+      "max_score": 20
+    },
+    {
+      "name": "Expectancy",
+      "score": 6,
+      "max_score": 20
+    },
+    {
+      "name": "Risk Management",
+      "score": 13,
+      "max_score": 20
+    },
+    {
+      "name": "Robustness",
+      "score": 0,
+      "max_score": 20
+    },
+    {
+      "name": "Execution Realism",
+      "score": 20,
+      "max_score": 20
+    }
+  ],
+  "red_flags": [
+    {
+      "id": "over_optimized",
+      "severity": "medium",
+      "message": "8 parameters suggests over-optimization / curve-fitting risk."
+    },
+    {
+      "id": "short_test_period",
+      "severity": "medium",
+      "message": "Only 1 years tested — may miss regime changes (minimum 5 recommended)."
+    }
+  ],
+  "profit_factor": 1.4933802580861406,
+  "expectancy": 0.10598400000000002,
+  "inputs": {
+    "total_trades": 109,
+    "win_rate": 53.2,
+    "avg_win_pct": 0.603,
+    "avg_loss_pct": 0.459,
+    "max_drawdown_pct": 6.43,
+    "years_tested": 1,
+    "num_parameters": 8,
+    "slippage_tested": true
+  }
+}
