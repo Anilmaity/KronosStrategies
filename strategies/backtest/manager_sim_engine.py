@@ -131,22 +131,32 @@ class TradeRecord:
 
 
 def open_position(sig: Signal, strat_name: str, now: datetime,
-                  cfg: SimConfig) -> SimPosition:
+                  cfg: SimConfig, fill_price: float | None = None) -> SimPosition:
     """Apply entry friction and initialise a SimPosition.
 
     Entry friction (spread/2 + slippage) worsens the fill:
-      BUY  → pays more  (entry_px = sig.entry_price + friction)
-      SELL → receives less (entry_px = sig.entry_price - friction)
+      BUY  → pays more  (entry_px = base + friction)
+      SELL → receives less (entry_px = base - friction)
 
-    SL/TP levels stay exactly as signalled.
+    Parameters
+    ----------
+    fill_price : float | None
+        When provided (market-realistic mode), the 1m bar close at detection
+        time is used as the fill basis: entry_px = fill_price ± friction.
+        When None, the original behaviour is preserved and sig.entry_price is
+        used as the fill basis.  Existing unit tests always call without
+        fill_price so they remain unaffected.
+
+    SL/TP levels stay exactly as signalled (unchanged by fill_price).
     trail_dist is fixed at |sig.entry_price - sig.stop_loss| and never changes.
     hwm starts at entry_px (the worst fill, used as the initial water mark).
     """
     friction = cfg.entry_friction_pts
+    base = fill_price if fill_price is not None else sig.entry_price
     if sig.side == "BUY":
-        entry_px = sig.entry_price + friction
+        entry_px = base + friction
     else:  # SELL
-        entry_px = sig.entry_price - friction
+        entry_px = base - friction
 
     return SimPosition(
         strategy=strat_name,
@@ -527,9 +537,23 @@ def run_sim(
                     except Exception:
                         sig = None
                     if sig is not None:
-                        new_pos = open_position(sig, spec.name, now, cfg)
-                        new_pos.gate_reason = reason
-                        open_positions[spec.name] = new_pos
+                        # Market-realistic fill: use current bar's close.
+                        bar_close = float(bar["close"])
+                        friction = cfg.entry_friction_pts
+                        # Phantom guard: if the market fill has already blown
+                        # through TP the trade is un-tradeable live (live entry
+                        # manager would place a MARKET order and instantly close
+                        # or be rejected).  Skip it without booking any P&L.
+                        if sig.side == "BUY":
+                            phantom = bar_close + friction >= sig.take_profit
+                        else:
+                            phantom = bar_close - friction <= sig.take_profit
+                        if not phantom:
+                            new_pos = open_position(
+                                sig, spec.name, now, cfg, fill_price=bar_close
+                            )
+                            new_pos.gate_reason = reason
+                            open_positions[spec.name] = new_pos
 
     # ── Mark still-open positions as OPEN at sim end ──────────────────────────
     if i_end > i_start:

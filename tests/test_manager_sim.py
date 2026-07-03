@@ -375,6 +375,58 @@ def test_forming_bars_never_reach_regime_or_windows(tmp_path, monkeypatch):
     )
 
 
+# ── Task 6 — FIX A: market-realistic fills ────────────────────────────────────
+
+
+def test_fill_price_overrides_signal_entry():
+    """fill_price=102 on a BUY with sig.entry_price=100 → entry_px = 102.25.
+
+    Verifies that the fill_price parameter replaces sig.entry_price as the fill
+    basis while friction is still applied (102 + 0.25 = 102.25).
+    Existing tests call open_position without fill_price and remain unchanged.
+    """
+    cfg = _cfg()
+    pos = open_position(
+        _buy_sig(entry=100.0, sl=98.0, tp=110.0), "X",
+        datetime(2026, 4, 6, 8, 0, tzinfo=UTC), cfg,
+        fill_price=102.0,
+    )
+    assert pos.entry_px == pytest.approx(102.25)   # 102 + friction(0.25)
+
+
+def test_phantom_beyond_tp_skipped_in_run_sim(tmp_path):
+    """run_sim must drop BUY entries where bar_close + friction >= tp.
+
+    Stubs a strategy that always returns a BUY signal with tp=100.1 (well below
+    bar prices of ~3300 on the synthetic tape).  Every candidate entry would have
+    close + 0.25 >= 100.1, so all are phantoms.  The result must contain zero
+    trades.  This mirrors the 2026-07-01T14:00 SESSION_BREAKOUT phantom where
+    bar 14:00 already closed at TP.
+    """
+    import backtest.manager_sim_engine as eng
+
+    _write_synthetic_cache(tmp_path)
+    frames = load_frames(tmp_path, START, END)
+
+    probe_module = SimpleNamespace(
+        NAME="PHANTOM_S",
+        get_signal=lambda w1m, w5m, w15m, now: Signal(
+            side="BUY",
+            entry_price=100.0,
+            stop_loss=99.0,
+            take_profit=100.1,   # always below synthetic bar close (~3300)
+            reason="phantom",
+            max_hold_min=None,
+            trailing=False,
+        ),
+    )
+    specs = [eng.StratSpec("PHANTOM_S", probe_module, "trending", {})]
+    result = run_sim(frames, _cfg(gated=False, slice_rows=_SHALLOW), specs=specs)
+    assert len(result.trades) == 0, (
+        f"Phantom entries must be skipped; got {len(result.trades)} trade(s)"
+    )
+
+
 def test_kill_switch_trips_and_resets_next_day(tmp_path):
     """Spec test: force a losing exit that crosses -kill_switch_usd; same UTC
     day admits no further entries; the next day admits entries again; an open
