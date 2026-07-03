@@ -665,6 +665,53 @@ _SESSION_WINDOWS_PLUS_30 = [
 ]  # [[7.25, 10.5], [13.75, 16.5]]
 
 
+# Canonical sensitivity variant definitions — single source of truth.
+#
+# Consumed by run_sensitivity below (serial, in-process) and by
+# backtest.manager_sim_variant (one variant per OS process, run in parallel).
+#
+#   kind="threshold": attrs are setattr'd onto
+#                     strategy_manager.regime.regime_engine for the run
+#                     (originals restored in a finally block).
+#   kind="windows":   session_vol specs get these windows via _shifted_specs.
+#
+# Insertion order == run order in run_sensitivity.
+SENSITIVITY_VARIANTS: dict[str, dict] = {
+    "vol_loose": {
+        "label": "vol(20/70/90)",
+        "kind": "threshold",
+        "attrs": {"VOL_PCTL_LOW": 20.0, "VOL_PCTL_HIGH": 70.0,
+                  "VOL_PCTL_EXTREME": 90.0},
+    },
+    "vol_tight": {
+        "label": "vol(30/80/97)",
+        "kind": "threshold",
+        "attrs": {"VOL_PCTL_LOW": 30.0, "VOL_PCTL_HIGH": 80.0,
+                  "VOL_PCTL_EXTREME": 97.0},
+    },
+    "er_loose": {
+        "label": "er(0.30/0.15)",
+        "kind": "threshold",
+        "attrs": {"ER_TRENDING": 0.30, "ER_RANGING": 0.15},
+    },
+    "er_tight": {
+        "label": "er(0.40/0.25)",
+        "kind": "threshold",
+        "attrs": {"ER_TRENDING": 0.40, "ER_RANGING": 0.25},
+    },
+    "win_minus30": {
+        "label": "windows -30min",
+        "kind": "windows",
+        "windows": _SESSION_WINDOWS_MINUS_30,
+    },
+    "win_plus30": {
+        "label": "windows +30min",
+        "kind": "windows",
+        "windows": _SESSION_WINDOWS_PLUS_30,
+    },
+}
+
+
 def _shifted_specs(windows: list[list[float]]) -> list[StratSpec]:
     """Return STRAT_SPECS with session_vol strategies using the given windows.
 
@@ -728,49 +775,24 @@ def run_sensitivity(
 
     results: list[dict] = []
 
-    # ── Threshold variants ────────────────────────────────────────────────────
-    threshold_variants: list[tuple[str, dict]] = [
-        ("vol(20/70/90)", {
-            "VOL_PCTL_LOW": 20.0,
-            "VOL_PCTL_HIGH": 70.0,
-            "VOL_PCTL_EXTREME": 90.0,
-        }),
-        ("vol(30/80/97)", {
-            "VOL_PCTL_LOW": 30.0,
-            "VOL_PCTL_HIGH": 80.0,
-            "VOL_PCTL_EXTREME": 97.0,
-        }),
-        ("er(0.30/0.15)", {
-            "ER_TRENDING": 0.30,
-            "ER_RANGING": 0.15,
-        }),
-        ("er(0.40/0.25)", {
-            "ER_TRENDING": 0.40,
-            "ER_RANGING": 0.25,
-        }),
-    ]
-
-    for variant_name, attrs in threshold_variants:
-        originals = {k: getattr(rem, k) for k in attrs}
-        try:
-            for k, v in attrs.items():
-                setattr(rem, k, v)
-            res = run_sim(frames, gated_cfg)
-        finally:
-            for k, v in originals.items():
-                setattr(rem, k, v)
-        row = {"variant": variant_name}
-        row.update(_sensitivity_stats(res.trades))
-        results.append(row)
-
-    # ── Window variants ───────────────────────────────────────────────────────
-    for variant_name, windows in [
-        ("windows -30min", _SESSION_WINDOWS_MINUS_30),
-        ("windows +30min", _SESSION_WINDOWS_PLUS_30),
-    ]:
-        specs = _shifted_specs(windows)
-        res = run_sim(frames, gated_cfg, specs=specs)
-        row = {"variant": variant_name}
+    # Definitions live in module-level SENSITIVITY_VARIANTS (single source of
+    # truth, shared with backtest.manager_sim_variant). Insertion order gives
+    # the historical run order: 4 threshold variants, then 2 window variants.
+    for vdef in SENSITIVITY_VARIANTS.values():
+        if vdef["kind"] == "threshold":
+            attrs = vdef["attrs"]
+            originals = {k: getattr(rem, k) for k in attrs}
+            try:
+                for k, v in attrs.items():
+                    setattr(rem, k, v)
+                res = run_sim(frames, gated_cfg)
+            finally:
+                for k, v in originals.items():
+                    setattr(rem, k, v)
+        else:  # kind == "windows"
+            specs = _shifted_specs(vdef["windows"])
+            res = run_sim(frames, gated_cfg, specs=specs)
+        row = {"variant": vdef["label"]}
         row.update(_sensitivity_stats(res.trades))
         results.append(row)
 
