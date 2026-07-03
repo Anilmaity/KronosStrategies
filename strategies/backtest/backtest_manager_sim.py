@@ -115,7 +115,7 @@ def _write_outputs(result, prefix: str, output_dir: Path) -> None:
 
     # Regime snapshots — JSONL (one object per line)
     regime_path = output_dir / f"{prefix}_regime.jsonl"
-    with open(regime_path, "w") as fh:
+    with open(regime_path, "w", encoding="utf-8") as fh:
         for row in result.regime_rows:
             fh.write(json.dumps(row) + "\n")
     print(f"    regime rows ({len(result.regime_rows):,}) -> {regime_path}")
@@ -138,7 +138,7 @@ def _write_outputs(result, prefix: str, output_dir: Path) -> None:
             "outcomes": outcomes,
         })
     summary_path = output_dir / f"{prefix}_summary.json"
-    with open(summary_path, "w") as fh:
+    with open(summary_path, "w", encoding="utf-8") as fh:
         json.dump(summary, fh, indent=2)
     print(f"    summary -> {summary_path}")
 
@@ -150,7 +150,7 @@ def main() -> None:
     start = datetime.fromisoformat(args.start).replace(tzinfo=timezone.utc)
     end   = datetime.fromisoformat(args.end).replace(tzinfo=timezone.utc)
 
-    print(f"Loading frames from {cache_dir} …")
+    print(f"Loading frames from {cache_dir} ...")
     frames = load_frames(cache_dir, start, end)
     print(f"  1m bars in window: {len(frames['1m']):,}")
 
@@ -161,7 +161,7 @@ def main() -> None:
     for mode_str in modes:
         gated = mode_str == "gated"
         cfg   = _make_cfg(args, gated)
-        print(f"\nRunning {mode_str} …")
+        print(f"\nRunning {mode_str} ...")
         result = run_sim(frames, cfg)
         results[mode_str] = result
 
@@ -205,7 +205,7 @@ def main() -> None:
             out_dir=MANAGER_SIM_DIR,
             sensitivity=sensitivity,
         )
-        print(f"\nDecision report  → {report_path}")
+        print(f"\nDecision report  -> {report_path}")
 
     print("\nDone.")
 
