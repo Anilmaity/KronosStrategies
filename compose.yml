@@ -120,11 +120,12 @@ services:
   # Strategy Manager v1 child strategies (design spec 2026-07-02 §4).
   # Each is a research_runner service over backtest_strategies/s9N_*.py.
   # DB rows first:  python -m db.deploy_manager --commit   (from strategies/)
-  # ALL THREE ship with DRY_RUN=true (PAPER): full pipeline — DB rows, audit —
+  # BOTH ship with DRY_RUN=true (PAPER): full pipeline — DB rows, audit —
   # but NO broker orders. Additionally their UserStrategy rows are seeded
   # is_active=False, so nothing fires until the user arms them in the manager
-  # tab AND (for S95/S96) DRY_RUN is lifted after a positive held-out backtest.
-  # S97 (scalper slot) stays DRY_RUN=true permanently in v1 — doctrine.
+  # tab AND DRY_RUN is lifted after a positive held-out backtest.
+  # The scalper slot is empty: S97 was retired 2026-07-03 and its intended
+  # replacement S98 failed train validation (spec 2026-07-03) — no service.
   # ───────────────────────────────────────────────────────────────────────────
 
   # S95 — London/NY 15-min opening-range breakout on M5 close. Works off the
