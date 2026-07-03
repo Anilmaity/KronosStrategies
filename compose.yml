@@ -143,9 +143,9 @@ services:
       DRY_RUN: "true"              # PAPER until held-out backtest passes
 
   # S96 — pure M5 EMA9/21 crossover momentum, chandelier trail (rewritten 2026-07-03).
-  # H1 is resampled from the 15m window: needs >= (EMA50+Donchian24+2)*4 = 304
-  # CLOSED 15m bars, so WIN/DAYS_15M are enlarged well past the defaults
-  # (otherwise get_signal stays silent — same gotcha as challenge_xau).
+  # Works off the 5m window only: needs >= _MIN_M5 = 120 CLOSED M5 bars, so
+  # WIN/DAYS_5M are pinned past the 80-bar runner default (otherwise
+  # get_signal stays silent — same gotcha as challenge_xau).
   s96_h1_momentum:
     build: ./strategies
     restart: always
@@ -155,8 +155,8 @@ services:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
       RESEARCH_STRATEGY: s96_h1_momentum
-      RESEARCH_WIN_15M: "600"      # >= 304 needed for 76 closed H1 bars
-      RESEARCH_DAYS_15M: "10"      # cover ~1.5 trading weeks incl. weekend gaps
+      RESEARCH_WIN_5M: "160"       # >= 120 needed for EMA21 + ATR14 warmup
+      RESEARCH_DAYS_5M: "3"        # refill promptly after weekend gaps
       DRY_RUN: "true"              # PAPER until held-out backtest passes
 
   # S97 — M5 snap-fade with M15-derived HTF (H4/H1) ICT bias. PAPER-ONLY in v1

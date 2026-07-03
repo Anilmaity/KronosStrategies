@@ -24,8 +24,8 @@ Design (zero discretion), evaluated on the last closed M5 bar of w5m
   time  : max_hold_min = 480 (8 hours) backstop.
 
 The 2026-07-02 backtest verdict (H1 Donchian, test PF 1.445) does NOT
-apply to this logic. live_eligible was revoked with the rewrite
-(db/revoke_s96_live_eligibility.py); re-validate through the backtest
+apply to this logic. live_eligible is revoked at deploy time via
+db/revoke_s96_live_eligibility.py; re-validate through the backtest
 harness before arming live.
 """
 from __future__ import annotations

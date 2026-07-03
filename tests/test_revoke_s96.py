@@ -143,3 +143,9 @@ def test_revoke_missing_strategy_is_graceful():
     finally:
         sess.close()
         engine.dispose()
+
+
+def test_new_description_matches_roster():
+    # The revoke script duplicates the seeder's S96 description; pin them.
+    entry = next(r for r in deploy_manager.ROSTER if r[0] == S96_NAME)
+    assert revoke_mod.NEW_DESCRIPTION == entry[5]
