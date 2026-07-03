@@ -413,6 +413,10 @@ def run_sim(
     guard = GuardState()
     open_positions: dict[str, SimPosition] = {}  # strategy name -> SimPosition
 
+    # Live-fidelity cooldown (research_runner.py:133): no signal generation
+    # within CONFIG.cooldown_s of the strategy's last accepted signal.
+    last_entry: dict[str, datetime] = {}
+
     # Regime memoization cache: key = (last_d1_ts, last_h4_ts, last_h1_ts,
     # last_m15_ts, hour_utc).  m5/m1 excluded because they only appear in
     # snap.details and change every cadence tick (0% hit rate if included).
@@ -532,11 +536,20 @@ def run_sim(
             else:
                 gate_ok, reason = gates[spec.name]
                 if gate_ok:
+                    cd = getattr(getattr(spec.module, "CONFIG", None),
+                                 "cooldown_s", 0) or 0
+                    prev = last_entry.get(spec.name)
+                    if prev is not None and (now - prev).total_seconds() < cd:
+                        continue
                     try:
                         sig = spec.module.get_signal(w1m, w5m, w15m, now)
                     except Exception:
                         sig = None
                     if sig is not None:
+                        # Stamp on ANY accepted signal, phantom included:
+                        # live places the order (instantly closed for a
+                        # phantom) and stamps _last_entry_ts either way.
+                        last_entry[spec.name] = now
                         # Market-realistic fill: use current bar's close.
                         bar_close = float(bar["close"])
                         friction = cfg.entry_friction_pts
