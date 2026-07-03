@@ -94,20 +94,23 @@ def _s96_managed(sess) -> ManagedStrategy:
 
 
 def test_revoke_flips_live_eligible_false(db):
-    assert _s96_managed(db).live_eligible is True       # fixture precondition
+    m_before = _s96_managed(db)
+    assert m_before.live_eligible is True       # fixture precondition
+    arm_mode_before = m_before.arm_mode
+    desired_active_before = m_before.desired_active
     assert revoke_mod.revoke(db) == 0
     db.commit()
     m = _s96_managed(db)
     assert m.live_eligible is False
-    assert m.arm_mode == "OFF"                          # untouched
+    assert m.arm_mode == arm_mode_before        # untouched
+    assert m.desired_active == desired_active_before  # untouched
 
 
 def test_revoke_updates_strategy_description(db):
     assert revoke_mod.revoke(db) == 0
     db.commit()
     strat = db.query(Strategy).filter_by(name=S96_NAME).one()
-    assert "M5 EMA9/21 crossover" in strat.description
-    assert "Donchian" not in strat.description
+    assert strat.description == revoke_mod.NEW_DESCRIPTION
 
 
 def test_revoke_leaves_other_managed_rows_alone(db):
