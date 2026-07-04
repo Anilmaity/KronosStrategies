@@ -325,8 +325,8 @@ def client_for_broker(session, user_broker_id) -> "MetaApiClient | None":
     """Return a MetaApiClient for the broker's stored creds, or None (→ refuse)."""
     # Lazy imports to avoid DB engine initialisation during module load and
     # potential circular imports when running under pytest.
-    from strategies.shared.models import UserBroker
-    from strategies.shared.crypto import decrypt_token
+    from shared.models import UserBroker
+    from shared.crypto import decrypt_token
 
     broker = session.query(UserBroker).filter_by(id=user_broker_id).first()
     if broker is None:
