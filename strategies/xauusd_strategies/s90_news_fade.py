@@ -72,7 +72,10 @@ from typing import Optional
 
 import pandas as pd
 
-from strategies.research.exec_sim import Signal, simulate
+try:
+    from strategies.research.exec_sim import Signal, simulate
+except ImportError:  # in-container: WORKDIR /app == strategies/, package is `research`
+    from research.exec_sim import Signal, simulate
 
 log = logging.getLogger(__name__)
 
@@ -106,7 +109,10 @@ def get_high_impact_usd_events() -> list[pd.Timestamp]:
     Falls back to a hard-coded subset if import fails.
     """
     try:
-        from strategies.shared.event_gate import _build_event_table
+        try:
+            from strategies.shared.event_gate import _build_event_table
+        except ImportError:  # in-container: WORKDIR /app == strategies/, package is `shared`
+            from shared.event_gate import _build_event_table
         df = _build_event_table(2025, 2026)
         # Filter to importance=3 (FOMC, CPI, NFP, PCE)
         df = df[df["importance"] >= 3]
@@ -415,7 +421,10 @@ def detect_news_fade_signals(
 
 def run_backtest() -> dict:
     """Run the news-fade backtest on IS 5m bars and return metrics dict."""
-    from strategies.research.dataset import load_is_bars
+    try:
+        from strategies.research.dataset import load_is_bars
+    except ImportError:  # in-container layout
+        from research.dataset import load_is_bars
 
     print("[s90_news_fade] loading IS 5m bars...")
     bars = load_is_bars("5m")
@@ -468,7 +477,10 @@ def _empty_metrics() -> dict:
 
 
 def _compute_metrics(results, signals, bars, event_times) -> dict:
-    from strategies.research.exec_sim import TradeResult
+    try:
+        from strategies.research.exec_sim import TradeResult
+    except ImportError:  # in-container layout
+        from research.exec_sim import TradeResult
 
     n = len(results)
     r_multiples = [r.r_multiple for r in results]
