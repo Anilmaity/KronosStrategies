@@ -76,37 +76,58 @@ def main(commit: bool) -> int:
             return 1
         print(f"[OK]  CurrencyPair {SYMBOL} -> id={cp.id}")
 
-        ref_strat = (
-            sess.query(Strategy)
-            .filter_by(name=REFERENCE_STRATEGY_NAME, currencypair_id=cp.id)
-            .first()
-        )
-        if ref_strat is None:
-            print(f"FATAL: reference Strategy '{REFERENCE_STRATEGY_NAME}' not "
-                  f"found -- can't infer the UserBroker binding.")
-            return 1
-        ref_us = (
-            sess.query(UserStrategy)
-            .filter_by(strategy_id=ref_strat.id, deployed=True)
-            .first()
-        )
-        if ref_us is None:
-            print(f"[WARN] no deployed UserStrategy on '{REFERENCE_STRATEGY_NAME}', "
-                  f"falling back to any XAU_USD UserStrategy for the broker binding.")
-            ref_us = (
-                sess.query(UserStrategy)
-                .join(Strategy, UserStrategy.strategy_id == Strategy.id)
-                .filter(Strategy.currencypair_id == cp.id)
+        # Explicit, unambiguous binding: when CHALLENGE_XAU_USER_BROKER_ID is set
+        # we bind straight to that UserBroker (the verified FundingPips account)
+        # instead of inferring it from a reference strategy. Preferred for a live
+        # challenge deploy -- the reference-strategy fallback can resolve to the
+        # wrong account if the reference has no deployed UserStrategy.
+        override_ub_id = os.getenv("CHALLENGE_XAU_USER_BROKER_ID", "").strip()
+        if override_ub_id:
+            user_broker = sess.query(UserBroker).filter_by(id=override_ub_id).first()
+            if user_broker is None:
+                print(f"FATAL: CHALLENGE_XAU_USER_BROKER_ID={override_ub_id} not found.")
+                return 1
+            # Surface the human-readable label (mirror omits it) for verification.
+            from sqlalchemy import text as _text
+            row = sess.execute(
+                _text("SELECT label FROM apis_userbroker WHERE id = :i"),
+                {"i": str(user_broker.id)},
+            ).first()
+            label = row[0] if row else "?"
+            print(f"[OK]  Explicit UserBroker override -> id={user_broker.id} "
+                  f"label={label!r} status={user_broker.status}")
+        else:
+            ref_strat = (
+                sess.query(Strategy)
+                .filter_by(name=REFERENCE_STRATEGY_NAME, currencypair_id=cp.id)
                 .first()
             )
-        if ref_us is None:
-            print("FATAL: no UserStrategy on any XAU_USD strategy -- no UserBroker "
-                  "to bind to.")
-            return 1
-        user_broker = sess.query(UserBroker).filter_by(id=ref_us.user_broker_id).first()
-        if user_broker is None:
-            print(f"FATAL: UserBroker id={ref_us.user_broker_id} not found.")
-            return 1
+            if ref_strat is None:
+                print(f"FATAL: reference Strategy '{REFERENCE_STRATEGY_NAME}' not "
+                      f"found -- can't infer the UserBroker binding.")
+                return 1
+            ref_us = (
+                sess.query(UserStrategy)
+                .filter_by(strategy_id=ref_strat.id, deployed=True)
+                .first()
+            )
+            if ref_us is None:
+                print(f"[WARN] no deployed UserStrategy on '{REFERENCE_STRATEGY_NAME}', "
+                      f"falling back to any XAU_USD UserStrategy for the broker binding.")
+                ref_us = (
+                    sess.query(UserStrategy)
+                    .join(Strategy, UserStrategy.strategy_id == Strategy.id)
+                    .filter(Strategy.currencypair_id == cp.id)
+                    .first()
+                )
+            if ref_us is None:
+                print("FATAL: no UserStrategy on any XAU_USD strategy -- no UserBroker "
+                      "to bind to.")
+                return 1
+            user_broker = sess.query(UserBroker).filter_by(id=ref_us.user_broker_id).first()
+            if user_broker is None:
+                print(f"FATAL: UserBroker id={ref_us.user_broker_id} not found.")
+                return 1
         print(f"[OK]  Binding to UserBroker={user_broker.id} ({user_broker.status}) "
               f"-- verify this is the intended challenge account.")
         print(f"[OK]  Fixed entry_quantity = {ENTRY_QTY} lot")
