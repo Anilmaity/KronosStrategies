@@ -12,8 +12,15 @@ Design (zero discretion):
           detected on the newest CLOSED 1m bar (fires ~1 min after the touch,
           approximating the spec's stop-at-boundary fill); newest CLOSED M5
           bar kept as fallback probe for 1m-less offline replays
-  stop  : opposite OR side (static)   tp: entry +/- 1.5 * OR width (static)
+  stop  : entry -/+ 2.0 * OR width (static; wider than the opposite extreme)
+  tp    : entry +/- 0.8 * OR width (static)
   exit  : static broker SL/TP + 3h (36-bar) max-hold time-close
+
+Exit geometry re-optimized 2026-07-06 for the 70-80%-WR mandate
+(backtest/optimize_manager_strategies.py, 18mo M5, cost 0.45pt, train 2025 /
+test 2026H1): tp=0.8xOR sl=2.0xOR -> train WR 68.6% PF 1.20, test WR 72.3%
+PF 1.57; still profitable both halves at 0.80pt stress. The original
+tp=1.5xOR sl=1.0xOR (WR ~48%) lives in git history.
 """
 from __future__ import annotations
 
@@ -26,7 +33,8 @@ NAME = "SESSION_BREAKOUT"
 CONFIG = StrategyConfig(
     name=NAME,
     description="M5 opening-range breakout, EMA240 bias, sessions [1,7,12,13,14] UTC, "
-                "static OR-width stop + 1.5x-OR target. Port of strat_orb_biased.",
+                "static SL 2.0xOR / TP 0.8xOR (high-WR geometry, 2026-07-06). "
+                "Port of strat_orb_biased.",
     cooldown_s=1800,               # >= OR length; per-session guard does the fine-grained work
     session_start_hour=None,       # FIVE discrete hours -> gate inside get_signal
     session_end_hour=None,
@@ -34,13 +42,18 @@ CONFIG = StrategyConfig(
 )
 
 SESSION_HOURS = (1, 7, 12, 13, 14)
-_OR_MIN, _TP_MULT, _HOLD_BARS, _N_LONG, _SLOPE_LK = 30, 1.5, 36, 240, 48
+_OR_MIN, _TP_MULT, _SL_MULT, _HOLD_BARS, _N_LONG, _SLOPE_LK = 30, 0.8, 2.0, 36, 240, 48
 _MAX_HOLD_MIN = 180.0                     # 36 M5 bars = 3h time-stop
 USD_PER_POINT_PER_0_1_LOT = 10.0
 
 # One-entry-per-session guard: (utc_date, session_hour) keys that already fired.
 # Persists across research_runner ticks in the running process.
 _fired_sessions: set = set()
+
+
+def reset_state() -> None:
+    """Clear the per-session dedup memory (used by tests and the s95 delegate)."""
+    _fired_sessions.clear()
 
 
 def bias_series(closes: pd.Series, n_long: int = _N_LONG, slope_lk: int = _SLOPE_LK) -> list[int]:
@@ -150,12 +163,14 @@ def get_signal(w1m, w5m, w15m, now_utc) -> Signal | None:
         b = bias_series(bars["close"])[n - 1]
         if side == "BUY" and b == 1:
             _fired_sessions.add(key)
-            return Signal(side="BUY", entry_price=rng_hi, stop_loss=rng_lo,
+            return Signal(side="BUY", entry_price=rng_hi,
+                          stop_loss=round(rng_hi - _SL_MULT * rng, 2),
                           take_profit=round(rng_hi + _TP_MULT * rng, 2),
                           reason="SESSION_BREAKOUT_LONG", max_hold_min=_MAX_HOLD_MIN)
         if side == "SELL" and b == -1:
             _fired_sessions.add(key)
-            return Signal(side="SELL", entry_price=rng_lo, stop_loss=rng_hi,
+            return Signal(side="SELL", entry_price=rng_lo,
+                          stop_loss=round(rng_lo + _SL_MULT * rng, 2),
                           take_profit=round(rng_lo - _TP_MULT * rng, 2),
                           reason="SESSION_BREAKOUT_SHORT", max_hold_min=_MAX_HOLD_MIN)
     return None

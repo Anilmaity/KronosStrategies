@@ -82,9 +82,10 @@ ROSTER = [
         "session",
         "session_vol",
         {"windows": [[6.75, 10.0], [13.25, 16.0]], "vol_regimes": ["NORMAL", "HIGH"]},
-        "London/NY 15-min opening-range breakout on M5 close, structural SL "
-        "beyond opposite extreme (<=8 pts), TP 1.5R, 240-min time exit. "
-        "Managed slot: session breakout (backtest_strategies/s95_session_breakout.py).",
+        "Session ORB (delegate of kronos_session_breakout): 30-min OR, sessions "
+        "[1,7,12,13,14] UTC, EMA240 bias, SL 2.0xOR, TP 0.8xOR, 180-min time "
+        "exit. High-WR geometry validated 2026-07-06. Managed slot: session "
+        "breakout (backtest_strategies/s95_session_breakout.py).",
     ),
     (
         "S96 H1 Momentum",
@@ -92,9 +93,9 @@ ROSTER = [
         "momentum",
         "trending",
         {},
-        "Pure M5 EMA9/21 crossover momentum: cross event on the last closed "
-        "M5 bar, either direction, 1.5xATR(14,M5) chandelier trailing stop, "
-        "480-min backstop. Managed slot: momentum "
+        "H1 Donchian(24) continuation, EMA20/50 bias, static SL 3xATR(14,H1), "
+        "static TP 0.4R (1.2xATR). High-WR geometry validated 2026-07-06. "
+        "Managed slot: momentum "
         "(backtest_strategies/s96_h1_momentum.py).",
     ),
 ]

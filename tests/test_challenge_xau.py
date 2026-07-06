@@ -4,10 +4,10 @@ test_challenge_xau.py
 TDD tests for backtest_strategies.kronos_challenge_xau — the H4 Donchian
 trend-follow port of bot/challenge_xau.py (the deployable 5000->5500 answer).
 
-The economic edge (PF 1.83, positive every year) was validated offline in the
-source repo's backtest; these tests guard the PORT — that get_signal correctly
-resamples the 15m window to H4, applies the EMA20/50 bias + Donchian(20)
-breakout, and emits a *trailing* Signal with the right geometry and contract.
+These tests guard the PORT — that get_signal correctly resamples the 15m
+window to H4, applies the EMA20/50 bias + Donchian(20) breakout, and emits a
+STATIC SL/TP Signal with the right geometry and contract (exits re-optimized
+2026-07-06: SL 4xATR, TP 0.4R; train WR 81.0%/PF 1.73, test WR 86.2%/PF 1.90).
 
 All synthetic: hand-built 15m DataFrames, tz-naive UTC time column. No DB,
 no network, no real cache.
@@ -19,6 +19,7 @@ import sys
 from datetime import datetime, timezone
 
 import pandas as pd
+import pytest
 
 # Strategy modules use absolute imports rooted at `strategies/` (matching the
 # live runner's sys.path), so put that dir on the path before importing.
@@ -59,30 +60,33 @@ def _now():
     return datetime(2025, 1, 21, tzinfo=timezone.utc)
 
 
-def test_uptrend_breakout_emits_trailing_buy():
+def test_uptrend_breakout_emits_static_buy():
     w15m = _ramp_15m(_N_BARS, start=2000.0, step_per_bar=0.1)  # steady climb
     sig = strat.get_signal(None, None, w15m, _now())
     assert sig is not None, "steady uptrend making new highs should break out long"
     assert isinstance(sig, Signal)
     assert sig.side == "BUY"
-    assert sig.trailing is True
-    # Chandelier geometry: hard stop below entry, far placeholder TP above.
+    assert sig.trailing is False              # static SL/TP pair (2026-07-06)
     assert sig.stop_loss < sig.entry_price
     assert sig.take_profit > sig.entry_price
-    # Trail distance is positive and (entry - stop) ~ k_atr * ATR > 0.
-    assert (sig.entry_price - sig.stop_loss) > 0
+    risk = sig.entry_price - sig.stop_loss
+    assert risk > 0
+    # TP = 0.4R (the high-WR geometry).
+    assert (sig.take_profit - sig.entry_price) == pytest.approx(0.4 * risk, abs=0.03)
     assert "CHALLENGE" in sig.reason.upper()
 
 
-def test_downtrend_breakdown_emits_trailing_sell():
+def test_downtrend_breakdown_emits_static_sell():
     w15m = _ramp_15m(_N_BARS, start=2000.0, step_per_bar=-0.1)  # steady decline
     sig = strat.get_signal(None, None, w15m, _now())
     assert sig is not None, "steady downtrend making new lows should break out short"
     assert sig.side == "SELL"
-    assert sig.trailing is True
+    assert sig.trailing is False
     assert sig.stop_loss > sig.entry_price    # stop above for a short
-    assert sig.take_profit < sig.entry_price  # far placeholder below
-    assert (sig.stop_loss - sig.entry_price) > 0
+    assert sig.take_profit < sig.entry_price
+    risk = sig.stop_loss - sig.entry_price
+    assert risk > 0
+    assert (sig.entry_price - sig.take_profit) == pytest.approx(0.4 * risk, abs=0.03)
 
 
 def test_flat_market_no_signal():

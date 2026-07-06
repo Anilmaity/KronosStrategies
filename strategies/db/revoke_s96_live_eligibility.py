@@ -32,9 +32,9 @@ STRATEGY_NAME = "S96 H1 Momentum"
 
 # Keep in sync with the deploy_manager.ROSTER S96 description.
 NEW_DESCRIPTION = (
-    "Pure M5 EMA9/21 crossover momentum: cross event on the last closed "
-    "M5 bar, either direction, 1.5xATR(14,M5) chandelier trailing stop, "
-    "480-min backstop. Managed slot: momentum "
+    "H1 Donchian(24) continuation, EMA20/50 bias, static SL 3xATR(14,H1), "
+    "static TP 0.4R (1.2xATR). High-WR geometry validated 2026-07-06. "
+    "Managed slot: momentum "
     "(backtest_strategies/s96_h1_momentum.py)."
 )
 
@@ -49,7 +49,7 @@ def revoke(sess) -> int:
 
     if strat.description != NEW_DESCRIPTION:
         strat.description = NEW_DESCRIPTION
-        print("[UPD] Strategy.description refreshed to the M5 EMA cross text")
+        print("[UPD] Strategy.description refreshed to the H1 Donchian text")
     else:
         print("[SKIP] Strategy.description already current")
 

@@ -126,9 +126,11 @@ def test_long_signal_on_bias_aligned_breakout():
     assert sig is not None and sig.side == "BUY"
     assert sig.reason == "SESSION_BREAKOUT_LONG"
     assert sig.max_hold_min == 180.0
+    rng = rng_hi - rng_lo
     assert sig.entry_price == pytest.approx(rng_hi)
-    assert sig.stop_loss == pytest.approx(rng_lo)
-    assert sig.take_profit == pytest.approx(round(rng_hi + 1.5 * (rng_hi - rng_lo), 2))
+    # High-WR geometry (2026-07-06): SL 2.0xOR below entry, TP 0.8xOR above.
+    assert sig.stop_loss == pytest.approx(round(rng_hi - 2.0 * rng, 2))
+    assert sig.take_profit == pytest.approx(round(rng_hi + 0.8 * rng, 2))
 
 
 def test_no_signal_when_break_absent():
@@ -160,7 +162,7 @@ def test_1m_touch_fires_before_m5_break_bar_closes():
     assert sig is not None and sig.side == "BUY"
     # Entry books at the boundary, exactly like the backtest fill.
     assert sig.entry_price == pytest.approx(rng_hi)
-    assert sig.stop_loss == pytest.approx(rng_lo)
+    assert sig.stop_loss == pytest.approx(round(rng_hi - 2.0 * (rng_hi - rng_lo), 2))
 
 
 def test_1m_touch_blocked_before_or_complete():

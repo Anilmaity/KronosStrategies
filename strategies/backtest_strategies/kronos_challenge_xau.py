@@ -1,21 +1,20 @@
 """
-Kronos CHALLENGE_XAU -- H4 Donchian Trend-Follow (chandelier trailing exit)
----------------------------------------------------------------------------
+Kronos CHALLENGE_XAU -- H4 Donchian Trend-Follow (static high-WR exits)
+-----------------------------------------------------------------------
 Port of bot/challenge_xau.py from the research repo: the deployable answer to
-the "$5000 -> $5500" FundingPips challenge research. The manual high-win-rate
-no-stop scalp reproduces its win rate in backtest but ruins a challenge ~72.5%
-of the time; this trend-follow edge (PF 1.83 on H4, positive every year
-2023-2026) passes when sized so a -1R loss stays inside the daily limit.
+the "$5000 -> $5500" FundingPips challenge research. Exits re-optimized
+2026-07-06 for the 70-80%-WR mandate: the chandelier trail (WR ~40%s, big
+right tail) is replaced by a static SL 4xATR + TP 0.4R pair -- train WR 81.0%
+PF 1.73 / test WR 86.2% PF 1.90 @0.45pt cost, robust at 0.80pt stress and
+across the sl 3-4 x tp 0.4-0.75 neighborhood. The trailing variant lives in
+git history.
 
 Design (zero discretion), evaluated on the last CLOSED H4 bar:
   bias  : EMA20 > EMA50 (long-only) / EMA20 < EMA50 (short-only)
   entry : close breaks the prior-N(20) Donchian high (long) / low (short)
           in the bias direction
-  stop  : initial hard stop = entry -/+ K_ATR * ATR(14); thereafter a
-          chandelier TRAILING stop (Signal.trailing=True -> position_monitor
-          ratchets it off the high/low-water mark). No fixed take-profit:
-          a far placeholder TP is emitted only as a broker backstop so the
-          right tail is never capped server-side.
+  stop  : static, entry -/+ 4.0 x ATR(14, H4)
+  tp    : static, entry +/- 0.4R = 1.6 x ATR(14, H4)
 
 Working timeframe is H4, resampled from the 15m runner window. The live
 research_runner must pull enough 15m history to form >= EMA_SLOW + N closed H4
@@ -35,21 +34,27 @@ from backtest_strategies._kronos_indicators import ema, atr
 NAME = "CHALLENGE_XAU"
 CONFIG = StrategyConfig(
     name=NAME,
-    description="H4 Donchian(20) trend-follow, EMA20/50 bias, 3xATR chandelier "
-                "trailing stop. Port of bot/challenge_xau.py (5000->5500).",
+    description="H4 Donchian(20) trend-follow, EMA20/50 bias, static SL 4xATR / "
+                "static TP 0.4R (1.6xATR). High-WR geometry validated 2026-07-06 "
+                "(train WR 81.0%/PF 1.73, test WR 86.2%/PF 1.90).",
     cooldown_s=14400,          # one H4 bar: at most one entry per closed H4 bar
     session_start_hour=None,   # trend-follow runs around the clock
     session_end_hour=None,
     max_concurrent_positions=1,
 )
 
-# ── Knobs (match bot/challenge_xau.py defaults) ───────────────────────────────
+# ── Knobs ─────────────────────────────────────────────────────────────────────
+# Exit geometry re-optimized 2026-07-06 for the 70-80%-WR mandate
+# (backtest/optimize_manager_strategies.py): the 3xATR chandelier trail
+# (WR ~40%s) is replaced by static SL 4xATR + TP 0.4R = 1.6xATR. Train
+# WR 81.0% PF 1.73 / test WR 86.2% PF 1.90 @0.45pt cost; nearly unchanged at
+# 0.80pt stress, with profitable sl 3-4 x tp 0.4-0.75 neighbors (plateau).
 _N        = 20      # Donchian lookback (prior bars, excluding current)
 _EMA_FAST = 20
 _EMA_SLOW = 50
 _ATR_N    = 14
-_K_ATR    = 3.0     # chandelier multiple == initial-stop distance
-_FAR_ATR  = 50.0    # broker placeholder TP distance (never realistically hit)
+_K_ATR    = 4.0     # static initial-stop distance
+_TP_R     = 0.4     # TP as fraction of the SL distance => 1.6 x ATR
 
 # Minimum closed H4 bars needed: EMA_SLOW stabilisation + Donchian lookback.
 _MIN_H4 = _EMA_SLOW + _N + 2
@@ -105,22 +110,21 @@ def get_signal(w1m, w5m, w15m: pd.DataFrame, now_utc: datetime) -> Signal | None
     close = float(c.iloc[i])
     up = float(ef.iloc[i]) > float(es.iloc[i])
 
+    risk = _K_ATR * A
     if close > donch_hi and up:
         return Signal(
             side="BUY",
             entry_price=close,
-            stop_loss=round(close - _K_ATR * A, 2),
-            take_profit=round(close + _FAR_ATR * A, 2),  # broker backstop only
+            stop_loss=round(close - risk, 2),
+            take_profit=round(close + _TP_R * risk, 2),
             reason="CHALLENGE_XAU_LONG",
-            trailing=True,
         )
     if close < donch_lo and not up:
         return Signal(
             side="SELL",
             entry_price=close,
-            stop_loss=round(close + _K_ATR * A, 2),
-            take_profit=round(close - _FAR_ATR * A, 2),  # broker backstop only
+            stop_loss=round(close + risk, 2),
+            take_profit=round(close - _TP_R * risk, 2),
             reason="CHALLENGE_XAU_SHORT",
-            trailing=True,
         )
     return None
