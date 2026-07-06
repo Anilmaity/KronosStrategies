@@ -24,11 +24,11 @@ kronos_challenge_xau resamples H4): needs >= (EMA50 + Donchian24 + 2) = 76
 CLOSED H1 bars => >= ~310 fifteen-min bars; compose pins RESEARCH_WIN_15M
 well past that (otherwise get_signal stays silent -- the classic gotcha).
 
-NAME keeps the historical "KRONOS_S96_H1_MOMENTUM" identifier -- it is the
-strategy's DB identity (entry_manager variation map, deploy_manager roster,
-ManagedStrategy momentum slot, compose service env) and must not change.
-live_eligible is revoked at deploy time via db/revoke_s96_live_eligibility.py;
-arm PAPER first and compare fills against this backtest before going live.
+RETIRED from the manager roster 2026-07-06 (operator decision): the weakest
+3-month contributor (+$30 @0.01 lot in Apr-Jul 2026 despite 73.6% WR). The
+module stays in-tree for history; deploy_manager.RETIRED_STRATEGIES
+de-deploys it. NAME keeps the historical "KRONOS_S96_H1_MOMENTUM" identifier
+(entry_manager variation map) for old Position/Order rows.
 """
 from __future__ import annotations
 

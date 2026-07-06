@@ -164,21 +164,4 @@ services:
       RESEARCH_DAYS_5M: "2"
       DRY_RUN: "true"              # PAPER until live fills match the backtest
 
-  # S96 — H1 Donchian(24) continuation, static SL 3xATR / TP 1.2xATR (rewritten
-  # 2026-07-06; the M5 EMA-cross interim proved edge-negative). H1 is resampled
-  # from the 15m window: needs >= (EMA50+Donchian24+2)*4 = 304 CLOSED 15m bars,
-  # so WIN/DAYS_15M are enlarged well past the defaults (otherwise get_signal
-  # stays silent — same gotcha as challenge_xau).
-  s96_h1_momentum:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: s96_h1_momentum
-      RISK_PER_TRADE_USD: "75"  # Phase-1 risk-normalized sizing (lot = 75USD / SL pts / 100)
-      RESEARCH_WIN_15M: "600"      # >= 304 needed for 76 closed H1 bars
-      RESEARCH_DAYS_15M: "10"      # cover ~1.5 trading weeks incl. weekend gaps
-      DRY_RUN: "true"              # PAPER until held-out backtest passes
+  # S96 retired from the roster 2026-07-06 (operator decision) — service removed.

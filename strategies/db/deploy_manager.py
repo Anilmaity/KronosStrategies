@@ -124,17 +124,6 @@ ROSTER = [
         "(backtest_strategies/s95_session_breakout.py).",
     ),
     (
-        "S96 H1 Momentum",
-        "KRONOS_S96_H1_MOMENTUM",
-        "trend",
-        "trending",
-        {},
-        "H1 Donchian(24) continuation, EMA20/50 bias, static SL 3xATR(14,H1), "
-        "static TP 0.4R (1.2xATR). High-WR geometry validated 2026-07-06. "
-        "Category: trend "
-        "(backtest_strategies/s96_h1_momentum.py).",
-    ),
-    (
         "S99 MSS FVG Reversal",
         "KRONOS_S99_MSS_FVG",
         "reversal",
@@ -153,6 +142,9 @@ ROSTER = [
 # in Strategy.json_data, not a column). (name, variation) for readable prints.
 RETIRED_STRATEGIES = [
     ("S97 Snap Scalper M5 (paper)", "KRONOS_S97_SNAP_SCALPER"),
+    # S96 removed from the roster 2026-07-06 (operator decision): weakest
+    # 3-month contributor (+$30 @0.01 lot); module/tests stay in-tree.
+    ("S96 H1 Momentum", "KRONOS_S96_H1_MOMENTUM"),
 ]
 
 

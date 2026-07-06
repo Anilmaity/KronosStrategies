@@ -62,7 +62,6 @@ UserStrategy = deploy_manager.UserStrategy
 
 NEW_NAMES = [
     "S95 Session Breakout",
-    "S96 H1 Momentum",
     "S99 MSS FVG Reversal",
 ]
 
@@ -148,7 +147,6 @@ def test_seed_managed_rows_match_spec(db):
 
     expected = {
         "S95 Session Breakout":        ("trend",    "session_vol"),
-        "S96 H1 Momentum":             ("trend",    "trending"),
         "S99 MSS FVG Reversal":        ("reversal", "always_on"),
     }
     for name, (slot, policy_key) in expected.items():
@@ -216,7 +214,7 @@ def test_challenge_created_when_absent(db):
     # three roster strategies land in one pass (scalper slot stays empty).
     assert deploy_manager.seed(db) == 0
     db.commit()
-    assert db.query(ManagedStrategy).count() == 4
+    assert db.query(ManagedStrategy).count() == 3
     ch = db.query(Strategy).filter_by(
         name=deploy_manager.CHALLENGE_STRATEGY_NAME).one()
     ch_us = db.query(UserStrategy).filter_by(strategy_id=ch.id).one()
@@ -289,14 +287,14 @@ def test_retire_pulls_s97(db):
     assert s97_us.deployed is False
     assert s97_us.is_active is False
     # The manager roster now holds the two children + the created trend slot.
-    assert db.query(ManagedStrategy).count() == 4
+    assert db.query(ManagedStrategy).count() == 3
 
 
 def test_retire_noop_when_absent(db):
     # No S97 rows present -> retire pass is a clean no-op, seed still succeeds.
     assert deploy_manager.seed(db) == 0
     db.commit()
-    assert db.query(ManagedStrategy).count() == 4
+    assert db.query(ManagedStrategy).count() == 3
 
 
 # ──────────────────────────────────────────────────────────────────────────────
