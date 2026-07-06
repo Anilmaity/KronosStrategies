@@ -74,14 +74,33 @@ def _should_heartbeat(now: datetime, last: datetime | None, interval_s: int) -> 
 
 
 def _is_new_1m(candles) -> bool:
+    """True when the newest CLOSED 1m bar changed. fetch_candles returns only
+    complete candles (tsdb_reader filters on OANDA's `complete` flag), so the
+    last row IS the newest closed bar — keying off iloc[-2] would react a full
+    minute late."""
     global _last_1m_time
-    if len(candles) < 2:
+    if len(candles) < 1:
         return False
-    t = candles.iloc[-2]["time"]
+    t = candles.iloc[-1]["time"]
     if t == _last_1m_time:
         return False
     _last_1m_time = t
     return True
+
+
+def _build_windows(c1m, c5m, c15m):
+    """Tail the strategy windows from the OANDA frames AS-IS.
+
+    fetch_candles already returns only CLOSED candles (the `complete` filter in
+    tsdb_reader._fetch_oanda_ohlc), so the newest row is the newest closed bar.
+    An extra iloc[:-1] here would hide that bar until the NEXT bar closes —
+    the stale-fill bug behind the 2026-07-06 SESSION_BREAKOUT losses (every
+    live entry fired exactly one M5 bar late, 5-15 min after the OR touch).
+    """
+    w1m = c1m.tail(WIN_1M).reset_index(drop=True)
+    w5m = c5m.tail(WIN_5M).reset_index(drop=True) if not c5m.empty else c5m
+    w15m = c15m.tail(WIN_15M).reset_index(drop=True) if not c15m.empty else c15m
+    return w1m, w5m, w15m
 
 
 def main():
@@ -134,10 +153,8 @@ def main():
                 time.sleep(POLL_INTERVAL)
                 continue
 
-            # Build windows from completed candles (drop the still-forming last bar)
-            w1m  = c1m.iloc[:-1].tail(WIN_1M).reset_index(drop=True)
-            w5m  = c5m.iloc[:-1].tail(WIN_5M).reset_index(drop=True) if not c5m.empty else c5m
-            w15m = c15m.iloc[:-1].tail(WIN_15M).reset_index(drop=True) if not c15m.empty else c15m
+            # Feed is closed-bars-only; no dropping here (see _build_windows).
+            w1m, w5m, w15m = _build_windows(c1m, c5m, c15m)
 
             if len(w1m) < 30:
                 time.sleep(POLL_INTERVAL)
