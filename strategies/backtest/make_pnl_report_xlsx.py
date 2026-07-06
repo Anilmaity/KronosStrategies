@@ -2,7 +2,7 @@
 make_pnl_report_xlsx.py
 -----------------------
 Excel P&L report for the deployed manager roster (2026-07-06 configs) over the
-last 3 months of the local bars cache. Simulates the three strategies exactly
+last 3 months of the local bars cache. Simulates the four deployed strategies exactly
 as deployed on the new account (0.01 lot each) and writes:
 
   Sheet "Summary"   — per-strategy + portfolio: trades, WR, PF, net, per-day
@@ -25,7 +25,7 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from backtest.optimize_manager_strategies import (  # noqa: E402
-    load, run_orb, run_donchian_h4,
+    load, run_orb, run_donchian_h4, run_mss_fvg,
 )
 
 LOT = 0.01                    # deployed MANAGER_CHILD_LOT on the new account
@@ -103,8 +103,14 @@ def refine_exit_with_ticks(row: dict, fill_delay: pd.Timedelta,
     is_buy = row["side"] == "BUY"
     # Fill moment: ORB fills intrabar at the boundary touch; close-fill
     # strategies fill at the signal bar's close (entry_time + bar length).
-    if fill_delay == pd.Timedelta(0):   # ORB: first touch of the boundary
-        cross = (prices >= row["entry"]) if is_buy else (prices <= row["entry"])
+    if fill_delay == pd.Timedelta(0):   # intrabar touch fill
+        if row.get("retrace"):
+            # limit-style retrace fill (MSS+FVG): BUY fills as price FALLS
+            # to the edge, SELL as it RISES
+            cross = (prices <= row["entry"]) if is_buy else (prices >= row["entry"])
+        else:
+            # breakout fill (ORB): BUY fills as price RISES to the boundary
+            cross = (prices >= row["entry"]) if is_buy else (prices <= row["entry"])
         idx = cross.argmax() if cross.any() else 0
         start = idx + 1
     else:
@@ -200,6 +206,10 @@ def main():
         "Session ORB (S95/live)": (
             run_orb(m5, or_min=30, tp_frac=0.8, sl_frac=2.0),
             pd.Timedelta(0), pd.Timedelta(minutes=5)),
+        "Reversal S99 (MSS+FVG)": (
+            run_mss_fvg(m5, sweep_n=48, tp_r=1.5, retrace_w=24,
+                        hours=tuple(range(1, 16))),
+            pd.Timedelta(0), pd.Timedelta(minutes=5)),
         "Momentum S96 (H1 Don24)": (
             run_donchian_h4(h1, n=24, k_atr=3.0, tp_r=0.4, hold_bars=0),
             pd.Timedelta(hours=1), pd.Timedelta(hours=1)),
@@ -213,8 +223,11 @@ def main():
         cutoff = start.tz_localize(None) if df.empty or df["entry_time"].dt.tz is None else start
         df = df[df["entry_time"] >= cutoff].reset_index(drop=True)
         # Tick-accurate exit pass (~1s ticks in .history_data, thru 2026-05-19)
+        recs = df.to_dict("records")
+        for r in recs:
+            r["retrace"] = name.startswith("Reversal")
         refined = [refine_exit_with_ticks(dict(r), fill_delay, bar_len)
-                   for r in df.to_dict("records")]
+                   for r in recs]
         frames.append(pd.DataFrame(refined))
     all_trades = pd.concat(frames, ignore_index=True).sort_values("entry_time")
     n_tick = (all_trades["exit_basis"] == "ticks").sum()
@@ -227,7 +240,7 @@ def main():
     # ── Summary ────────────────────────────────────────────────────────────────
     summary_rows = [summarize(df, name, n_days)
                     for df, name in zip(frames, runs.keys())]
-    summary_rows.append(summarize(all_trades, "PORTFOLIO (all 3)", n_days))
+    summary_rows.append(summarize(all_trades, "PORTFOLIO (all 4)", n_days))
     summary = pd.DataFrame(summary_rows)
 
     # ── Daily pivot ────────────────────────────────────────────────────────────
