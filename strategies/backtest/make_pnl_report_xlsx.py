@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from backtest.optimize_manager_strategies import (  # noqa: E402
     load, run_orb, run_donchian_h4, run_mss_fvg,
 )
+# S96 retired from the roster 2026-07-06 — no longer in the report.
 
 LOT = 0.01                    # deployed MANAGER_CHILD_LOT on the new account
 USD_PER_PT = LOT * 100.0      # XAUUSD: $1/pt at 0.01 lot
@@ -210,9 +211,6 @@ def main():
             run_mss_fvg(m5, sweep_n=48, tp_r=1.5, retrace_w=24,
                         hours=tuple(range(1, 16))),
             pd.Timedelta(0), pd.Timedelta(minutes=5)),
-        "Momentum S96 (H1 Don24)": (
-            run_donchian_h4(h1, n=24, k_atr=3.0, tp_r=0.4, hold_bars=0),
-            pd.Timedelta(hours=1), pd.Timedelta(hours=1)),
         "Trend CHALLENGE_XAU (H4)": (
             run_donchian_h4(h4, n=20, k_atr=4.0, tp_r=0.4, hold_bars=0),
             pd.Timedelta(hours=4), pd.Timedelta(hours=4)),
