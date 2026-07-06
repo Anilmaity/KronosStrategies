@@ -34,7 +34,7 @@ STRATEGY_NAME = "S96 H1 Momentum"
 NEW_DESCRIPTION = (
     "H1 Donchian(24) continuation, EMA20/50 bias, static SL 3xATR(14,H1), "
     "static TP 0.4R (1.2xATR). High-WR geometry validated 2026-07-06. "
-    "Managed slot: momentum "
+    "Category: trend "
     "(backtest_strategies/s96_h1_momentum.py)."
 )
 
