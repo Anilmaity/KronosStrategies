@@ -599,6 +599,207 @@ def sweep_mss(m5, top, h4=None):
     _report(rows, top)
 
 
+# ── 7. Scalping candidates (fifth campaign, 2026-07-06) ─────────────────────
+
+def run_burst_scalp(m5: pd.DataFrame, *, range_atr=2.0, close_q=0.25,
+                    tp_atr=0.8, sl_atr=1.0, atr_n=14, hold_bars=12,
+                    hours=(7, 8, 9, 12, 13, 14), vol_x=None,
+                    bias_m5: np.ndarray | None = None) -> list[Trade]:
+    """Displacement-burst CONTINUATION scalp: an abnormal-range M5 bar
+    (range >= range_atr x ATR) closing within close_q of its extreme ignites
+    a short burst — follow it. Optional vol_x: bar volume must also exceed
+    vol_x times its 48-bar average (tick-volume ignition filter)."""
+    times = m5["time"]
+    h = m5["high"].to_numpy(float); l = m5["low"].to_numpy(float)
+    c = m5["close"].to_numpy(float)
+    v = m5["volume"].to_numpy(float)
+    dates = times.dt.date.to_numpy()
+    hr = times.dt.hour.to_numpy()
+    a = atr_np(h, l, c, atr_n)
+    vavg = pd.Series(v).rolling(48).mean().to_numpy()
+
+    trades: list[Trade] = []
+    busy_until = -1
+    for k in range(50, len(c)):
+        if k <= busy_until or hr[k] not in hours or not (a[k] > 0):
+            continue
+        rng = h[k] - l[k]
+        if rng < range_atr * a[k]:
+            continue
+        if vol_x is not None and not (v[k] > vol_x * vavg[k]):
+            continue
+        side = 0
+        if (h[k] - c[k]) <= close_q * rng:
+            side = 1                        # closed near the high -> follow up
+        elif (c[k] - l[k]) <= close_q * rng:
+            side = -1                       # closed near the low -> follow down
+        if side == 0:
+            continue
+        if bias_m5 is not None and bias_m5[k] != side:
+            continue
+        entry = c[k]
+        sl = entry - side * sl_atr * a[k]
+        tp = entry + side * tp_atr * a[k]
+        ke, px, out = walk_exit(h, l, c, dates, k, side, entry, sl, tp,
+                                hold_bars, False, times)
+        pnl = side * (px - entry) - COST_PTS
+        trades.append(Trade(times.iloc[k], side, entry, sl, tp,
+                            times.iloc[ke], px, out, pnl))
+        busy_until = ke
+    return trades
+
+
+def run_squeeze_scalp(m5: pd.DataFrame, *, sq_n=6, sq_pct=0.6, tp_atr=0.8,
+                      sl_atr=1.0, atr_n=14, hold_bars=12,
+                      hours=(7, 8, 9, 12, 13, 14),
+                      bias_m5: np.ndarray | None = None) -> list[Trade]:
+    """Volatility-contraction squeeze break: the last sq_n bars' combined
+    range compresses below sq_pct x (sq_n x ATR); the first close beyond the
+    squeeze box breaks it — follow with a tight TP/SL."""
+    times = m5["time"]
+    h = m5["high"].to_numpy(float); l = m5["low"].to_numpy(float)
+    c = m5["close"].to_numpy(float)
+    dates = times.dt.date.to_numpy()
+    hr = times.dt.hour.to_numpy()
+    a = atr_np(h, l, c, atr_n)
+    box_hi = pd.Series(h).rolling(sq_n).max().to_numpy()
+    box_lo = pd.Series(l).rolling(sq_n).min().to_numpy()
+
+    trades: list[Trade] = []
+    busy_until = -1
+    for k in range(sq_n + atr_n + 2, len(c)):
+        if k <= busy_until or hr[k] not in hours or not (a[k] > 0):
+            continue
+        bh, bl = box_hi[k - 1], box_lo[k - 1]     # squeeze box BEFORE this bar
+        if (bh - bl) > sq_pct * sq_n * a[k]:
+            continue                              # not compressed
+        side = 0
+        if c[k] > bh:
+            side = 1
+        elif c[k] < bl:
+            side = -1
+        if side == 0:
+            continue
+        if bias_m5 is not None and bias_m5[k] != side:
+            continue
+        entry = c[k]
+        sl = entry - side * sl_atr * a[k]
+        tp = entry + side * tp_atr * a[k]
+        ke, px, out = walk_exit(h, l, c, dates, k, side, entry, sl, tp,
+                                hold_bars, False, times)
+        pnl = side * (px - entry) - COST_PTS
+        trades.append(Trade(times.iloc[k], side, entry, sl, tp,
+                            times.iloc[ke], px, out, pnl))
+        busy_until = ke
+    return trades
+
+
+def run_fvg_scalp(m5: pd.DataFrame, *, min_fvg_atr=0.3, retrace_w=12,
+                  tp_r=1.0, buf_atr=0.2, atr_n=14, hold_bars=24,
+                  hours=(7, 8, 9, 12, 13, 14),
+                  bias_m5: np.ndarray | None = None) -> list[Trade]:
+    """Trend-aligned FVG continuation scalp: a displacement bar leaves an FVG
+    (>= min_fvg_atr x ATR wide) in the H4 trend direction; enter the first
+    retrace to the proximal edge within retrace_w bars, SL beyond the distal
+    edge + buffer, TP = tp_r x risk, short hold."""
+    times = m5["time"]
+    h = m5["high"].to_numpy(float); l = m5["low"].to_numpy(float)
+    c = m5["close"].to_numpy(float)
+    dates = times.dt.date.to_numpy()
+    hr = times.dt.hour.to_numpy()
+    a = atr_np(h, l, c, atr_n)
+
+    trades: list[Trade] = []
+    busy_until = -1
+    for k in range(atr_n + 3, len(c)):
+        if k <= busy_until or hr[k] not in hours or not (a[k] > 0):
+            continue
+        side = 0
+        if l[k] > h[k - 2] and (l[k] - h[k - 2]) >= min_fvg_atr * a[k]:
+            side = 1                       # bullish FVG
+            prox, dist = l[k], h[k - 2]
+        elif h[k] < l[k - 2] and (l[k - 2] - h[k]) >= min_fvg_atr * a[k]:
+            side = -1                      # bearish FVG
+            prox, dist = h[k], l[k - 2]
+        if side == 0:
+            continue
+        if bias_m5 is not None and bias_m5[k] != side:
+            continue                       # continuation: WITH the H4 trend
+        entry_j = None
+        for j in range(k + 1, min(k + 1 + retrace_w, len(c))):
+            if side > 0 and l[j] <= prox:
+                entry_j = j
+                break
+            if side < 0 and h[j] >= prox:
+                entry_j = j
+                break
+        if entry_j is None:
+            continue
+        entry = prox
+        sl = dist - (buf_atr * a[k] * (1 if side > 0 else -1))
+        risk = abs(entry - sl)
+        if risk <= 0:
+            continue
+        tp = entry + side * tp_r * risk
+        if (side > 0 and l[entry_j] <= sl) or (side < 0 and h[entry_j] >= sl):
+            continue                       # retrace ran straight through
+        ke, px, out = walk_exit(h, l, c, dates, entry_j, side, entry, sl, tp,
+                                hold_bars, False, times)
+        pnl = side * (px - entry) - COST_PTS
+        trades.append(Trade(times.iloc[entry_j], side, entry, sl, tp,
+                            times.iloc[ke], px, out, pnl))
+        busy_until = ke
+    return trades
+
+
+def sweep_scalp2(m5, top, h4=None):
+    print("\n===== scalping campaign 5: burst / squeeze / volume ignition =====")
+    rows = []
+    bias = h4_bias_on_m5(m5, h4) if h4 is not None else None
+    kz = (7, 8, 9, 12, 13, 14)
+    wide = tuple(range(1, 16))
+    for range_atr in (1.5, 2.0, 2.5):
+        for tp_atr in (0.6, 0.8, 1.2):
+            for sl_atr in (0.8, 1.0, 1.5):
+                for hours, htag in ((kz, "KZ"), (wide, "1-15")):
+                    for vol_x, vtag in ((None, ""), (1.5, "+vol1.5"), (2.0, "+vol2")):
+                        for b, btag in ((None, ""), (bias, "+H4bias")):
+                            label = (f"burst r{range_atr} tp{tp_atr} sl{sl_atr} "
+                                     f"{htag}{vtag}{btag}")
+                            tr, te = split_summary(
+                                run_burst_scalp(m5, range_atr=range_atr,
+                                                tp_atr=tp_atr, sl_atr=sl_atr,
+                                                hours=hours, vol_x=vol_x,
+                                                bias_m5=b), label)
+                            rows.append((tr, te))
+    for min_fvg in (0.3, 0.5, 0.8):
+        for tp_r in (0.8, 1.0, 1.5):
+            for retrace_w in (6, 12, 24):
+                for hours, htag in ((kz, "KZ"), (wide, "1-15")):
+                    for b, btag in ((None, ""), (bias, "+H4bias")):
+                        label = (f"fvgscalp f{min_fvg} tp{tp_r}R w{retrace_w} "
+                                 f"{htag}{btag}")
+                        tr, te = split_summary(
+                            run_fvg_scalp(m5, min_fvg_atr=min_fvg, tp_r=tp_r,
+                                          retrace_w=retrace_w, hours=hours,
+                                          bias_m5=b), label)
+                        rows.append((tr, te))
+    for sq_n in (6, 12):
+        for sq_pct in (0.5, 0.7):
+            for tp_atr in (0.6, 0.8, 1.2):
+                for sl_atr in (0.8, 1.2):
+                    for hours, htag in ((kz, "KZ"), (wide, "1-15")):
+                        for b, btag in ((None, ""), (bias, "+H4bias")):
+                            label = (f"squeeze n{sq_n} p{sq_pct} tp{tp_atr} "
+                                     f"sl{sl_atr} {htag}{btag}")
+                            tr, te = split_summary(
+                                run_squeeze_scalp(m5, sq_n=sq_n, sq_pct=sq_pct,
+                                                  tp_atr=tp_atr, sl_atr=sl_atr,
+                                                  hours=hours, bias_m5=b), label)
+                            rows.append((tr, te))
+    _report(rows, top)
+
+
 # ── sweeps ────────────────────────────────────────────────────────────────────
 
 def sweep_orb(m5, top):
@@ -741,7 +942,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--strategy", default="all",
                     choices=["all", "orb", "s96", "trend", "scalper", "momo",
-                             "verify", "lowtf", "mss"])
+                             "verify", "lowtf", "mss", "scalp2"])
     ap.add_argument("--top", type=int, default=10)
     args = ap.parse_args()
 
@@ -764,6 +965,8 @@ def main():
         sweep_lowtf(load("1m"), args.top, h4=h4)
     if args.strategy == "mss":
         sweep_mss(m5, args.top, h4=h4)
+    if args.strategy == "scalp2":
+        sweep_scalp2(m5, args.top, h4=h4)
     if args.strategy in ("all", "scalper"):
         sweep_scalper(m5, args.top, h4=h4)
 

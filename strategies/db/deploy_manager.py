@@ -124,6 +124,18 @@ ROSTER = [
         "(backtest_strategies/s95_session_breakout.py).",
     ),
     (
+        "S93 FVG Scalp",
+        "KRONOS_S93_FVG_SCALP",
+        "scalping",
+        "always_on",
+        {},
+        "FVG continuation scalp (M5): displacement FVG >=0.3xATR in killzones "
+        "{7-9,12-14} UTC, retrace entry, SL beyond distal edge, TP 1.5R, "
+        "120-min backstop. Validated 2026-07-06 (train PF 1.30 / test PF 1.24; "
+        "survives 0.80pt stress). Category: scalping "
+        "(backtest_strategies/s93_fvg_scalp.py).",
+    ),
+    (
         "S99 MSS FVG Reversal",
         "KRONOS_S99_MSS_FVG",
         "reversal",

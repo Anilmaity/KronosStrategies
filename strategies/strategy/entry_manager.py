@@ -146,6 +146,9 @@ _VARIATION_STRATEGY_NAME = {
     # Reversal category (2026-07-06): ICT MSS+FVG — the first strategy to pass
     # held-out validation outside the trend family (train PF 1.29 / test 1.19).
     "KRONOS_S99_MSS_FVG":          "S99 MSS FVG Reversal",
+    # Scalping category (2026-07-06): FVG continuation scalp — first scalp to
+    # pass validation after five failed campaigns (train PF 1.30 / test 1.24).
+    "KRONOS_S93_FVG_SCALP":        "S93 FVG Scalp",
 }
 
 

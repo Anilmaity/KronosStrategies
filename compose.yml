@@ -147,6 +147,22 @@ services:
       RESEARCH_DAYS_5M: "3"        # refill promptly after weekend gaps
       DRY_RUN: "true"              # PAPER until held-out backtest passes
 
+  # S93 — FVG continuation scalp (M5, killzones), the SCALPING category
+  # (2026-07-06): first scalp to pass validation after five failed campaigns.
+  s93_fvg_scalp:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: s93_fvg_scalp
+      RISK_PER_TRADE_USD: "75"  # Phase-1 risk-normalized sizing
+      RESEARCH_WIN_5M: "160"
+      RESEARCH_DAYS_5M: "2"
+      DRY_RUN: "true"              # PAPER until live fills match the backtest
+
   # S99 — ICT MSS+FVG reversal (M5), the REVERSAL category (2026-07-06).
   # Liquidity sweep -> structure shift -> FVG retrace entry on the 1m touch.
   # Needs >= ~60 closed M5 bars; WIN_5M default 80 suffices but pinned higher.
