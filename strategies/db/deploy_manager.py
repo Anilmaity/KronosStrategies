@@ -103,30 +103,47 @@ def _live_eligible_override() -> bool:
 # Names must equal entry_manager._VARIATION_STRATEGY_NAME[variation].
 # policy_params mirror the spec §4 defaults explicitly so the frontend can
 # render them read-only; policies.py falls back to the same values if empty.
+# Slot taxonomy simplified 2026-07-06 (user decision): every strategy is one
+# of THREE categories — "trend" (breakout/continuation: S95 ORB, S96 H1
+# Donchian, Challenge XAU H4), "reversal" (S99 MSS+FVG), "scalping"
+# (EMPTY — four validation campaigns failed after costs: S97, S98, M5 z-fade
+# sweep, M1 liquidity-sweep sweep). _ensure_managed syncs slot/policy renames
+# onto existing rows.
 ROSTER = [
     (
         "S95 Session Breakout",
         "KRONOS_S95_SESSION_BREAKOUT",
-        "session",
+        "trend",
         "session_vol",
         # Entry windows follow the ORB session hours [1,7,12,13,14] UTC: the OR
         # completes at :30, entries run to the top of the hour (h12-14 merge).
         {"windows": [[1.0, 2.0], [7.0, 8.0], [12.0, 15.0]], "vol_regimes": ["NORMAL", "HIGH"]},
         "Session ORB (delegate of kronos_session_breakout): 30-min OR, sessions "
         "[1,7,12,13,14] UTC, EMA240 bias, SL 2.0xOR, TP 0.8xOR, 180-min time "
-        "exit. High-WR geometry validated 2026-07-06. Managed slot: session "
-        "breakout (backtest_strategies/s95_session_breakout.py).",
+        "exit. High-WR geometry validated 2026-07-06. Category: trend "
+        "(backtest_strategies/s95_session_breakout.py).",
     ),
     (
         "S96 H1 Momentum",
         "KRONOS_S96_H1_MOMENTUM",
-        "momentum",
+        "trend",
         "trending",
         {},
         "H1 Donchian(24) continuation, EMA20/50 bias, static SL 3xATR(14,H1), "
         "static TP 0.4R (1.2xATR). High-WR geometry validated 2026-07-06. "
-        "Managed slot: momentum "
+        "Category: trend "
         "(backtest_strategies/s96_h1_momentum.py).",
+    ),
+    (
+        "S99 MSS FVG Reversal",
+        "KRONOS_S99_MSS_FVG",
+        "reversal",
+        "always_on",
+        {},
+        "ICT MSS+FVG reversal (M5): liquidity sweep -> structure shift -> FVG "
+        "retrace entry, SL beyond distal edge, TP 1.5R, hours 1-15 UTC. "
+        "Validated 2026-07-06 (train PF 1.29 / test PF 1.19, ~7.6 trades/day). "
+        "Category: reversal (backtest_strategies/s99_mss_fvg.py).",
     ),
 ]
 
@@ -256,8 +273,22 @@ def _ensure_managed(sess, us, slot, policy_key, policy_params,
         print(f"[NEW] ManagedStrategy slot={slot} policy={policy_key} "
               f"arm={arm} live_eligible={live_eligible}")
     else:
-        print(f"[SKIP] ManagedStrategy for UserStrategy {us.id} already present "
-              f"(slot={m.slot} policy={m.policy_key} arm={m.arm_mode})")
+        # Sync category/policy renames onto existing rows (2026-07-06 slot
+        # taxonomy: trend | scalping | reversal). arm_mode / live_eligible /
+        # desired_active remain the operator's — never touched on re-runs.
+        changed = []
+        if m.slot != slot:
+            changed.append(f"slot {m.slot}->{slot}")
+            m.slot = slot
+        if m.policy_key != policy_key:
+            changed.append(f"policy {m.policy_key}->{policy_key}")
+            m.policy_key = policy_key
+        if changed:
+            print(f"[UPD] ManagedStrategy for UserStrategy {us.id}: "
+                  + ", ".join(changed))
+        else:
+            print(f"[SKIP] ManagedStrategy for UserStrategy {us.id} already present "
+                  f"(slot={m.slot} policy={m.policy_key} arm={m.arm_mode})")
     return m
 
 

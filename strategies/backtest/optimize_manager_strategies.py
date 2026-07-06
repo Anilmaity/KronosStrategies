@@ -466,6 +466,139 @@ def sweep_lowtf(m1, top, h4=None):
     _report(rows, top)
 
 
+# ── 6. ICT MSS + FVG reversal (M5) ───────────────────────────────────────────
+
+def _fractal_swings(h: np.ndarray, l: np.ndarray, w: int = 2):
+    """Last CONFIRMED fractal swing high/low value as of each bar (a swing at
+    i confirms at i+w, so no look-ahead). Returns (swing_hi, swing_lo) arrays
+    (nan until the first confirmation)."""
+    n = len(h)
+    swing_hi = np.full(n, np.nan)
+    swing_lo = np.full(n, np.nan)
+    last_hi = last_lo = np.nan
+    for i in range(w, n - w):
+        if h[i] == h[i - w:i + w + 1].max() and (h[i] > h[i - w:i]).all():
+            last_hi_new = h[i]
+        else:
+            last_hi_new = None
+        if l[i] == l[i - w:i + w + 1].min() and (l[i] < l[i - w:i]).all():
+            last_lo_new = l[i]
+        else:
+            last_lo_new = None
+        k = i + w                     # confirmation bar
+        if last_hi_new is not None:
+            last_hi = last_hi_new
+        if last_lo_new is not None:
+            last_lo = last_lo_new
+        swing_hi[k] = last_hi
+        swing_lo[k] = last_lo
+    # forward-fill so every bar sees the latest confirmed swing
+    for arr in (swing_hi, swing_lo):
+        v = np.nan
+        for i in range(n):
+            if not np.isnan(arr[i]):
+                v = arr[i]
+            arr[i] = v
+    return swing_hi, swing_lo
+
+
+def run_mss_fvg(m5: pd.DataFrame, *, sweep_n=48, retrace_w=24, tp_r=1.5,
+                buf_atr=0.2, atr_n=14, hold_bars=96,
+                hours=(7, 8, 9, 12, 13, 14),
+                bias_m5: np.ndarray | None = None) -> list[Trade]:
+    """ICT Market-Structure-Shift + FVG reversal on M5 (zero discretion):
+
+    bearish setup at bar k:
+      sweep : within the prior sweep_n bars price traded ABOVE the last
+              confirmed swing high (buy-side liquidity taken)
+      MSS   : bar k CLOSES below the last confirmed swing low (displacement)
+      FVG   : the displacement leaves a bearish FVG (high[k] < low[k-2])
+      entry : first retrace into the FVG within retrace_w bars, filled at the
+              proximal edge (high[k]); SL above the distal edge (low[k-2])
+              + buf_atr x ATR; TP = tp_r x risk. Mirror for bullish.
+    bias_m5: optional H4 alignment (reversal trades WITH the HTF trend)."""
+    times = m5["time"]
+    h = m5["high"].to_numpy(float); l = m5["low"].to_numpy(float)
+    c = m5["close"].to_numpy(float)
+    dates = times.dt.date.to_numpy()
+    hr = times.dt.hour.to_numpy()
+    a = atr_np(h, l, c, atr_n)
+    swing_hi, swing_lo = _fractal_swings(h, l)
+    roll_hi = pd.Series(h).rolling(sweep_n).max().to_numpy()
+    roll_lo = pd.Series(l).rolling(sweep_n).min().to_numpy()
+
+    trades: list[Trade] = []
+    busy_until = -1
+    for k in range(sweep_n + 2, len(c)):
+        if k <= busy_until or hr[k] not in hours or not (a[k] > 0):
+            continue
+        if np.isnan(swing_hi[k]) or np.isnan(swing_lo[k]):
+            continue
+        side = 0
+        # bearish MSS: highs swept recently, close breaks the swing low,
+        # displacement leaves a bearish FVG
+        if (roll_hi[k] > swing_hi[k] and c[k] < swing_lo[k]
+                and h[k] < l[k - 2]):
+            side = -1
+            fvg_prox, fvg_dist = h[k], l[k - 2]
+        elif (roll_lo[k] < swing_lo[k] and c[k] > swing_hi[k]
+                and l[k] > h[k - 2]):
+            side = 1
+            fvg_prox, fvg_dist = l[k], h[k - 2]
+        if side == 0:
+            continue
+        if bias_m5 is not None and bias_m5[k] != side:
+            continue
+        # wait for the retrace into the FVG (limit-style fill at the edge)
+        entry_j = None
+        for j in range(k + 1, min(k + 1 + retrace_w, len(c))):
+            if side < 0 and h[j] >= fvg_prox:
+                entry_j = j
+                break
+            if side > 0 and l[j] <= fvg_prox:
+                entry_j = j
+                break
+        if entry_j is None:
+            continue
+        entry = fvg_prox
+        sl = fvg_dist + (buf_atr * a[k] * (1 if side < 0 else -1))
+        risk = abs(sl - entry)
+        if risk <= 0:
+            continue
+        tp = entry + side * tp_r * risk
+        # phantom guard: the retrace bar itself may already be through SL
+        if (side < 0 and h[entry_j] >= sl) or (side > 0 and l[entry_j] <= sl):
+            continue
+        ke, px, out = walk_exit(h, l, c, dates, entry_j, side, entry, sl, tp,
+                                hold_bars, False, times)
+        pnl = side * (px - entry) - COST_PTS
+        trades.append(Trade(times.iloc[entry_j], side, entry, sl, tp,
+                            times.iloc[ke], px, out, pnl))
+        busy_until = ke
+    return trades
+
+
+def sweep_mss(m5, top, h4=None):
+    print("\n===== ICT MSS+FVG reversal (M5) =====")
+    rows = []
+    bias = h4_bias_on_m5(m5, h4) if h4 is not None else None
+    kz = (7, 8, 9, 12, 13, 14)
+    wide = tuple(range(1, 16))
+    for sweep_n in (24, 48, 96):
+        for tp_r in (1.0, 1.5, 2.0):
+            for retrace_w in (12, 24):
+                for hours, htag in ((kz, "KZ"), (wide, "1-15")):
+                    for b, btag in ((None, ""), (bias, "+H4bias")):
+                        label = (f"sw={sweep_n} tp={tp_r}R w={retrace_w} "
+                                 f"{htag}{btag}")
+                        tr, te = split_summary(
+                            run_mss_fvg(m5, sweep_n=sweep_n, tp_r=tp_r,
+                                        retrace_w=retrace_w, hours=hours,
+                                        bias_m5=b), label)
+                        rows.append((tr, te))
+    _report(rows, top)
+
+
 # ── sweeps ────────────────────────────────────────────────────────────────────
 
 def sweep_orb(m5, top):
@@ -608,7 +741,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--strategy", default="all",
                     choices=["all", "orb", "s96", "trend", "scalper", "momo",
-                             "verify", "lowtf"])
+                             "verify", "lowtf", "mss"])
     ap.add_argument("--top", type=int, default=10)
     args = ap.parse_args()
 
@@ -629,6 +762,8 @@ def main():
         verify_winners(m5, h4, load("1h"))
     if args.strategy == "lowtf":
         sweep_lowtf(load("1m"), args.top, h4=h4)
+    if args.strategy == "mss":
+        sweep_mss(m5, args.top, h4=h4)
     if args.strategy in ("all", "scalper"):
         sweep_scalper(m5, args.top, h4=h4)
 

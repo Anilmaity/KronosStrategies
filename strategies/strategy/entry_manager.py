@@ -143,6 +143,9 @@ _VARIATION_STRATEGY_NAME = {
     "KRONOS_S96_H1_MOMENTUM":      "S96 H1 Momentum",
     "KRONOS_S97_SNAP_SCALPER":     "S97 Snap Scalper M5 (paper)",
     "KRONOS_S98_ZSCORE_MR":        "S98 ZScore MR M15 (paper)",
+    # Reversal category (2026-07-06): ICT MSS+FVG — the first strategy to pass
+    # held-out validation outside the trend family (train PF 1.29 / test 1.19).
+    "KRONOS_S99_MSS_FVG":          "S99 MSS FVG Reversal",
 }
 
 
