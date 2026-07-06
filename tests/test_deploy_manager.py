@@ -209,12 +209,37 @@ def test_challenge_adopted_when_deployed(db):
     assert ch_us.is_active is True
 
 
-def test_challenge_skipped_when_absent(db):
+def test_challenge_created_when_absent(db):
+    # 2026-07-06: a fresh-account rollout creates the trend slot too, so all
+    # three roster strategies land in one pass (scalper slot stays empty).
     assert deploy_manager.seed(db) == 0
     db.commit()
-    # Only the two children got managed rows (scalper slot empty since S98
-    # failed validation, spec 2026-07-03).
-    assert db.query(ManagedStrategy).count() == 2
+    assert db.query(ManagedStrategy).count() == 3
+    ch = db.query(Strategy).filter_by(
+        name=deploy_manager.CHALLENGE_STRATEGY_NAME).one()
+    ch_us = db.query(UserStrategy).filter_by(strategy_id=ch.id).one()
+    assert ch_us.deployed is True
+    assert ch_us.is_active is False, "created trend slot must start paused"
+    m = db.query(ManagedStrategy).filter_by(user_strategy_id=ch_us.id).one()
+    assert m.slot == "trend" and m.policy_key == "always_on"
+    assert m.live_eligible is True
+
+
+def test_rollout_env_knobs(db, monkeypatch):
+    # The 2026-07-06 live-account rollout: arm LIVE + live_eligible, still
+    # paused (is_active False everywhere, master OFF).
+    monkeypatch.setenv("MANAGER_ARM_MODE", "LIVE")
+    monkeypatch.setenv("MANAGER_LIVE_ELIGIBLE", "true")
+    assert deploy_manager.seed(db) == 0
+    db.commit()
+    for m in db.query(ManagedStrategy).all():
+        assert m.arm_mode == "LIVE"
+        assert m.live_eligible is True
+        assert m.desired_active is False
+        us = db.query(UserStrategy).filter_by(id=m.user_strategy_id).one()
+        assert us.is_active is False, "rollout must land paused"
+    cfg = db.query(ManagerConfig).one()
+    assert cfg.master_mode == "OFF"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -261,15 +286,15 @@ def test_retire_pulls_s97(db):
     db.refresh(s97_us)
     assert s97_us.deployed is False
     assert s97_us.is_active is False
-    # The manager roster now holds the two current children only.
-    assert db.query(ManagedStrategy).count() == 2
+    # The manager roster now holds the two children + the created trend slot.
+    assert db.query(ManagedStrategy).count() == 3
 
 
 def test_retire_noop_when_absent(db):
     # No S97 rows present -> retire pass is a clean no-op, seed still succeeds.
     assert deploy_manager.seed(db) == 0
     db.commit()
-    assert db.query(ManagedStrategy).count() == 2
+    assert db.query(ManagedStrategy).count() == 3
 
 
 # ──────────────────────────────────────────────────────────────────────────────

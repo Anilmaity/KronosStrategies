@@ -26,6 +26,15 @@ Inserts (idempotently):
     backtest (spec §8) produces a positive test-set expectancy.
   - apis_managerconfig default row (master_mode=OFF, kill $150, max 3 open).
 
+Rollout env knobs (2026-07-06 live-account deployment):
+  MANAGER_USER_BROKER_ID  bind everything to this UserBroker (fresh account).
+  MANAGER_ARM_MODE        arm_mode for NEWLY created managed rows (OFF|PAPER|LIVE).
+  MANAGER_LIVE_ELIGIBLE   "true" -> children live_eligible=True (held-out
+                          backtest passed 2026-07-06). CHALLENGE_XAU is created
+                          on the resolved broker when absent, so a fresh account
+                          gets the full 3-strategy roster (scalper slot empty).
+  Pausing is enforced by master_mode=OFF + is_active=False regardless.
+
 Broker binding
 --------------
 Like deploy_challenge_xau: mirrors an existing XAU_USD UserBroker so the new
@@ -71,6 +80,25 @@ CHALLENGE_STRATEGY_NAME = "Challenge XAU H4 Trend"
 # paper/probation strategies.
 ENTRY_QTY = Decimal(os.getenv("MANAGER_CHILD_LOT", "0.01"))
 
+
+def _arm_mode() -> str:
+    """arm_mode applied to NEWLY created ManagedStrategy rows only (re-runs
+    never touch an existing row's arm). Default OFF; the 2026-07-06 live
+    account rollout passes MANAGER_ARM_MODE=LIVE with everything paused via
+    master_mode=OFF + is_active=False."""
+    mode = os.getenv("MANAGER_ARM_MODE", "OFF").strip().upper() or "OFF"
+    if mode not in ("OFF", "PAPER", "LIVE"):
+        raise SystemExit(f"MANAGER_ARM_MODE must be OFF|PAPER|LIVE, got '{mode}'")
+    return mode
+
+
+def _live_eligible_override() -> bool:
+    """MANAGER_LIVE_ELIGIBLE=true marks the child strategies live-eligible at
+    seed time. Justified only once the held-out backtest passed — it did on
+    2026-07-06 (optimize_manager_strategies: s95 test WR 72.3%/PF 1.57,
+    s96 test WR 79.8%/PF 1.36, challenge test WR 86.2%/PF 1.90)."""
+    return os.getenv("MANAGER_LIVE_ELIGIBLE", "").strip().lower() in ("1", "true", "yes")
+
 # (strategy name, variation tag, slot, policy_key, policy_params, description)
 # Names must equal entry_manager._VARIATION_STRATEGY_NAME[variation].
 # policy_params mirror the spec §4 defaults explicitly so the frontend can
@@ -81,7 +109,9 @@ ROSTER = [
         "KRONOS_S95_SESSION_BREAKOUT",
         "session",
         "session_vol",
-        {"windows": [[6.75, 10.0], [13.25, 16.0]], "vol_regimes": ["NORMAL", "HIGH"]},
+        # Entry windows follow the ORB session hours [1,7,12,13,14] UTC: the OR
+        # completes at :30, entries run to the top of the hour (h12-14 merge).
+        {"windows": [[1.0, 2.0], [7.0, 8.0], [12.0, 15.0]], "vol_regimes": ["NORMAL", "HIGH"]},
         "Session ORB (delegate of kronos_session_breakout): 30-min OR, sessions "
         "[1,7,12,13,14] UTC, EMA240 bias, SL 2.0xOR, TP 0.8xOR, 180-min time "
         "exit. High-WR geometry validated 2026-07-06. Managed slot: session "
@@ -209,13 +239,14 @@ def _ensure_managed(sess, us, slot, policy_key, policy_params,
                     live_eligible=False) -> ManagedStrategy:
     m = sess.query(ManagedStrategy).filter_by(user_strategy_id=us.id).first()
     if m is None:
+        arm = _arm_mode()
         m = ManagedStrategy(
             id=uuid.uuid4(),
             user_strategy_id=us.id,
             slot=slot,
             policy_key=policy_key,
             policy_params=policy_params,
-            arm_mode="OFF",            # user arms via the backend API only
+            arm_mode=arm,              # default OFF; env override for rollouts
             live_eligible=live_eligible,
             desired_active=False,
             last_reason="",
@@ -223,7 +254,7 @@ def _ensure_managed(sess, us, slot, policy_key, policy_params,
         sess.add(m)
         sess.flush()
         print(f"[NEW] ManagedStrategy slot={slot} policy={policy_key} "
-              f"arm=OFF live_eligible={live_eligible}")
+              f"arm={arm} live_eligible={live_eligible}")
     else:
         print(f"[SKIP] ManagedStrategy for UserStrategy {us.id} already present "
               f"(slot={m.slot} policy={m.policy_key} arm={m.arm_mode})")
@@ -291,34 +322,51 @@ def seed(sess) -> int:
                 print(f"[RETIRE] {variation}: UserStrategy {us.id} de-deployed")
 
     # ── The two new children ──────────────────────────────────────────────────
+    child_live_eligible = _live_eligible_override()
     for name, variation, slot, policy_key, policy_params, description in ROSTER:
         strat = _ensure_strategy(sess, cp, name, variation, description)
         us = _ensure_user_strategy(sess, strat, user_broker)
         _ensure_managed(sess, us, slot, policy_key, policy_params,
-                        live_eligible=False)
+                        live_eligible=child_live_eligible)
 
-    # ── Adopt CHALLENGE_XAU under always_on management (if deployed) ─────────
+    # ── CHALLENGE_XAU fills the trend slot ────────────────────────────────────
+    # Prefer an existing deployed UserStrategy on the RESOLVED broker; adopt an
+    # existing one on any broker second (pre-2026-07-06 behaviour); create the
+    # Strategy/UserStrategy pair on the resolved broker when nothing exists, so
+    # a fresh-account rollout gets the full 3-strategy roster in one pass.
     ch_strat = (
         sess.query(Strategy)
         .filter_by(name=CHALLENGE_STRATEGY_NAME, currencypair_id=cp.id)
         .first()
     )
-    ch_us = None
-    if ch_strat is not None:
-        ch_us = (
-            sess.query(UserStrategy)
-            .filter_by(strategy_id=ch_strat.id, deployed=True)
-            .first()
+    if ch_strat is None:
+        ch_strat = _ensure_strategy(
+            sess, cp, CHALLENGE_STRATEGY_NAME, "CHALLENGE_XAU",
+            "H4 Donchian(20) trend-follow, EMA20/50 bias, static SL 4xATR / "
+            "static TP 0.4R (1.6xATR). High-WR geometry validated 2026-07-06 "
+            "(train WR 81.0%/PF 1.73, test WR 86.2%/PF 1.90).",
         )
+    ch_us = (
+        sess.query(UserStrategy)
+        .filter_by(strategy_id=ch_strat.id, user_broker_id=user_broker.id,
+                   deployed=True)
+        .first()
+    ) or (
+        sess.query(UserStrategy)
+        .filter_by(strategy_id=ch_strat.id, deployed=True)
+        .first()
+    )
     if ch_us is not None:
         _ensure_managed(sess, ch_us, "trend", "always_on", {},
                         live_eligible=True)
         print(f"[OK]  '{CHALLENGE_STRATEGY_NAME}' adopted (UserStrategy {ch_us.id}); "
-              f"is_active untouched — arm_mode=OFF means the manager never "
-              f"touches it, so it keeps trading exactly as today.")
+              f"is_active untouched — the manager only acts on it once armed.")
     else:
-        print(f"[WARN] no deployed UserStrategy for '{CHALLENGE_STRATEGY_NAME}' "
-              f"— skipping its ManagedStrategy row (deploy_challenge_xau first).")
+        ch_us = _ensure_user_strategy(sess, ch_strat, user_broker)
+        _ensure_managed(sess, ch_us, "trend", "always_on", {},
+                        live_eligible=True)
+        print(f"[OK]  '{CHALLENGE_STRATEGY_NAME}' created on the resolved broker "
+              f"(UserStrategy {ch_us.id}, is_active=False).")
 
     # ── Global config ─────────────────────────────────────────────────────────
     _ensure_config(sess)
