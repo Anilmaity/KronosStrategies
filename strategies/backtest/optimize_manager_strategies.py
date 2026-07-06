@@ -392,6 +392,80 @@ def run_zscore_mr(m5: pd.DataFrame, *, n=48, zt=2.5, tp_atr=0.5, sl_atr=1.5,
     return trades
 
 
+# ── 5. M1 liquidity-sweep reversal (killzones) ───────────────────────────────
+
+def run_liq_sweep_m1(m1: pd.DataFrame, *, n=60, poke_atr=0.2, buf_atr=0.3,
+                     tp_r=0.8, atr_n=14, hold_bars=240,
+                     hours=(7, 8, 9, 12, 13, 14),
+                     bias_m5: np.ndarray | None = None) -> list[Trade]:
+    """ICT-style stop-hunt fade on M1: a poke beyond the prior n-bar extreme
+    (by >= poke_atr x ATR) that CLOSES back inside = liquidity sweep +
+    rejection -> fade it. SL beyond the sweep wick + buf_atr x ATR,
+    TP = tp_r x risk. bias_m5: fade only sweeps against the H4 trend
+    (sell swept highs in a downtrend, buy swept lows in an uptrend)."""
+    times = m1["time"]
+    h = m1["high"].to_numpy(float); l = m1["low"].to_numpy(float)
+    c = m1["close"].to_numpy(float)
+    dates = times.dt.date.to_numpy()
+    hr = times.dt.hour.to_numpy()
+
+    a = atr_np(h, l, c, atr_n)
+    prev_hi = pd.Series(h).rolling(n).max().shift(1).to_numpy()
+    prev_lo = pd.Series(l).rolling(n).min().shift(1).to_numpy()
+
+    trades: list[Trade] = []
+    busy_until = -1
+    for k in range(n + 1, len(c)):
+        if k <= busy_until or hr[k] not in hours or not (a[k] > 0):
+            continue
+        side = 0
+        if (h[k] > prev_hi[k] + poke_atr * a[k]) and c[k] < prev_hi[k]:
+            side = -1                       # swept the highs, rejected -> SELL
+            sl = h[k] + buf_atr * a[k]
+        elif (l[k] < prev_lo[k] - poke_atr * a[k]) and c[k] > prev_lo[k]:
+            side = 1                        # swept the lows, rejected -> BUY
+            sl = l[k] - buf_atr * a[k]
+        if side == 0:
+            continue
+        if bias_m5 is not None and bias_m5[k] != side:
+            continue
+        entry = c[k]
+        risk = abs(entry - sl)
+        if risk <= 0:
+            continue
+        tp = entry + side * tp_r * risk
+        ke, px, out = walk_exit(h, l, c, dates, k, side, entry, sl, tp,
+                                hold_bars, False, times)
+        pnl = side * (px - entry) - COST_PTS
+        trades.append(Trade(times.iloc[k], side, entry, sl, tp,
+                            times.iloc[ke], px, out, pnl))
+        busy_until = ke
+    return trades
+
+
+def sweep_lowtf(m1, top, h4=None):
+    print("\n===== M1 liquidity-sweep reversal (killzones) =====")
+    rows = []
+    bias = h4_bias_on_m5(m1, h4) if h4 is not None else None
+    kz_ldn_ny = (7, 8, 9, 12, 13, 14)
+    kz_all = tuple(range(1, 16))
+    for n in (30, 60, 120):
+        for poke in (0.0, 0.2, 0.5):
+            for tp_r in (0.5, 0.8, 1.2):
+                for buf in (0.2, 0.5):
+                    for hours, htag in ((kz_ldn_ny, "KZ"), (kz_all, "1-15")):
+                        for b, btag in ((None, ""), (bias, "+H4bias")):
+                            label = (f"n={n} poke={poke}A tp={tp_r}R "
+                                     f"buf={buf}A {htag}{btag}")
+                            tr, te = split_summary(
+                                run_liq_sweep_m1(m1, n=n, poke_atr=poke,
+                                                 tp_r=tp_r, buf_atr=buf,
+                                                 hours=hours, bias_m5=b),
+                                label)
+                            rows.append((tr, te))
+    _report(rows, top)
+
+
 # ── sweeps ────────────────────────────────────────────────────────────────────
 
 def sweep_orb(m5, top):
@@ -534,7 +608,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--strategy", default="all",
                     choices=["all", "orb", "s96", "trend", "scalper", "momo",
-                             "verify"])
+                             "verify", "lowtf"])
     ap.add_argument("--top", type=int, default=10)
     args = ap.parse_args()
 
@@ -553,6 +627,8 @@ def main():
         sweep_momo_h1(load("1h"), args.top)
     if args.strategy == "verify":
         verify_winners(m5, h4, load("1h"))
+    if args.strategy == "lowtf":
+        sweep_lowtf(load("1m"), args.top, h4=h4)
     if args.strategy in ("all", "scalper"):
         sweep_scalper(m5, args.top, h4=h4)
 
