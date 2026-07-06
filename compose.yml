@@ -93,6 +93,7 @@ services:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
       RESEARCH_STRATEGY: kronos_challenge_xau
+      RISK_PER_TRADE_USD: "75"  # Phase-1 risk-normalized sizing (lot = 75USD / SL pts / 100)
       RESEARCH_WIN_15M: "1400"     # ~87 H4 bars of reach (>= 72 needed)
       RESEARCH_DAYS_15M: "28"      # cover ~3-4 trading weeks incl. weekend gaps
       # DRY_RUN: "true"            # uncomment to smoke-test without placing orders
@@ -141,6 +142,7 @@ services:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
       RESEARCH_STRATEGY: s95_session_breakout
+      RISK_PER_TRADE_USD: "75"  # Phase-1 risk-normalized sizing (lot = 75USD / SL pts / 100)
       RESEARCH_WIN_5M: "320"       # >= 290 needed for the EMA240+48 bias warmup
       RESEARCH_DAYS_5M: "3"        # refill promptly after weekend gaps
       DRY_RUN: "true"              # PAPER until held-out backtest passes
@@ -159,6 +161,7 @@ services:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
       RESEARCH_STRATEGY: s96_h1_momentum
+      RISK_PER_TRADE_USD: "75"  # Phase-1 risk-normalized sizing (lot = 75USD / SL pts / 100)
       RESEARCH_WIN_15M: "600"      # >= 304 needed for 76 closed H1 bars
       RESEARCH_DAYS_15M: "10"      # cover ~1.5 trading weeks incl. weekend gaps
       DRY_RUN: "true"              # PAPER until held-out backtest passes

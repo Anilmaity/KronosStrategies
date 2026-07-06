@@ -7,6 +7,7 @@ via SQLAlchemy when an ICT entry signal fires.
 
 from __future__ import annotations
 
+import os
 import uuid
 import logging
 from decimal import Decimal
@@ -22,6 +23,71 @@ from strategy.ict_engine import EntrySignal
 
 log = logging.getLogger(__name__)
 SYMBOL = "XAU_USD"
+
+# ── Risk-normalized sizing (Phase-1 manager redesign, 2026-07-06) ─────────────
+# When RISK_PER_TRADE_USD is set (>0), lot size derives from the signal's stop
+# distance so every loser costs ~the same dollars regardless of which strategy
+# fired (an H4 trend stop no longer risks 4x an ORB stop). Fixed
+# Strategy.entry_quantity x multiplyer remains the behaviour when unset.
+RISK_PER_TRADE_USD = float(os.getenv("RISK_PER_TRADE_USD", "0") or 0)
+MIN_LOT = 0.01
+MAX_LOT = float(os.getenv("MAX_LOT", "0.20"))
+# If even the minimum lot risks more than this multiple of the budget, the
+# trade is rejected (a freak-wide stop must not blow the daily brake solo).
+_MIN_LOT_RISK_TOLERANCE = 1.5
+# $ per point per 1.0 lot. XAUUSD: 1 lot = 100 oz -> $100/pt. Extend this map
+# when XAG_USD / BTC_USD join the roster (Phase 2) — contract sizes differ.
+_USD_PER_PT_PER_LOT = {"XAU_USD": 100.0}
+
+# Never stack risk onto a losing open position: a new entry in the SAME symbol
+# and direction is rejected while an open position there is underwater.
+NO_ADD_TO_LOSER = os.getenv("NO_ADD_TO_LOSER", "true").strip().lower() \
+    not in ("false", "0", "no")
+
+
+def _risk_sized_qty(entry_price: float, stop_loss: float | None,
+                    symbol: str, default_qty: float) -> tuple[float | None, str]:
+    """(lots, reason). lots=None -> reject (reason says why). Falls back to
+    default_qty when risk sizing is disabled or the signal has no stop."""
+    if RISK_PER_TRADE_USD <= 0 or stop_loss is None:
+        return default_qty, "fixed"
+    sl_dist = abs(float(entry_price) - float(stop_loss))
+    if sl_dist <= 0:
+        return default_qty, "fixed (degenerate stop)"
+    usd_pp = _USD_PER_PT_PER_LOT.get(symbol, 100.0)
+    min_lot_risk = MIN_LOT * sl_dist * usd_pp
+    if min_lot_risk > RISK_PER_TRADE_USD * _MIN_LOT_RISK_TOLERANCE:
+        return None, (f"risk_too_wide: min lot risks {min_lot_risk:.0f} USD "
+                      f"> {_MIN_LOT_RISK_TOLERANCE}x budget {RISK_PER_TRADE_USD:.0f}")
+    raw = RISK_PER_TRADE_USD / (sl_dist * usd_pp)
+    lots = max(MIN_LOT, min(MAX_LOT, int(raw / MIN_LOT) * MIN_LOT))
+    return round(lots, 2), f"risk {RISK_PER_TRADE_USD:.0f} USD / {sl_dist:.2f} pts"
+
+
+def _losing_open_same_side(user_broker_id, symbol: str, side: str) -> bool:
+    """True when the account already holds an open position in `symbol` on the
+    same side with negative unrealized P&L (position_monitor keeps
+    Position.profit_loss current every second)."""
+    sess = Session()
+    try:
+        rows = (
+            sess.query(Position)
+            .join(UserStrategy, Position.user_strategy_id == UserStrategy.id)
+            .filter(
+                UserStrategy.user_broker_id == user_broker_id,
+                Position.symbol == symbol,
+                Position.quantity > 0,
+                Position.profit_loss < 0,
+            )
+            .all()
+        )
+        for p in rows:
+            p_side = "BUY" if float(p.avg_buy_price or 0) > 0 else "SELL"
+            if p_side == side:
+                return True
+        return False
+    finally:
+        sess.close()
 
 
 # Variation tag → DB Strategy.name. Runners pass `variation="VAR2"` etc; we use
@@ -243,7 +309,25 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
                  open_n, max_concurrent)
         return False
 
-    qty = ctx["quantity"]
+    # ── No-add-to-loser guard (Phase-1 redesign) ──────────────────────────────
+    if NO_ADD_TO_LOSER and _losing_open_same_side(
+            ctx["user_broker_id"], symbol, signal.side):
+        _update_signal_status(signal_log_id, "REJECTED",
+                              rejection_reason="no_add_to_loser")
+        log.info("[ENTRY] blocked: open %s position on %s is underwater — "
+                 "not adding to a loser", signal.side, symbol)
+        return False
+
+    # ── Risk-normalized sizing (Phase-1 redesign) ─────────────────────────────
+    qty, sizing_reason = _risk_sized_qty(
+        signal.entry_price, signal.stop_loss, symbol, ctx["quantity"])
+    if qty is None:
+        _update_signal_status(signal_log_id, "REJECTED",
+                              rejection_reason=sizing_reason[:200])
+        log.info("[ENTRY] rejected by risk sizing: %s", sizing_reason)
+        return False
+    if sizing_reason != "fixed":
+        log.info("[SIZING] %s -> qty=%.2f lots", sizing_reason, qty)
 
     # Fire MetaAPI market order FIRST. If broker rejects, we don't pollute the
     # DB with phantom positions. On success we record the broker positionId on

@@ -344,6 +344,39 @@ def test_kill_switch_trips_pauses_and_resets_next_utc_day(db):
     db.flush()
     assert cfg.state.get("kill_tripped_date") is None
     assert any("auto-reset" in a.reason for a in actions(db, "INFO"))
+
+
+def test_soft_brake_blocks_new_starts_but_keeps_running(db):
+    """Phase-1 redesign (2026-07-06): at/below -soft_brake_usd the manager
+    stops STARTING strategies but leaves running ones alone; the hard kill
+    (kill_switch_loss_usd) is untouched below its own threshold."""
+    cfg = set_master_on(db, kill_switch_loss_usd=Decimal("200.00"))
+    cfg.state = {"soft_brake_usd": 120}
+    ms_off, us_off = seed_strategy(db, arm_mode="LIVE", policy_key="always_on",
+                                   is_active=False, slot="trend")
+    ms_on, us_on = seed_strategy(db, arm_mode="LIVE", policy_key="always_on",
+                                 is_active=True, slot="momentum")
+    # today's realized loss: past the soft brake, short of the hard kill
+    add_position(db, us_on, realized=-130.0, modified_at=NOW)
+
+    manager.evaluate_tick(db, make_snap(), NOW)
+    db.flush()
+
+    assert us_off.is_active is False, "soft brake must block the new START"
+    assert "soft daily brake" in ms_off.last_reason
+    assert us_on.is_active is True, "running strategy must keep running"
+    assert cfg.state.get("kill_tripped_date") is None, \
+        "-130 must NOT trip the -200 hard kill"
+
+
+def test_soft_brake_disabled_when_unset(db):
+    set_master_on(db, kill_switch_loss_usd=Decimal("200.00"))
+    ms, us = seed_strategy(db, arm_mode="LIVE", policy_key="always_on",
+                           is_active=False)
+    add_position(db, us, realized=-130.0, modified_at=NOW)
+    manager.evaluate_tick(db, make_snap(), NOW)
+    db.flush()
+    assert us.is_active is True, "no soft_brake_usd configured -> no brake"
     assert us.is_active is True                     # always_on resumes
 
 

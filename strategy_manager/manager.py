@@ -217,13 +217,22 @@ def evaluate_tick(sess, snap: RegimeState, now_utc: datetime, dry_run: bool = Fa
             snap,
         )
 
+    # ── Soft daily brake (Phase-1 redesign 2026-07-06) ───────────────────────
+    # At/below -soft_brake_usd the manager stops STARTING strategies but lets
+    # already-running ones finish their open positions; the hard kill above
+    # remains the ceiling. Configured via ManagerConfig.state["soft_brake_usd"]
+    # (0/absent = disabled). Auto-resets with the UTC day like the daily P&L.
+    soft_brake = float((cfg.state or {}).get("soft_brake_usd") or 0)
+    soft_active = soft_brake > 0 and daily_pnl <= -soft_brake
+
     open_count = _open_managed_positions(sess, managed_us_ids)
     cap = int(cfg.max_concurrent_positions or 0)
 
     log.info(
-        "[TICK] master=ON armed=%d/%d open_pos=%d/%d pnl_today=%.2f kill=%s | %s",
+        "[TICK] master=ON armed=%d/%d open_pos=%d/%d pnl_today=%.2f kill=%s "
+        "soft_brake=%s | %s",
         len(armed), len(managed), open_count, cap, daily_pnl, kill_active,
-        _summary_str(snap),
+        soft_active, _summary_str(snap),
     )
 
     # ── Per-strategy evaluation & apply ──────────────────────────────────────
@@ -250,6 +259,12 @@ def evaluate_tick(sess, snap: RegimeState, now_utc: datetime, dry_run: bool = Fa
             if desired and not currently_active and open_count >= cap:
                 desired = False
                 reason = f"max concurrent positions reached ({open_count}>={cap})"
+            # Soft daily brake: no new STARTs while today's realized P&L sits
+            # at/below -soft_brake_usd; running strategies finish their trades.
+            if desired and not currently_active and soft_active:
+                desired = False
+                reason = (f"soft daily brake: P&L {daily_pnl:.2f} <= "
+                          f"-{soft_brake:.2f} USD — no new starts today")
 
         transitioned = desired != bool(m.desired_active)
         if transitioned:
