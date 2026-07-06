@@ -25,7 +25,7 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from backtest.optimize_manager_strategies import (  # noqa: E402
-    load, run_orb, run_donchian_h4, run_mss_fvg,
+    load, run_orb, run_donchian_h4, run_mss_fvg, run_fvg_scalp,
 )
 # S96 retired from the roster 2026-07-06 — no longer in the report.
 
@@ -207,6 +207,10 @@ def main():
         "Session ORB (S95/live)": (
             run_orb(m5, or_min=30, tp_frac=0.8, sl_frac=2.0),
             pd.Timedelta(0), pd.Timedelta(minutes=5)),
+        "Scalp S93 (FVG killzone)": (
+            run_fvg_scalp(m5, min_fvg_atr=0.3, tp_r=1.5, retrace_w=12,
+                          hours=(7, 8, 9, 12, 13, 14)),
+            pd.Timedelta(0), pd.Timedelta(minutes=5)),
         "Reversal S99 (MSS+FVG)": (
             run_mss_fvg(m5, sweep_n=48, tp_r=1.5, retrace_w=24,
                         hours=tuple(range(1, 16))),
@@ -223,7 +227,7 @@ def main():
         # Tick-accurate exit pass (~1s ticks in .history_data, thru 2026-05-19)
         recs = df.to_dict("records")
         for r in recs:
-            r["retrace"] = name.startswith("Reversal")
+            r["retrace"] = name.startswith(("Reversal", "Scalp"))
         refined = [refine_exit_with_ticks(dict(r), fill_delay, bar_len)
                    for r in recs]
         frames.append(pd.DataFrame(refined))
