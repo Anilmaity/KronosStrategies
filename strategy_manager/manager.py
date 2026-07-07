@@ -141,8 +141,17 @@ def _utc_day_start(now_utc: datetime) -> datetime:
     return datetime.combine(now_utc.date(), dtime.min, tzinfo=timezone.utc)
 
 
+# Position.realized_profit_loss is stored in points x lots (= USD / 100 for
+# XAUUSD, where 1.0 lot = 100 oz -> $100/pt). The backend's GraphQL resolvers
+# multiply by the same contract factor for display; the manager must too, or
+# the USD-denominated kill-switch/soft-brake thresholds are 100x off — found
+# live on the FIRST real trade 2026-07-07 (realized -0.38 units == -$38).
+_USD_PER_PNL_UNIT = 100.0
+
+
 def _daily_realized_pnl(sess, us_ids, now_utc: datetime) -> float:
-    """Sum of realized P&L across managed strategies for the current UTC day.
+    """Sum of realized P&L in USD across managed strategies for the current
+    UTC day.
 
     Positions realize P&L when closed (position_monitor stamps modified_at),
     so `modified_at >= today 00:00 UTC` captures today's closes; still-open
@@ -158,7 +167,7 @@ def _daily_realized_pnl(sess, us_ids, now_utc: datetime) -> float:
         )
         .scalar()
     )
-    return float(total or 0)
+    return float(total or 0) * _USD_PER_PNL_UNIT
 
 
 def _open_managed_positions(sess, us_ids) -> int:

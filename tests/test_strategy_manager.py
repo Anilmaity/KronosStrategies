@@ -115,6 +115,9 @@ def set_master_on(sess, **cfg_kw):
 
 
 def add_position(sess, us, *, realized=0.0, qty=0.0, modified_at=NOW):
+    """realized is in DB units (points x lots = USD/100): -0.90 means -$90.
+    The manager multiplies by _USD_PER_PNL_UNIT when summing (units bug found
+    on the first live trade, 2026-07-07)."""
     pos = manager.Position(
         id=uuid.uuid4(),
         symbol="XAU_USD",
@@ -322,8 +325,8 @@ def test_kill_switch_trips_pauses_and_resets_next_utc_day(db):
     assert us.is_active is True
 
     # today's realized loss breaches the limit -> trip
-    add_position(db, us, realized=-90.0, modified_at=NOW)
-    add_position(db, us, realized=-70.0, modified_at=NOW)
+    add_position(db, us, realized=-0.90, modified_at=NOW)
+    add_position(db, us, realized=-0.70, modified_at=NOW)
     manager.evaluate_tick(db, make_snap(), NOW + timedelta(minutes=1))
     db.flush()
     assert us.is_active is False
@@ -357,7 +360,7 @@ def test_soft_brake_blocks_new_starts_but_keeps_running(db):
     ms_on, us_on = seed_strategy(db, arm_mode="LIVE", policy_key="always_on",
                                  is_active=True, slot="momentum")
     # today's realized loss: past the soft brake, short of the hard kill
-    add_position(db, us_on, realized=-130.0, modified_at=NOW)
+    add_position(db, us_on, realized=-1.30, modified_at=NOW)
 
     manager.evaluate_tick(db, make_snap(), NOW)
     db.flush()
@@ -373,7 +376,7 @@ def test_soft_brake_disabled_when_unset(db):
     set_master_on(db, kill_switch_loss_usd=Decimal("200.00"))
     ms, us = seed_strategy(db, arm_mode="LIVE", policy_key="always_on",
                            is_active=False)
-    add_position(db, us, realized=-130.0, modified_at=NOW)
+    add_position(db, us, realized=-1.30, modified_at=NOW)
     manager.evaluate_tick(db, make_snap(), NOW)
     db.flush()
     assert us.is_active is True, "no soft_brake_usd configured -> no brake"
@@ -386,12 +389,12 @@ def test_kill_switch_counts_only_todays_managed_pnl(db):
                            is_active=True)
     ms.desired_active = True
     # yesterday's big loss must NOT trip today
-    add_position(db, us, realized=-500.0, modified_at=NOW - timedelta(days=1))
+    add_position(db, us, realized=-5.00, modified_at=NOW - timedelta(days=1))
     # unmanaged strategy's loss must NOT count either
     other = manager.UserStrategy(id=uuid.uuid4(), name="unmanaged")
     db.add(other)
     db.flush()
-    add_position(db, other, realized=-500.0, modified_at=NOW)
+    add_position(db, other, realized=-5.00, modified_at=NOW)
 
     manager.evaluate_tick(db, make_snap(), NOW)
     db.flush()
