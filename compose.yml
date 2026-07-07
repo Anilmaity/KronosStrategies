@@ -159,7 +159,7 @@ services:
     environment:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RECON_LOOP_SEC: "60"
+      RECON_LOOP_SEC: "300"
       RECON_LOOKBACK_H: "48"
 
   # S93 — FVG continuation scalp (M5, killzones), the SCALPING category
