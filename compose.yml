@@ -142,7 +142,8 @@ services:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
       RESEARCH_STRATEGY: s95_session_breakout
-      RISK_PER_TRADE_USD: "75"  # Phase-1 risk-normalized sizing (lot = 75USD / SL pts / 100)
+      RISK_PER_TRADE_USD: "38"  # halved 2026-07-07 (operator)
+      MAX_LOT: "0.10"  # Phase-1 risk-normalized sizing (lot = 75USD / SL pts / 100)
       RESEARCH_WIN_5M: "320"       # >= 290 needed for the EMA240+48 bias warmup
       RESEARCH_DAYS_5M: "3"        # refill promptly after weekend gaps
       DRY_RUN: "true"              # PAPER until held-out backtest passes
@@ -173,7 +174,8 @@ services:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
       RESEARCH_STRATEGY: s93_fvg_scalp
-      RISK_PER_TRADE_USD: "75"  # Phase-1 risk-normalized sizing
+      RISK_PER_TRADE_USD: "38"  # halved 2026-07-07 (operator)
+      MAX_LOT: "0.10"  # Phase-1 risk-normalized sizing
       RESEARCH_WIN_5M: "160"
       RESEARCH_DAYS_5M: "2"
       DRY_RUN: "true"              # PAPER until live fills match the backtest
@@ -190,7 +192,8 @@ services:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
       TIGERDATA_URL: ${TIGERDATA_URL:-}
       RESEARCH_STRATEGY: s99_mss_fvg
-      RISK_PER_TRADE_USD: "75"  # Phase-1 risk-normalized sizing
+      RISK_PER_TRADE_USD: "38"  # halved 2026-07-07 (operator)
+      MAX_LOT: "0.10"  # Phase-1 risk-normalized sizing
       RESEARCH_WIN_5M: "160"
       RESEARCH_DAYS_5M: "2"
       DRY_RUN: "true"              # PAPER until live fills match the backtest
