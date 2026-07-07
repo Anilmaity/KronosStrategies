@@ -14,6 +14,7 @@ and cached for the lifetime of the process.
 from __future__ import annotations
 
 import os
+import time
 import logging
 import requests
 from dotenv import load_dotenv
@@ -311,6 +312,38 @@ class MetaApiClient:
             log.error("[MetaAPI] HTTP error %s: %s", exc.response.status_code, exc.response.text)
         except Exception:
             log.exception("[MetaAPI] Failed to place order")
+        return None
+
+    def get_position_fill(self, position_id: str, *, retries: int = 6,
+                          delay: float = 0.5) -> float | None:
+        """Real entry fill (openPrice) for a just-opened position, or None.
+
+        Market fills land in well under a second; poll briefly so place_entry
+        can book the Position at BROKER TRUTH instead of the signal price
+        (2026-07-07: trade #1 booked 4137.27 vs real fill 4136.90). Returns
+        None on the 'dry-run' sentinel, timeouts, or if the position already
+        closed before we could read it — callers fall back to the signal
+        price and the fill_reconciler trues it up within minutes.
+        """
+        if not position_id or not str(position_id).isdigit():
+            return None                      # dry-run sentinel / no ticket
+        url = (f"{self._trading_url()}/users/current/accounts/"
+               f"{self.account_id}/positions/{position_id}")
+        for attempt in range(retries):
+            try:
+                resp = requests.get(url, headers=self._headers(), timeout=10)
+                if resp.status_code == 200:
+                    px = (resp.json() or {}).get("openPrice")
+                    if px:
+                        return float(px)
+                # 404: not registered yet (or already closed) — retry briefly
+            except Exception as exc:
+                log.warning("[MetaAPI] get_position_fill attempt %d: %s",
+                            attempt + 1, exc)
+            time.sleep(delay)
+        log.warning("[MetaAPI] no fill price for position %s after %.1fs — "
+                    "caller falls back to signal price (reconciler will fix)",
+                    position_id, retries * delay)
         return None
 
 

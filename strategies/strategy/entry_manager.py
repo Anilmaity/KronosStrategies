@@ -365,6 +365,17 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
         log.warning("[ENTRY] MetaAPI rejected order — skipping DB write")
         return False
 
+    # ── Book at BROKER TRUTH (2026-07-07): fetch the real fill immediately
+    # (market fills land <1s). Falls back to the signal price on dry-run /
+    # timeout; fill_reconciler trues it up later either way. SL/TP trigger
+    # LEVELS stay signal-based; StrategySignal keeps the signal price audit.
+    fill_px = _client.get_position_fill(broker_position_id)
+    entry_px = float(fill_px) if fill_px else float(signal.entry_price)
+    if fill_px and abs(entry_px - float(signal.entry_price)) > 0.005:
+        log.info("[ENTRY] booked at broker fill %.2f (signal %.2f, drift %+.2f)",
+                 entry_px, float(signal.entry_price),
+                 entry_px - float(signal.entry_price))
+
     sess = Session()
     try:
         # ── 1. Position ───────────────────────────────────────────────────────
@@ -372,11 +383,11 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
         position = Position(
             id=uuid.uuid4(),
             symbol=symbol,
-            avg_buy_price=Decimal(str(signal.entry_price)) if is_long else Decimal("0"),
-            avg_sell_price=Decimal("0") if is_long else Decimal(str(signal.entry_price)),
+            avg_buy_price=Decimal(str(entry_px)) if is_long else Decimal("0"),
+            avg_sell_price=Decimal("0") if is_long else Decimal(str(entry_px)),
             total_buy_quantity=Decimal(str(qty)) if is_long else Decimal("0"),
             quantity=Decimal(str(qty)),
-            ltp=Decimal(str(signal.entry_price)),
+            ltp=Decimal(str(entry_px)),
             profit_loss=Decimal("0"),
             profit_loss_percentage=Decimal("0"),
             realized_profit_loss=Decimal("0"),
@@ -390,11 +401,11 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
         entry_order = Order(
             id=uuid.uuid4(),
             symbol=symbol,
-            price=Decimal(str(signal.entry_price)),
+            price=Decimal(str(entry_px)),          # broker fill (signal px lives on StrategySignal)
             condition="ENTRY",
             side=signal.side,
             quantity=Decimal(str(qty)),
-            amount=Decimal(str(round(signal.entry_price * qty, 2))),
+            amount=Decimal(str(round(entry_px * qty, 2))),
             order_type="MARKET",
             status="EXECUTED",
             reason=signal.reason,
@@ -498,7 +509,7 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
         log.info(
             "[ENTRY] %s %s qty=%.2f @ %.2f | SL=%.2f TP=%.2f | %s | pos_id=%s",
             signal.side, symbol, qty,
-            signal.entry_price, signal.stop_loss, signal.take_profit,
+            entry_px, signal.stop_loss, signal.take_profit,
             signal.reason, position.id,
         )
         return True
