@@ -39,8 +39,9 @@ CONFIG = StrategyConfig(
     name=NAME,
     description="ICT MSS+FVG reversal (M5): liquidity sweep -> structure "
                 "shift -> FVG retrace entry, SL beyond distal edge, TP 1.5R, "
-                "hours 1-15 UTC. Validated 2026-07-06 (train PF 1.29 / test "
-                "PF 1.19, ~7.6 trades/day).",
+                "hours 6-15 UTC (Asia dropped 2026-07-07 after live friction "
+                "measurement). 6-15 sim: train PF 1.33 / test PF 1.22, "
+                "~5 trades/day.",
     cooldown_s=300,            # one M5 bar; pending-state machine is stricter
     session_start_hour=None,   # hours gated inside get_signal (1..15 UTC)
     session_end_hour=None,
@@ -54,7 +55,12 @@ _TP_R       = 1.5
 _BUF_ATR    = 0.2
 _ATR_N      = 14
 _SWING_W    = 2           # fractal half-width
-_HOURS      = tuple(range(1, 16))     # 01:00..15:59 UTC
+_HOURS      = tuple(range(6, 16))     # 06:00..15:59 UTC — Asia hours 1-5
+                                      # dropped 2026-07-07: first live trade
+                                      # (01:31 UTC) measured ~1.5pt round-trip
+                                      # friction in thin liquidity, ~2x the
+                                      # 0.80pt stress bar; 6-15 sim: train PF
+                                      # 1.33 / test PF 1.22, robust at 0.80pt.
 _MAX_HOLD_MIN = 480
 _MIN_M5     = _SWEEP_N + 3 * _SWING_W + 4
 

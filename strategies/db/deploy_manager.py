@@ -142,8 +142,8 @@ ROSTER = [
         "always_on",
         {},
         "ICT MSS+FVG reversal (M5): liquidity sweep -> structure shift -> FVG "
-        "retrace entry, SL beyond distal edge, TP 1.5R, hours 1-15 UTC. "
-        "Validated 2026-07-06 (train PF 1.29 / test PF 1.19, ~7.6 trades/day). "
+        "retrace entry, SL beyond distal edge, TP 1.5R, hours 6-15 UTC (Asia 1-5 dropped 2026-07-07 after live friction "
+        "measurement). Validated: 6-15 train PF 1.33 / test PF 1.22, ~5 trades/day. "
         "Category: reversal (backtest_strategies/s99_mss_fvg.py).",
     ),
 ]
