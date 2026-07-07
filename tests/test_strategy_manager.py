@@ -402,6 +402,29 @@ def test_kill_switch_counts_only_todays_managed_pnl(db):
     assert actions(db, "KILL_SWITCH") == []
 
 
+def test_paper_strategy_invisible_to_brakes_and_cap(db):
+    """A PAPER-armed strategy (DRY_RUN runner) books fake positions/P&L in the
+    same tables; brakes and the concurrency cap must only see LIVE strategies,
+    while the policy still starts/stops the PAPER one normally."""
+    set_master_on(db, kill_switch_loss_usd=Decimal("150.00"),
+                  max_concurrent_positions=1)
+    ms_live, us_live = seed_strategy(db, arm_mode="LIVE", policy_key="always_on",
+                                     is_active=False, slot="trend")
+    ms_paper, us_paper = seed_strategy(db, arm_mode="PAPER", policy_key="always_on",
+                                       is_active=False, slot="reversal")
+    # paper losses beyond the kill threshold + a paper open position at the cap
+    add_position(db, us_paper, realized=-2.00, modified_at=NOW)
+    add_position(db, us_paper, qty=0.02)
+
+    manager.evaluate_tick(db, make_snap(), NOW)
+    db.flush()
+    # neither the fake loss nor the fake open position held the LIVE start back
+    assert us_live.is_active is True
+    assert actions(db, "KILL_SWITCH") == []
+    # and the PAPER strategy itself is still policy-managed
+    assert us_paper.is_active is True
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Max-concurrent guard
 # ──────────────────────────────────────────────────────────────────────────────

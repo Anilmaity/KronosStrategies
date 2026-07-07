@@ -201,7 +201,11 @@ def evaluate_tick(sess, snap: RegimeState, now_utc: datetime, dry_run: bool = Fa
         return
 
     armed = [m for m in managed if (m.arm_mode or "OFF") != "OFF"]
-    managed_us_ids = [m.user_strategy_id for m in managed]
+    # Brakes and the concurrency cap protect real money, so they must only see
+    # LIVE-armed strategies: a PAPER (DRY_RUN runner) strategy books fake
+    # positions/P&L in the same tables, and arm=OFF rows can carry stale paper
+    # history — either would trip the kill-switch or hold cap slots hostage.
+    live_us_ids = [m.user_strategy_id for m in managed if (m.arm_mode or "OFF") == "LIVE"]
 
     # ── Kill-switch state (auto-reset on the next UTC day) ──────────────────
     today = now_utc.date().isoformat()
@@ -214,7 +218,7 @@ def evaluate_tick(sess, snap: RegimeState, now_utc: datetime, dry_run: bool = Fa
         tripped_date = None
     kill_active = tripped_date == today
 
-    daily_pnl = _daily_realized_pnl(sess, managed_us_ids, now_utc)
+    daily_pnl = _daily_realized_pnl(sess, live_us_ids, now_utc)
     if not kill_active and daily_pnl <= -float(cfg.kill_switch_loss_usd):
         state["kill_tripped_date"] = today
         cfg.state = state
@@ -234,7 +238,7 @@ def evaluate_tick(sess, snap: RegimeState, now_utc: datetime, dry_run: bool = Fa
     soft_brake = float((cfg.state or {}).get("soft_brake_usd") or 0)
     soft_active = soft_brake > 0 and daily_pnl <= -soft_brake
 
-    open_count = _open_managed_positions(sess, managed_us_ids)
+    open_count = _open_managed_positions(sess, live_us_ids)
     cap = int(cfg.max_concurrent_positions or 0)
 
     log.info(
