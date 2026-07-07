@@ -146,6 +146,20 @@ ROSTER = [
         "measurement). Validated: 6-15 train PF 1.33 / test PF 1.22, ~5 trades/day. "
         "Category: reversal (backtest_strategies/s99_mss_fvg.py).",
     ),
+    (
+        "S94 Sweep Reversal",
+        "KRONOS_S94_SWEEP_REVERSAL",
+        "trend",
+        "always_on",
+        {},
+        "Liquidity-sweep reversal (M5): PD/session/swing level swept and "
+        "closed back within 15 bars, HTF15 wick-validated, retest entry, SL "
+        "beyond sweep extreme +10% pen, TP 2x break-bar leg, 1200-min "
+        "backstop, 24h. Full-year OOS validation 2026-07-07 (static exits): "
+        "886 trades, WR 29%, PF 1.82, +623R, 12/13 months positive; the 9 "
+        "OOS months beat the 3 IS months. Category: trend "
+        "(backtest_strategies/s94_sweep_reversal.py).",
+    ),
 ]
 
 # Strategies pulled from the roster: their UserStrategy is de-deployed and the

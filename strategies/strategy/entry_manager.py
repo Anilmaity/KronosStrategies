@@ -149,6 +149,10 @@ _VARIATION_STRATEGY_NAME = {
     # Scalping category (2026-07-06): FVG continuation scalp — first scalp to
     # pass validation after five failed campaigns (train PF 1.30 / test 1.24).
     "KRONOS_S93_FVG_SCALP":        "S93 FVG Scalp",
+    # Trend category (2026-07-07): liquidity-sweep reversal riding the
+    # distribution leg; full-year OOS-validated (static exits PF 1.82,
+    # 12/13 months positive — ClaudeTradingRD/validate_oos.py).
+    "KRONOS_S94_SWEEP_REVERSAL":   "S94 Sweep Reversal",
 }
 
 

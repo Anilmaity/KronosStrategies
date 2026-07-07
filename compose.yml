@@ -198,4 +198,24 @@ services:
       RESEARCH_DAYS_5M: "2"
       DRY_RUN: "true"              # PAPER until live fills match the backtest
 
+  # S94 — liquidity-sweep reversal (M5), TREND category (2026-07-07).
+  # Sweep of PD/session/swing level closing back within 15 bars, HTF15 wick
+  # validity, retest entry on the 1m touch, TP 2x break-bar leg. Swing levels
+  # live _LEVEL_TTL=1440 M5 bars (~5 days) -> WIN_5M 1500 / DAYS_5M 8 so the
+  # window actually spans the level lifetime across weekends.
+  s94_sweep_reversal:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: s94_sweep_reversal
+      RISK_PER_TRADE_USD: "38"  # Phase-1 parity with S93/S99
+      MAX_LOT: "0.10"
+      RESEARCH_WIN_5M: "1500"
+      RESEARCH_DAYS_5M: "8"
+      DRY_RUN: "true"              # PAPER until live fills match the backtest
+
   # S96 retired from the roster 2026-07-06 (operator decision) — service removed.
