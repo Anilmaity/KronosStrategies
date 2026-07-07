@@ -147,6 +147,21 @@ services:
       RESEARCH_DAYS_5M: "3"        # refill promptly after weekend gaps
       DRY_RUN: "true"              # PAPER until held-out backtest passes
 
+  # Fill reconciler — trues-up Position entry fills + realized P&L against
+  # MetaAPI history-deals (broker truth incl. spread/slippage/commission),
+  # so the dashboard AND the manager's daily brakes see real dollars.
+  # Built 2026-07-07 after live trade #1 showed DB -$38 vs broker -$67.4.
+  fill_reconciler:
+    build: ./strategies
+    restart: always
+    command: python fill_reconciler.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RECON_LOOP_SEC: "60"
+      RECON_LOOKBACK_H: "48"
+
   # S93 — FVG continuation scalp (M5, killzones), the SCALPING category
   # (2026-07-06): first scalp to pass validation after five failed campaigns.
   s93_fvg_scalp:
