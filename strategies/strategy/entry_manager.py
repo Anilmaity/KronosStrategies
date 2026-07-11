@@ -10,15 +10,19 @@ from __future__ import annotations
 import os
 import uuid
 import logging
+from datetime import datetime, time as dtime, timedelta, timezone
 from decimal import Decimal
+
+from sqlalchemy import func
 
 from shared.models import (
     Session,
     Position, Order, Trigger,
     UserStrategy, Strategy, CurrencyPair,
-    StrategySignal,
+    StrategySignal, ManagedStrategy, ManagerConfig,
 )
 from shared.metaapi_client import client_for_broker
+from shared.tsdb_reader import fetch_latest_ltp
 from strategy.ict_engine import EntrySignal
 
 log = logging.getLogger(__name__)
@@ -43,6 +47,190 @@ _USD_PER_PT_PER_LOT = {"XAU_USD": 100.0}
 # and direction is rejected while an open position there is underwater.
 NO_ADD_TO_LOSER = os.getenv("NO_ADD_TO_LOSER", "true").strip().lower() \
     not in ("false", "0", "no")
+
+# ── Entry-quality gates (2026-07-11, post double-kill-switch RCA) ─────────────
+# The 2026-07-09/10 kill-switch days traced mostly to execution artifacts:
+# market fills drifting past the signal level (mean +0.67pt adverse, max +6pt),
+# stops tighter than live friction, sibling strategies doubling the same setup,
+# and entries walked into the 12:30 UTC US-data candle. Each gate below rejects
+# the signal with an auditable StrategySignal.rejection_reason.
+#
+# UTC windows "HH:MM-HH:MM[,HH:MM-HH:MM...]"; no new entries inside them.
+NEWS_BLACKOUT_UTC = os.getenv("NEWS_BLACKOUT_UTC", "12:25-12:45")
+# Stops tighter than live round-trip friction (~1.5pt spread+slippage+fees on
+# XAUUSD) are negative-EV regardless of direction.
+MIN_SL_DIST_PTS = float(os.getenv("MIN_SL_DIST_PTS", "1.5"))
+# Reject when the market already ran past the signal level by more than
+# min(MAX_ENTRY_DRIFT_PTS, MAX_ENTRY_DRIFT_FRAC x stop distance): the backtest
+# fills AT the level, so chasing beyond that is unmodelled risk.
+MAX_ENTRY_DRIFT_PTS = float(os.getenv("MAX_ENTRY_DRIFT_PTS", "0.5"))
+MAX_ENTRY_DRIFT_FRAC = float(os.getenv("MAX_ENTRY_DRIFT_FRAC", "0.25"))
+# Cross-strategy duplicate guard: an open same-broker+symbol+side position
+# created within DUP_GUARD_MIN minutes whose entry sits within
+# DUP_GUARD_PROX_PTS is the same setup fired by a sibling (S93/S99 both trade
+# FVG retraces and routinely emit identical levels; no_add_to_loser only
+# catches the second one once the first is already underwater). 0 disables.
+DUP_GUARD_MIN = float(os.getenv("DUP_GUARD_MIN", "15"))
+DUP_GUARD_PROX_PTS = float(os.getenv("DUP_GUARD_PROX_PTS", "2.0"))
+# LIVE-armed managed strategies also respect the manager's soft daily brake at
+# ENTRY time — the manager itself only gates STARTs, so an already-running
+# always_on child would otherwise trade straight through it.
+SOFT_BRAKE_AT_ENTRY = os.getenv("SOFT_BRAKE_AT_ENTRY", "true").strip().lower() \
+    not in ("false", "0", "no")
+
+
+def _parse_utc_windows(spec: str) -> list[tuple[dtime, dtime]]:
+    """'12:25-12:45,13:55-14:05' -> [(time(12,25), time(12,45)), ...].
+    Malformed parts are logged and skipped, never fatal."""
+    wins: list[tuple[dtime, dtime]] = []
+    for part in (spec or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            a, b = part.split("-")
+            ah, am = a.split(":")
+            bh, bm = b.split(":")
+            wins.append((dtime(int(ah), int(am)), dtime(int(bh), int(bm))))
+        except ValueError:
+            log.warning("[GATE] bad blackout window %r — ignored", part)
+    return wins
+
+
+_BLACKOUT_WINDOWS = _parse_utc_windows(NEWS_BLACKOUT_UTC)
+
+
+def _in_news_blackout(now_utc: datetime) -> bool:
+    t = now_utc.time()
+    return any(a <= t <= b for a, b in _BLACKOUT_WINDOWS)
+
+
+def _drift_budget_pts(entry_price: float, stop_loss: float | None) -> float:
+    """Max tolerated adverse move past the signal level before entry."""
+    budget = MAX_ENTRY_DRIFT_PTS
+    if stop_loss is not None:
+        sl_dist = abs(float(entry_price) - float(stop_loss))
+        if sl_dist > 0:
+            budget = min(budget, MAX_ENTRY_DRIFT_FRAC * sl_dist)
+    return budget
+
+
+def _entry_drift_exceeded(side: str, entry_price: float, stop_loss: float | None,
+                          symbol: str) -> tuple[bool, str]:
+    """(exceeded, detail). Positive drift = the market already ran in the trade
+    direction (a BUY costs more / a SELL sells for less than modelled).
+    Measured live 2026-07-08..10 this cost ~$65/day. Fails OPEN on feed errors
+    so a price-feed hiccup can't halt trading."""
+    ltp = fetch_latest_ltp(symbol)
+    if ltp is None:
+        log.warning("[GATE] no live price for drift check (%s) — allowing entry", symbol)
+        return False, "no_ltp"
+    drift = (float(ltp) - float(entry_price)) if side == "BUY" \
+        else (float(entry_price) - float(ltp))
+    budget = _drift_budget_pts(entry_price, stop_loss)
+    detail = f"drift {drift:+.2f}pt vs budget {budget:.2f}pt (ltp {float(ltp):.2f})"
+    return drift > budget, detail
+
+
+def _duplicate_open_same_side(user_broker_id, symbol: str, side: str,
+                              entry_price: float) -> bool:
+    """True when the account already holds an OPEN same-side position in
+    `symbol` opened within DUP_GUARD_MIN minutes and DUP_GUARD_PROX_PTS of this
+    signal's entry — a sibling strategy just took the same setup."""
+    if DUP_GUARD_MIN <= 0:
+        return False
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=DUP_GUARD_MIN)
+    sess = Session()
+    try:
+        rows = (
+            sess.query(Position)
+            .join(UserStrategy, Position.user_strategy_id == UserStrategy.id)
+            .filter(
+                UserStrategy.user_broker_id == user_broker_id,
+                Position.symbol == symbol,
+                Position.quantity > 0,
+            )
+            .all()
+        )
+        for p in rows:
+            # Age filter in Python: created_at is tz-aware from Postgres but
+            # the column default is Kolkata wall-time — normalise defensively.
+            created = p.created_at
+            if created is None:
+                continue
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            if created < cutoff:
+                continue
+            p_side = "BUY" if float(p.avg_buy_price or 0) > 0 else "SELL"
+            if p_side != side:
+                continue
+            p_entry = float(p.avg_buy_price if p_side == "BUY" else p.avg_sell_price)
+            if abs(p_entry - float(entry_price)) <= DUP_GUARD_PROX_PTS:
+                return True
+        return False
+    finally:
+        sess.close()
+
+
+# Position P&L storage = points x lots (USD / 100 for XAUUSD). Keep in sync
+# with strategy_manager.manager._USD_PER_PNL_UNIT and the backend resolvers.
+_USD_PER_PNL_UNIT = 100.0
+
+
+def _todays_realized_usd(sess, us_ids) -> float:
+    """Realized P&L (USD) for the current UTC day across `us_ids`, attributed
+    by EXIT time (the closing Order's created_at) — NOT Position.modified_at,
+    which fill_reconciler re-touches for days after a close (the leak behind
+    the 2026-07-09 false kill-switch trip: -225 'today' vs a true -168)."""
+    if not us_ids:
+        return 0.0
+    day_start = datetime.combine(datetime.now(timezone.utc).date(),
+                                 dtime.min, tzinfo=timezone.utc)
+    pos_ids = [r[0] for r in
+               sess.query(Order.position_id)
+               .filter(Order.condition != "ENTRY",
+                       Order.created_at >= day_start).all() if r[0]]
+    if not pos_ids:
+        return 0.0
+    total = (
+        sess.query(func.coalesce(func.sum(Position.realized_profit_loss), 0))
+        .filter(Position.user_strategy_id.in_(list(us_ids)),
+                Position.id.in_(pos_ids))
+        .scalar()
+    )
+    return float(total or 0) * _USD_PER_PNL_UNIT
+
+
+def _managed_soft_brake(user_strategy_id) -> tuple[bool, str]:
+    """(blocked, detail). No NEW entries for a LIVE-armed managed strategy
+    while today's realized P&L across the LIVE-armed roster sits at/under
+    -soft_brake_usd (ManagerConfig.state). Open positions are untouched —
+    this only stops adding fresh risk, mirroring the manager's soft-brake
+    semantics at the one layer the manager can't reach."""
+    if not SOFT_BRAKE_AT_ENTRY:
+        return False, ""
+    sess = Session()
+    try:
+        mine = (sess.query(ManagedStrategy)
+                .filter_by(user_strategy_id=user_strategy_id).first())
+        if mine is None or (mine.arm_mode or "OFF") != "LIVE":
+            return False, ""
+        cfg = sess.query(ManagerConfig).first()
+        if cfg is None:
+            return False, ""
+        soft = float((cfg.state or {}).get("soft_brake_usd") or 0)
+        if soft <= 0:
+            return False, ""
+        live_us_ids = [m.user_strategy_id
+                       for m in sess.query(ManagedStrategy).all()
+                       if (m.arm_mode or "OFF") == "LIVE"]
+        pnl = _todays_realized_usd(sess, live_us_ids)
+        if pnl <= -soft:
+            return True, f"daily P&L {pnl:+.2f} USD <= -{soft:.0f} soft brake"
+        return False, ""
+    finally:
+        sess.close()
 
 
 def _risk_sized_qty(entry_price: float, stop_loss: float | None,
@@ -326,6 +514,48 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
                               rejection_reason="no_add_to_loser")
         log.info("[ENTRY] blocked: open %s position on %s is underwater — "
                  "not adding to a loser", signal.side, symbol)
+        return False
+
+    # ── Entry-quality gates (post 2026-07-09/10 kill-switch RCA) ─────────────
+    if _in_news_blackout(datetime.now(timezone.utc)):
+        _update_signal_status(signal_log_id, "REJECTED",
+                              rejection_reason="news_blackout")
+        log.info("[ENTRY] blocked: news blackout window (%s UTC)",
+                 NEWS_BLACKOUT_UTC)
+        return False
+
+    sl_dist = (abs(float(signal.entry_price) - float(signal.stop_loss))
+               if signal.stop_loss is not None else None)
+    if sl_dist is not None and 0 < sl_dist < MIN_SL_DIST_PTS:
+        _update_signal_status(
+            signal_log_id, "REJECTED",
+            rejection_reason=f"sl_too_tight: {sl_dist:.2f}pt < {MIN_SL_DIST_PTS}pt")
+        log.info("[ENTRY] blocked: stop %.2fpt < %.2fpt friction floor",
+                 sl_dist, MIN_SL_DIST_PTS)
+        return False
+
+    if _duplicate_open_same_side(ctx["user_broker_id"], symbol,
+                                 signal.side, signal.entry_price):
+        _update_signal_status(signal_log_id, "REJECTED",
+                              rejection_reason="duplicate_entry")
+        log.info("[ENTRY] blocked: sibling strategy already holds this setup "
+                 "(same side within %.0f min / %.1f pt)",
+                 DUP_GUARD_MIN, DUP_GUARD_PROX_PTS)
+        return False
+
+    brake_hit, brake_detail = _managed_soft_brake(ctx["user_strategy_id"])
+    if brake_hit:
+        _update_signal_status(signal_log_id, "REJECTED",
+                              rejection_reason=f"soft_daily_brake: {brake_detail}"[:200])
+        log.info("[ENTRY] blocked: %s", brake_detail)
+        return False
+
+    drift_bad, drift_detail = _entry_drift_exceeded(
+        signal.side, signal.entry_price, signal.stop_loss, symbol)
+    if drift_bad:
+        _update_signal_status(signal_log_id, "REJECTED",
+                              rejection_reason=f"entry_drift: {drift_detail}"[:200])
+        log.info("[ENTRY] blocked: %s", drift_detail)
         return False
 
     # ── Risk-normalized sizing (Phase-1 redesign) ─────────────────────────────

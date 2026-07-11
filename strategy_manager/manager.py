@@ -52,6 +52,7 @@ from shared.models import (
     ManagedStrategy,
     ManagerAction,
     ManagerConfig,
+    Order,
     Position,
     RegimeSnapshot,   # SQLAlchemy row (apis_regimesnapshot)
     Session,
@@ -151,19 +152,27 @@ _USD_PER_PNL_UNIT = 100.0
 
 def _daily_realized_pnl(sess, us_ids, now_utc: datetime) -> float:
     """Sum of realized P&L in USD across managed strategies for the current
-    UTC day.
+    UTC day, attributed by EXIT time (the closing Order's created_at).
 
-    Positions realize P&L when closed (position_monitor stamps modified_at),
-    so `modified_at >= today 00:00 UTC` captures today's closes; still-open
-    positions contribute their (zero) realized_profit_loss harmlessly.
+    Do NOT key this on Position.modified_at: fill_reconciler re-touches rows
+    for up to 48h after a close, which leaked prior days' P&L into "today" —
+    the 2026-07-09 kill-switch tripped on -225 USD when the true day was -168
+    (two Jul-7 closes were re-counted and a same-day winner migrated out).
     """
     if not us_ids:
+        return 0.0
+    day_start = _utc_day_start(now_utc)
+    closed_today = [r[0] for r in
+                    sess.query(Order.position_id)
+                    .filter(Order.condition != "ENTRY",
+                            Order.created_at >= day_start).all() if r[0]]
+    if not closed_today:
         return 0.0
     total = (
         sess.query(func.coalesce(func.sum(Position.realized_profit_loss), 0))
         .filter(
             Position.user_strategy_id.in_(us_ids),
-            Position.modified_at >= _utc_day_start(now_utc),
+            Position.id.in_(closed_today),
         )
         .scalar()
     )

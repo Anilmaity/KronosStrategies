@@ -117,7 +117,13 @@ def set_master_on(sess, **cfg_kw):
 def add_position(sess, us, *, realized=0.0, qty=0.0, modified_at=NOW):
     """realized is in DB units (points x lots = USD/100): -0.90 means -$90.
     The manager multiplies by _USD_PER_PNL_UNIT when summing (units bug found
-    on the first live trade, 2026-07-07)."""
+    on the first live trade, 2026-07-07).
+
+    A closed position (qty=0) also gets an exit Order stamped at
+    `modified_at`: since 2026-07-11 _daily_realized_pnl attributes P&L by
+    EXIT time (the closing Order's created_at), not by row-touch time —
+    fill_reconciler re-touches leaked prior days into "today" (the Jul-9
+    false kill-switch trip)."""
     pos = manager.Position(
         id=uuid.uuid4(),
         symbol="XAU_USD",
@@ -128,6 +134,22 @@ def add_position(sess, us, *, realized=0.0, qty=0.0, modified_at=NOW):
     pos.modified_at = modified_at
     sess.add(pos)
     sess.flush()
+    if float(qty) == 0:
+        eo = manager.Order(
+            id=uuid.uuid4(),
+            symbol="XAU_USD",
+            price=Decimal("4000"),
+            condition="STOPLOSS",
+            side="SELL",
+            quantity=Decimal("0.1"),
+            amount=Decimal("400"),
+            order_type="MARKET",
+            status="EXECUTED",
+            position_id=pos.id,
+        )
+        eo.created_at = modified_at
+        sess.add(eo)
+        sess.flush()
     return pos
 
 

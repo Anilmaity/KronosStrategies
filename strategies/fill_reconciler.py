@@ -140,7 +140,13 @@ def apply_deals(sess, grouped: dict[str, dict]) -> int:
                     touched.append(f"entry {booked:.2f}->{real:.2f}")
 
         # ── realized P&L true-up (closed positions only) ──────────────────────
-        if float(pos.quantity or 0) == 0 and g["out_vol"] > 0:
+        # Require the ENTRY deal in-window too: once the sliding lookback ages
+        # past the open, total_usd silently loses the entry-deal commission and
+        # the row gets rewritten a few cents off on every pass — bumping
+        # modified_at for days (the leak behind the 2026-07-09 false
+        # kill-switch trip) and corrupting realized by the entry commission.
+        if (float(pos.quantity or 0) == 0 and g["out_vol"] > 0
+                and g["entry_px"]):
             unit = _USD_PER_PNL_UNIT.get(pos.symbol, 100.0)
             real_units = g["total_usd"] / unit
             booked_units = float(pos.realized_profit_loss or 0)
