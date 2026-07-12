@@ -106,9 +106,9 @@ def main():
 
     for f in ("c1m.parquet", "c5m.parquet", "c15m.parquet"):
         try: os.remove(os.path.join(tmp, f))
-        except: pass
+        except Exception: pass
     try: os.rmdir(tmp)
-    except: pass
+    except Exception: pass
 
 
 if __name__ == "__main__":

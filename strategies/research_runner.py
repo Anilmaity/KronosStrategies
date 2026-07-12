@@ -65,6 +65,14 @@ _last_entry_ts:     datetime | None = None
 _last_heartbeat_ts: datetime | None = None
 
 
+def reset_state() -> None:
+    """Reset module-level runner state (test hook; mirrors the sNN modules)."""
+    global _last_1m_time, _last_entry_ts, _last_heartbeat_ts
+    _last_1m_time = None
+    _last_entry_ts = None
+    _last_heartbeat_ts = None
+
+
 def _should_heartbeat(now: datetime, last: datetime | None, interval_s: int) -> bool:
     """True when a liveness heartbeat is due: never logged before, or at least
     `interval_s` seconds have elapsed since the last one."""
@@ -137,9 +145,10 @@ def main():
                          _last_entry_ts.strftime("%Y-%m-%d %H:%M") if _last_entry_ts else "none",
                          cfg.cooldown_s)
 
-            c1m  = fetch_candles("1m",  days=DAYS_1M,  symbol=SYMBOL)
-            c5m  = fetch_candles("5m",  days=DAYS_5M,  symbol=SYMBOL)
-            c15m = fetch_candles("15m", days=DAYS_15M, symbol=SYMBOL)
+            # Fetch the 1m frame first and gate on it — on idle ticks (no new
+            # closed bar / out of session / cooldown) the 5m/15m fetches would
+            # be wasted OANDA calls once per cache TTL, per runner service.
+            c1m = fetch_candles("1m", days=DAYS_1M, symbol=SYMBOL)
 
             if c1m.empty or not _is_new_1m(c1m):
                 time.sleep(POLL_INTERVAL)
@@ -153,6 +162,9 @@ def main():
                 time.sleep(POLL_INTERVAL)
                 continue
 
+            c5m  = fetch_candles("5m",  days=DAYS_5M,  symbol=SYMBOL)
+            c15m = fetch_candles("15m", days=DAYS_15M, symbol=SYMBOL)
+
             # Feed is closed-bars-only; no dropping here (see _build_windows).
             w1m, w5m, w15m = _build_windows(c1m, c5m, c15m)
 
@@ -165,16 +177,7 @@ def main():
                 time.sleep(POLL_INTERVAL)
                 continue
 
-            entry = EntrySignal(
-                side=sig.side,
-                entry_price=float(sig.entry_price),
-                stop_loss=float(sig.stop_loss),
-                take_profit=float(sig.take_profit),
-                reason=sig.reason,
-                zone_low=float(sig.entry_price),
-                zone_high=float(sig.entry_price),
-                max_hold_min=getattr(sig, "max_hold_min", None),
-            )
+            entry = EntrySignal.from_signal(sig)
             log.info(
                 "[%s SIGNAL] %s @ %.2f | SL=%.2f TP=%.2f | maxhold=%s | %s",
                 name, sig.side, sig.entry_price, sig.stop_loss, sig.take_profit,

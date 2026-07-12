@@ -31,7 +31,6 @@ load_dotenv()
 API_KEY    = os.getenv("OANDA_API_KEY")
 INSTRUMENT = os.getenv("OANDA_INSTRUMENT", "XAU_USD")
 PRACTICE   = os.getenv("OANDA_PRACTICE", "true").lower() != "false"
-print(API_KEY , INSTRUMENT, PRACTICE)
 POLL_SECONDS = 5
 
 
@@ -86,7 +85,7 @@ def main():
             try:
                 # 🔒 Market closed check (weekends + 21:00–22:00 UTC daily maintenance)
                 if not is_market_closed_utc():
-                    log.info("Market Live -")
+                    log.debug("Market Live -")
 
                     try:
                         candle = fetcher.fetch_latest_candle()

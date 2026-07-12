@@ -446,11 +446,6 @@ def _update_signal_status(signal_log_id, status, *, rejection_reason=None, posit
         sess.close()
 
 
-def _has_open_position(user_strategy_id: uuid.UUID) -> bool:
-    """Return True if there is already an open (quantity > 0) position."""
-    return _open_position_count(user_strategy_id) > 0
-
-
 def _open_position_count(user_strategy_id: uuid.UUID) -> int:
     """Number of currently-open (quantity > 0) positions for this UserStrategy."""
     sess = Session()

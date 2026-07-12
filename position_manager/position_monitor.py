@@ -29,6 +29,12 @@ from shared.tsdb_reader import fetch_latest_ltp
 from shared.models import Session, Position, Trigger, Order, UserStrategy, CurrencyPair
 from shared.market_timing import is_market_closed_utc
 from shared.metaapi_client import close_position_by_id
+from trigger_logic import (
+    USD_PER_POINT_PER_LOT,
+    evaluate_trigger,
+    ratchet_trail,
+    trigger_fired,
+)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Config
@@ -47,23 +53,17 @@ log = logging.getLogger("position_monitor")
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Thin wrappers kept for back-compat (tests and any external callers); the
+# actual logic lives in trigger_logic.py so it is unit-testable without a DB.
+
 def _trigger_fired(trigger: Trigger, price: float) -> bool:
     """Return True if `price` crosses the trigger's threshold in the correct direction."""
-    tp = float(trigger.trigger_price)
-    return (trigger.greater_than and price >= tp) or (not trigger.greater_than and price <= tp)
+    return trigger_fired(trigger.greater_than, float(trigger.trigger_price), price)
 
 
 def _ratchet_trail(greater_than: bool, dist: float, price: float, cur_stop: float) -> float:
-    """Chandelier ratchet for a TRAILING_STOPLOSS_POINTS trigger.
-
-    `dist` is the fixed trail distance (price points). Returns the new stop,
-    which only ever tightens toward price (never loosens):
-      * LONG  (greater_than=False, stop below price): stop = max(cur, price-dist)
-      * SHORT (greater_than=True,  stop above price): stop = min(cur, price+dist)
-    """
-    if greater_than:                       # SHORT — stop sits above price
-        return min(cur_stop, price + dist)
-    return max(cur_stop, price - dist)     # LONG  — stop sits below price
+    """Chandelier ratchet — see trigger_logic.ratchet_trail."""
+    return ratchet_trail(greater_than, dist, price, cur_stop)
 
 
 def _realized_pnl(position: Position, close_price: float, qty: float) -> float:
@@ -114,8 +114,10 @@ def _check_triggers(current_price: float) -> None:
         )
 
         for pos in open_positions:
-            # Update live LTP and unrealized P&L
-            qty = float(pos.quantity) *100
+            # Update live LTP and unrealized P&L. quantity is in LOTS; the
+            # contract factor converts $-move × lots into USD (see
+            # trigger_logic module docstring for the units convention).
+            qty = float(pos.quantity) * USD_PER_POINT_PER_LOT
             avg_buy = float(pos.avg_buy_price)
             avg_sell = float(pos.avg_sell_price)
 
@@ -136,63 +138,34 @@ def _check_triggers(current_price: float) -> None:
             )
 
             for trigger in pending:
-                # TIME_EXIT triggers are tagged CUSTOM + order_type="TIME_EXIT"
-                # and carry an absolute UNIX expiry epoch in trigger_price (NOT a
-                # price). They MUST be evaluated on wall-clock, never via the
-                # price comparison below (an epoch ~1.7e9 would otherwise fire a
-                # price<=epoch trigger instantly). See entry_manager.place_entry.
-                is_time_exit = (
-                    trigger.trigger_type == "CUSTOM"
-                    and (trigger.order_type or "") == "TIME_EXIT"
-                )
-                is_trail = trigger.trigger_type == "TRAILING_STOPLOSS_POINTS"
-                # Whether this trigger, once fired, has NO broker-side equivalent
-                # and must be actively closed at MetaAPI (true for TIME_EXIT and
-                # for the ratcheted TRAIL level; SL/TP are attached at the broker).
-                need_active_close = False
+                # All TP/SL/TIME_EXIT/TRAIL semantics live in trigger_logic
+                # (pure, unit-tested); this loop only applies the decision.
+                decision = evaluate_trigger(trigger, current_price, time.time())
 
-                if is_time_exit:
-                    # Wall-clock exit: trigger_price holds an absolute UNIX epoch
-                    # (NOT a price), so it MUST be compared to time.time(), never
-                    # to current_price (an epoch ~1.7e9 would fire a price<=epoch
-                    # trigger instantly). See entry_manager.place_entry.
-                    if time.time() < float(trigger.trigger_price):
-                        continue
-                    label = "TIME_EXIT"
-                    need_active_close = True
+                if decision.new_trail_stop is not None:
+                    # Persist the ratcheted chandelier stop even when it does
+                    # not fire this tick — the broker holds only the initial
+                    # hard stop; the ratcheted level exists solely here.
+                    trigger.trigger_price = Decimal(str(decision.new_trail_stop))
+
+                if not decision.fired:
+                    continue
+
+                label = decision.label
+                if label == "TIME_EXIT":
                     log.info("[TRIGGER] TIME_EXIT fired | held past max-hold | pos=%s", pos.id)
-                elif is_trail:
-                    # Chandelier trailing stop: ratchet the stop toward price each
-                    # tick (trail distance lives in trail_points), persist it, then
-                    # fire on the usual price-cross. The ratcheted level has no
-                    # broker-side equivalent (the broker holds only the initial
-                    # hard stop), so a fire here closes the position actively.
-                    new_stop = _ratchet_trail(
-                        trigger.greater_than,
-                        float(trigger.trail_points),
-                        current_price,
-                        float(trigger.trigger_price),
-                    )
-                    if new_stop != float(trigger.trigger_price):
-                        trigger.trigger_price = Decimal(str(round(new_stop, 2)))
-                    if not _trigger_fired(trigger, current_price):
-                        continue
-                    label = "TRAIL"
-                    need_active_close = True
+                elif label == "TRAIL":
                     log.info(
                         "[TRIGGER] TRAIL fired | price=%.2f stop=%.2f | pos=%s",
                         current_price, float(trigger.trigger_price), pos.id,
                     )
                 else:
-                    if not _trigger_fired(trigger, current_price):
-                        continue
-                    label = trigger.trigger_type
                     log.info(
                         "[TRIGGER] %s fired | price=%.2f trigger_price=%.2f | pos=%s",
                         label, current_price, float(trigger.trigger_price), pos.id,
                     )
 
-                if need_active_close:
+                if decision.need_active_close:
                     # Unlike SL/TP (attached at the broker, auto-closed there),
                     # actively close the MetaAPI position; otherwise the DB flattens
                     # but the real position rides on to its attached SL/TP.

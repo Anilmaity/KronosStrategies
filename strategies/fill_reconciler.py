@@ -43,7 +43,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from shared.models import Session, Order, Position, UserStrategy  # noqa: E402
 from shared.metaapi_client import client_for_broker  # noqa: E402
-from shared.market_timing import is_market_closed_utc  # noqa: E402
 
 LOOP_SEC = int(os.getenv("RECON_LOOP_SEC", "60"))
 LOOKBACK_H = int(os.getenv("RECON_LOOKBACK_H", "48"))

@@ -66,7 +66,7 @@ TF_DAYS: dict[str, int] = {
 # ─────────────────────────────────────────────────────────────────────────────
 def connect_db() -> "psycopg2.extensions.connection":
     """Return an open psycopg2 connection to TimescaleDB."""
-    print(f"[DB] Connecting  {DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}/",DB_PASSWORD)
+    print(f"[DB] Connecting  {DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
 
     try:
         conn = psycopg2.connect(

@@ -17,7 +17,7 @@ import os
 import sys
 import time
 import logging
-from datetime import datetime, timezone, date
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -52,6 +52,13 @@ log = logging.getLogger("micro_scalper")
 
 _last_1m_time:  object          = None
 _last_entry_ts: datetime | None = None
+
+
+def reset_state() -> None:
+    """Reset module-level runner state (test hook; mirrors the sNN modules)."""
+    global _last_1m_time, _last_entry_ts
+    _last_1m_time = None
+    _last_entry_ts = None
 
 
 def _is_new_1m(candles) -> bool:
@@ -90,17 +97,18 @@ def _today_realized_pnl_points() -> float:
         ).first()
         if not us:
             return 0.0
+        # Filter to today's (UTC) closes in SQL — modified_at is timestamptz,
+        # so an instant-range compare equals the old per-row UTC-date check
+        # without loading every closed position the strategy ever had.
         today = datetime.now(timezone.utc).date()
+        day_start = datetime(today.year, today.month, today.day, tzinfo=timezone.utc)
         positions = sess.query(Position).filter(
             Position.user_strategy_id == us.id,
             Position.quantity == 0,  # closed only
+            Position.modified_at >= day_start,
+            Position.modified_at < day_start + timedelta(days=1),
         ).all()
-        total_cash = 0.0
-        total_qty = 0.0
-        for p in positions:
-            if p.modified_at and p.modified_at.astimezone(timezone.utc).date() == today:
-                total_cash += float(p.realized_profit_loss or 0.0)
-                total_qty += float(p.total_buy_quantity or 0.0) or float(strat.entry_quantity or 0.05)
+        total_cash = sum(float(p.realized_profit_loss or 0.0) for p in positions)
         # realized_profit_loss is cash; convert to points using the configured
         # entry quantity (uniform across VAR3 trades).
         qty = float(strat.entry_quantity or 0.05) or 0.05

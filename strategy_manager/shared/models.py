@@ -20,8 +20,35 @@ SSLMODE  = os.getenv("DB_SSLMODE", "require" if HOST.endswith("tsdb.cloud.timesc
 
 database_connection_string = f"postgresql://{USER}:{PASSWORD}@{HOST}:{PORT}/{NAME}?sslmode={SSLMODE}"
 
-engine  = create_engine(database_connection_string, pool_size=60, max_overflow=10)
-Session = sessionmaker(bind=engine)
+# `engine` / `Session` are created lazily (module __getattr__, PEP 562) so that
+# importing the model classes alone (tests, offline tools) never constructs a
+# connection pool. `from shared.models import Session` keeps working unchanged:
+# the first access builds the engine + sessionmaker once and reuses them.
+_engine = None
+_session_factory = None
+
+
+def _get_engine():
+    global _engine
+    if _engine is None:
+        _engine = create_engine(database_connection_string, pool_size=60, max_overflow=10)
+    return _engine
+
+
+def _get_session_factory():
+    global _session_factory
+    if _session_factory is None:
+        _session_factory = sessionmaker(bind=_get_engine())
+    return _session_factory
+
+
+def __getattr__(name):
+    if name == "engine":
+        return _get_engine()
+    if name == "Session":
+        return _get_session_factory()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 Base       = declarative_base()
 APP_PREFIX = "apis"
@@ -83,7 +110,9 @@ class Broker(BaseModel):
 class UserBroker(BaseModel):
     __tablename__ = f"{APP_PREFIX}_userbroker"
 
-    api_key          = Column(String(500), unique=True, default=str(uuid.uuid4()))
+    # default must be a callable — a bare str(uuid.uuid4()) would be evaluated
+    # once at import and hand every inserted row the SAME key (unique violation).
+    api_key          = Column(String(500), unique=True, default=lambda: str(uuid.uuid4()))
     margin_available = Column(String(100), default="")
     margin_used      = Column(String(100), default="0.00")
     meta_account_id    = Column(String(120), default="")
@@ -242,7 +271,7 @@ class Action(BaseModel):
         ("SELL_EXIT",         "SELL_EXIT"),
     )
 
-    TRIGGER_TYPE = {
+    TRIGGER_TYPE = (
         ("POINTS",                    "POINTS"),
         ("PERCENTAGE",                "PERCENTAGE"),
         ("CUMULATIVE_PNL_VALUE",      "CUMULATIVE_PNL_VALUE"),
@@ -251,7 +280,7 @@ class Action(BaseModel):
         ("TIME_PERIOD",               "TIME_PERIOD"),
         ("INDEX_PERCENTAGE",          "INDEX_PERCENTAGE"),
         ("CUSTOM",                    "CUSTOM"),
-    }
+    )
 
     TRAILING_TYPE = (
         ("PERCENTAGE",           "PERCENTAGE"),

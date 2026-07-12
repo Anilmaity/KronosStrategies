@@ -27,7 +27,6 @@ import sys
 import time
 from typing import Optional
 
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -68,6 +67,13 @@ CONFIGS = {
 
 _last_bar_seen: Optional[pd.Timestamp] = None
 _open_local: bool = False  # cooperative single-position guard inside the process
+
+
+def reset_state() -> None:
+    """Reset module-level runner state (test hook; mirrors the sNN modules)."""
+    global _last_bar_seen, _open_local
+    _last_bar_seen = None
+    _open_local = False
 
 
 def to_indexed_df(candles: pd.DataFrame) -> pd.DataFrame:

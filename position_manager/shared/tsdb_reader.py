@@ -16,6 +16,7 @@ Public API (unchanged):
 import it (backfill/validate); the live trading path never calls it.
 """
 
+import logging
 import os
 import time
 import threading
@@ -24,6 +25,8 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 import requests
 from dotenv import load_dotenv
+
+log = logging.getLogger(__name__)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 for _env_path in [
@@ -166,7 +169,7 @@ def fetch_candles(tf: str, days: int = 7, symbol: str = "XAU_USD") -> pd.DataFra
     try:
         rows = _fetch_oanda_ohlc(symbol, gran, days)
     except Exception as exc:
-        print(f"[OANDA] fetch_candles error ({symbol} {gran} {days}d): {exc}")
+        log.warning("[OANDA] fetch_candles error (%s %s %sd): %s", symbol, gran, days, exc)
         with _cache_lock:                       # serve last good data if we have it
             hit = _candle_cache.get(key)
         return hit[1].copy() if hit else empty
@@ -197,5 +200,5 @@ def fetch_latest_ltp(symbol: str = "XAU_USD") -> float | None:
             return None
         return float(candles[-1]["mid"]["c"])
     except Exception as exc:
-        print(f"[OANDA] fetch_latest_ltp error ({symbol}): {exc}")
+        log.warning("[OANDA] fetch_latest_ltp error (%s): %s", symbol, exc)
         return None
