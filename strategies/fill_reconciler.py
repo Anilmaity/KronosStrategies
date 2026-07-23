@@ -173,6 +173,22 @@ def _accounts_in_scope(sess) -> list:
     return [r[0] for r in rows if r[0] is not None]
 
 
+def _archive_deals(account_id: str, deals: list[dict]) -> None:
+    """Append raw broker deals to the broker_deals archive table.
+
+    Failure-isolated on purpose: archiving must never break reconciliation,
+    so any error is logged and swallowed (2026-07-23, broker-history archive)."""
+    try:
+        from shared import broker_deals as bd
+        from shared import models as _models
+        n = bd.persist_deals(_models.engine, account_id, deals)
+        if n:
+            log.info("[ARCHIVE] account %s: %d new broker deal(s) stored",
+                     account_id, n)
+    except Exception:
+        log.exception("[ARCHIVE] persist failed — reconciliation unaffected")
+
+
 def run_once() -> None:
     sess = Session()
     try:
@@ -180,7 +196,9 @@ def run_once() -> None:
             client = client_for_broker(sess, ub_id)
             if client is None:
                 continue
-            grouped = group_deals(fetch_deals(client, LOOKBACK_H))
+            deals = fetch_deals(client, LOOKBACK_H)
+            _archive_deals(client.account_id, deals)
+            grouped = group_deals(deals)
             n = apply_deals(sess, grouped)
             if n:
                 sess.commit()
