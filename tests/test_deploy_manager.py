@@ -61,7 +61,6 @@ UserBroker = deploy_manager.UserBroker
 UserStrategy = deploy_manager.UserStrategy
 
 NEW_NAMES = [
-    "S95 Session Breakout",
     "S99 MSS FVG Reversal",
     "S93 FVG Scalp",
     "S94 Sweep Reversal",
@@ -148,7 +147,6 @@ def test_seed_managed_rows_match_spec(db):
     db.commit()
 
     expected = {
-        "S95 Session Breakout":        ("trend",    "session_vol"),
         "S99 MSS FVG Reversal":        ("reversal", "always_on"),
         "S93 FVG Scalp":               ("scalping", "always_on"),
         "S94 Sweep Reversal":          ("trend",    "always_on"),
@@ -218,7 +216,7 @@ def test_challenge_created_when_absent(db):
     # three roster strategies land in one pass (scalper slot stays empty).
     assert deploy_manager.seed(db) == 0
     db.commit()
-    assert db.query(ManagedStrategy).count() == 5
+    assert db.query(ManagedStrategy).count() == 4
     ch = db.query(Strategy).filter_by(
         name=deploy_manager.CHALLENGE_STRATEGY_NAME).one()
     ch_us = db.query(UserStrategy).filter_by(strategy_id=ch.id).one()
@@ -290,15 +288,15 @@ def test_retire_pulls_s97(db):
     db.refresh(s97_us)
     assert s97_us.deployed is False
     assert s97_us.is_active is False
-    # Roster children (S95, S93, S99, S94) + the created challenge trend slot.
-    assert db.query(ManagedStrategy).count() == 5
+    # Roster children (S93, S99, S94) + the created challenge trend slot.
+    assert db.query(ManagedStrategy).count() == 4
 
 
 def test_retire_noop_when_absent(db):
     # No S97 rows present -> retire pass is a clean no-op, seed still succeeds.
     assert deploy_manager.seed(db) == 0
     db.commit()
-    assert db.query(ManagedStrategy).count() == 5
+    assert db.query(ManagedStrategy).count() == 4
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -317,11 +315,11 @@ def test_seed_is_idempotent(db):
         db.query(ManagerConfig).count(),
     )
 
-    # Simulate the manager having started S95, then re-run the seeder: the
+    # Simulate the manager having started S93, then re-run the seeder: the
     # re-run must not flip is_active back off.
-    s95 = db.query(Strategy).filter_by(name="S95 Session Breakout").one()
-    s95_us = db.query(UserStrategy).filter_by(strategy_id=s95.id).one()
-    s95_us.is_active = True
+    s93 = db.query(Strategy).filter_by(name="S93 FVG Scalp").one()
+    s93_us = db.query(UserStrategy).filter_by(strategy_id=s93.id).one()
+    s93_us.is_active = True
     db.commit()
 
     assert deploy_manager.seed(db) == 0
@@ -333,8 +331,8 @@ def test_seed_is_idempotent(db):
         db.query(ManagedStrategy).count(),
         db.query(ManagerConfig).count(),
     )
-    db.refresh(s95_us)
-    assert s95_us.is_active is True, "re-seed must not flip a running strategy off"
+    db.refresh(s93_us)
+    assert s93_us.is_active is True, "re-seed must not flip a running strategy off"
 
 
 def test_seed_fails_without_currencypair():

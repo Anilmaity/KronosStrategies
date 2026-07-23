@@ -111,19 +111,6 @@ def _live_eligible_override() -> bool:
 # onto existing rows.
 ROSTER = [
     (
-        "S95 Session Breakout",
-        "KRONOS_S95_SESSION_BREAKOUT",
-        "trend",
-        "session_vol",
-        # Entry windows follow the ORB session hours [1,7,12,13,14] UTC: the OR
-        # completes at :30, entries run to the top of the hour (h12-14 merge).
-        {"windows": [[1.0, 2.0], [7.0, 8.0], [12.0, 15.0]], "vol_regimes": ["NORMAL", "HIGH"]},
-        "Session ORB (delegate of kronos_session_breakout): 30-min OR, sessions "
-        "[1,7,12,13,14] UTC, EMA240 bias, SL 2.0xOR, TP 0.8xOR, 180-min time "
-        "exit. High-WR geometry validated 2026-07-06. Category: trend "
-        "(backtest_strategies/s95_session_breakout.py).",
-    ),
-    (
         "S93 FVG Scalp",
         "KRONOS_S93_FVG_SCALP",
         "scalping",
@@ -171,6 +158,11 @@ RETIRED_STRATEGIES = [
     # S96 removed from the roster 2026-07-06 (operator decision): weakest
     # 3-month contributor (+$30 @0.01 lot); module/tests stay in-tree.
     ("S96 H1 Momentum", "KRONOS_S96_H1_MOMENTUM"),
+    # S95 retired 2026-07-23 (operator decision, live-vs-sim capture audit):
+    # 5 live trades in 2.5 weeks (generation was starved by DAYS_5M=3 < its
+    # 290-bar warmup post-weekend), tiny-sample live PF misleading. UserStrategy
+    # rows archived + ManagedStrategy rows deleted on the live DB same day.
+    ("S95 Session Breakout", "KRONOS_S95_SESSION_BREAKOUT"),
 ]
 
 

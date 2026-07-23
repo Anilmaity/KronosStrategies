@@ -74,29 +74,13 @@ services:
   # ───────────────────────────────────────────────────────────────────────────
 
   # ───────────────────────────────────────────────────────────────────────────
-  # CHALLENGE_XAU — H4 Donchian trend-follow with a chandelier TRAILING stop.
-  # The deployable answer to the $5000->$5500 FundingPips challenge research
-  # (port of bot/challenge_xau.py). Requires its DB rows first:
-  #     python -m db.deploy_challenge_xau --commit    (from strategies/)
-  # WORKING TF is H4: the runner must pull enough 15m history to form
-  #   >= EMA_SLOW(50)+Donchian(20) closed H4 bars, so WIN/DAYS_15M are enlarged
-  #   well past the defaults (otherwise get_signal stays silent).
-  # The exit is monitor-side trailing -> position_manager MUST be running.
-  # SAFETY: set DRY_RUN "true" to smoke-test (logs signals, places NO orders).
+  # CHALLENGE_XAU REMOVED 2026-07-16 (operator decision). The H4 Donchian
+  # trend-follow never traded live: the box ran RESEARCH_DAYS_15M=15 (~996
+  # 15m bars / 67 closed H4) below the strategy's 1152-bar / 72-H4 minimum,
+  # so get_signal returned None on every tick. UserStrategy rows archived
+  # (not deleted). Recreatable from git history + db/deploy_challenge_xau.py;
+  # strategy module kept at backtest_strategies/kronos_challenge_xau.py.
   # ───────────────────────────────────────────────────────────────────────────
-  challenge_xau:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: kronos_challenge_xau
-      RISK_PER_TRADE_USD: "75"  # Phase-1 risk-normalized sizing (lot = 75USD / SL pts / 100)
-      RESEARCH_WIN_15M: "1400"     # ~87 H4 bars of reach (>= 72 needed)
-      RESEARCH_DAYS_15M: "28"      # cover ~3-4 trading weeks incl. weekend gaps
-      # DRY_RUN: "true"            # uncomment to smoke-test without placing orders
 
   # ───────────────────────────────────────────────────────────────────────────
   # Strategy Manager — regime-aware meta-controller (60s loop). Computes the
@@ -133,20 +117,9 @@ services:
   # 30-min OR, sessions [1,7,12,13,14], SL 2.0xOR / TP 0.8xOR). The EMA240+48
   # bias needs >= 290 CLOSED M5 bars, so WIN/DAYS_5M are pinned well past the
   # 80-bar runner default (otherwise get_signal stays silent — classic gotcha).
-  s95_session_breakout:
-    build: ./strategies
-    restart: always
-    command: python research_runner.py
-    env_file: .env
-    environment:
-      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
-      TIGERDATA_URL: ${TIGERDATA_URL:-}
-      RESEARCH_STRATEGY: s95_session_breakout
-      RISK_PER_TRADE_USD: "38"  # halved 2026-07-07 (operator)
-      MAX_LOT: "0.10"  # Phase-1 risk-normalized sizing (lot = 75USD / SL pts / 100)
-      RESEARCH_WIN_5M: "320"       # >= 290 needed for the EMA240+48 bias warmup
-      RESEARCH_DAYS_5M: "3"        # refill promptly after weekend gaps
-      DRY_RUN: "true"              # PAPER until held-out backtest passes
+  # s95_session_breakout retired 2026-07-23 (operator decision): UserStrategy
+  # rows archived, ManagedStrategy rows removed, container stopped on the box.
+  # Module and tests stay in-tree; redeploy via db/deploy_manager.py if revived.
 
   # Fill reconciler — trues-up Position entry fills + realized P&L against
   # MetaAPI history-deals (broker truth incl. spread/slippage/commission),
@@ -177,7 +150,9 @@ services:
       RISK_PER_TRADE_USD: "38"  # halved 2026-07-07 (operator)
       MAX_LOT: "0.10"  # Phase-1 risk-normalized sizing
       RESEARCH_WIN_5M: "160"
-      RESEARCH_DAYS_5M: "2"
+      RESEARCH_DAYS_5M: "5"        # 2 gave ~96 M5 bars Monday morning (< 120 module
+                                   # minimum) -> dark until midday; 2026-07-23 audit
+      RESEARCH_DAYS_15M: "5"       # WIN_15M=100 needs >3 calendar days over a weekend
       DRY_RUN: "true"              # PAPER until live fills match the backtest
 
   # S99 — ICT MSS+FVG reversal (M5), the REVERSAL category (2026-07-06).
@@ -195,7 +170,9 @@ services:
       RISK_PER_TRADE_USD: "38"  # halved 2026-07-07 (operator)
       MAX_LOT: "0.10"  # Phase-1 risk-normalized sizing
       RESEARCH_WIN_5M: "160"
-      RESEARCH_DAYS_5M: "2"
+      RESEARCH_DAYS_5M: "5"        # 2 gave ~96 M5 bars Monday morning (< 120 module
+                                   # minimum) -> dark until midday; 2026-07-23 audit
+      RESEARCH_DAYS_15M: "5"       # WIN_15M=100 needs >3 calendar days over a weekend
       DRY_RUN: "true"              # PAPER until live fills match the backtest
 
   # S94 — liquidity-sweep reversal (M5), TREND category (2026-07-07).
@@ -215,7 +192,9 @@ services:
       RISK_PER_TRADE_USD: "38"  # Phase-1 parity with S93/S99
       MAX_LOT: "0.10"
       RESEARCH_WIN_5M: "1500"
-      RESEARCH_DAYS_5M: "8"
+      RESEARCH_DAYS_5M: "11"       # 8 gave ~1470 M5 bars post-weekend (< 1500 window,
+                                   # zero holiday margin); 2026-07-23 capture audit
+      RESEARCH_DAYS_15M: "5"       # WIN_15M=100 needs >3 calendar days over a weekend
       DRY_RUN: "true"              # PAPER until live fills match the backtest
 
   # S96 retired from the roster 2026-07-06 (operator decision) — service removed.
