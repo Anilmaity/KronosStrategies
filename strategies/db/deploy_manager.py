@@ -134,6 +134,18 @@ ROSTER = [
         "Category: reversal (backtest_strategies/s99_mss_fvg.py).",
     ),
     (
+        "S100 M3 Combo Scalper",
+        "KRONOS_S100_M3_COMBO",
+        "scalping",
+        "always_on",
+        {},
+        "M3 combo scalper (spec v3, 2026-07-23): FVG retrace + OB edge retest "
+        "+ RSI3-momentum, EMA20/200 direction gate, hours 1-8/13-15 UTC, TP "
+        "max(2.5R, 1.5pt), 72-min backstop. 3y-validated (2026 PF 1.68 / 2025 "
+        "1.36 / 2024 1.05 / 2023H2 0.74 — regime-dependent, deployed PAUSED). "
+        "Category: scalping (backtest_strategies/s100_m3_combo.py).",
+    ),
+    (
         "S94 Sweep Reversal",
         "KRONOS_S94_SWEEP_REVERSAL",
         "trend",

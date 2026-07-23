@@ -121,6 +121,27 @@ services:
   # rows archived, ManagedStrategy rows removed, container stopped on the box.
   # Module and tests stay in-tree; redeploy via db/deploy_manager.py if revived.
 
+  # S100 — M3 combo scalper (spec v3, 2026-07-23): FVG+OB+RSI3-momentum with
+  # EMA20/200 gate, TP 2.5R. Deployed PAUSED: DRY_RUN paper + manager arm OFF
+  # until live fills are measured. WIN_1M 700 = EMA200 on M3 + warmup;
+  # DAYS_1M 3 covers Monday mornings (module only consumes w1m).
+  s100_m3_combo:
+    build: ./strategies
+    restart: always
+    command: python research_runner.py
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      RESEARCH_STRATEGY: s100_m3_combo
+      RISK_PER_TRADE_USD: "38"
+      MAX_LOT: "0.10"
+      RESEARCH_WIN_1M: "700"
+      RESEARCH_DAYS_1M: "3"
+      RESEARCH_DAYS_15M: "5"       # unused by the module; keeps the weekend
+                                   # window-coverage guard satisfied
+      DRY_RUN: "true"              # PAPER until armed + fills measured
+
   # Fill reconciler — trues-up Position entry fills + realized P&L against
   # MetaAPI history-deals (broker truth incl. spread/slippage/commission),
   # so the dashboard AND the manager's daily brakes see real dollars.

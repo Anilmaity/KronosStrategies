@@ -341,6 +341,10 @@ _VARIATION_STRATEGY_NAME = {
     # distribution leg; full-year OOS-validated (static exits PF 1.82,
     # 12/13 months positive — ClaudeTradingRD/validate_oos.py).
     "KRONOS_S94_SWEEP_REVERSAL":   "S94 Sweep Reversal",
+    # Scalping category (2026-07-23): M3 combo (FVG+OB edge+RSI3-momentum,
+    # EMA20/200 gate, TP 2.5R) — 3y-validated spec v3, deployed PAUSED
+    # (arm OFF, paper) pending live-fill measurement.
+    "KRONOS_S100_M3_COMBO":        "S100 M3 Combo Scalper",
 }
 
 
