@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shared.tsdb_reader import fetch_latest_ltp
 from shared.models import Session, Position, Trigger, Order, UserStrategy, CurrencyPair
 from shared.market_timing import is_market_closed_utc
-from shared.metaapi_client import close_position_by_id
+from shared.metaapi_client import close_position_by_id, client_for_broker
 from trigger_logic import (
     USD_PER_POINT_PER_LOT,
     evaluate_trigger,
@@ -82,6 +82,74 @@ def _get_user_broker_id(sess, position: Position) -> uuid.UUID | None:
     """Look up user_broker_id through Position → UserStrategy."""
     us = sess.query(UserStrategy).filter_by(id=position.user_strategy_id).first()
     return us.user_broker_id if us else None
+
+
+# ── Active broker close with retry (TIME_EXIT/TRAIL/CUSTOM) ──────────────────
+# The Jul-14 TIME_EXITs 504ed at the broker (env client resolved the wrong
+# region) and the monitor flattened the DB anyway — the real positions rode on
+# to their attached stops (−52pt each). Closes now go through the per-broker
+# client (the entry manager's working path) and an unconfirmed close leaves
+# the trigger PENDING for retry; only after _CLOSE_MAX_ATTEMPTS failures do we
+# fall back to flatten-and-warn (broker SL/TP backstop remains attached).
+
+_CLOSE_MAX_ATTEMPTS = int(os.getenv("BROKER_CLOSE_MAX_ATTEMPTS", "5"))
+_CLOSE_RETRY_SEC    = float(os.getenv("BROKER_CLOSE_RETRY_SEC", "10"))
+_close_attempts: dict = {}   # position id -> failed attempt count
+_close_next_try: dict = {}   # position id -> unix ts of next allowed attempt
+
+
+def _attempt_broker_close(sess, pos: Position, label: str,
+                          now_ts: float) -> tuple[bool, bool]:
+    """Try to close `pos` at the broker. Returns (finalize, attempted).
+
+    finalize=True  → book the DB close (broker close confirmed, nothing to
+                     close, or attempts exhausted).
+    finalize=False → leave the trigger PENDING; the caller must NOT flatten.
+    attempted=False → skipped inside the retry backoff window.
+    """
+    pid = pos.id
+    if now_ts < _close_next_try.get(pid, 0.0):
+        return False, False
+
+    entry_order = (
+        sess.query(Order)
+        .filter_by(position_id=pos.id, condition="ENTRY")
+        .first()
+    )
+    broker_pid = entry_order.broker_order_id if entry_order else None
+    if not broker_pid:
+        log.warning("[%s] no broker position id for pos=%s — DB close only",
+                    label, pid)
+        _close_attempts.pop(pid, None)
+        _close_next_try.pop(pid, None)
+        return True, True
+
+    client = client_for_broker(sess, _get_user_broker_id(sess, pos))
+    closed_ok = (client.close_position_by_id(broker_pid) if client
+                 else close_position_by_id(broker_pid))
+    if closed_ok:
+        _close_attempts.pop(pid, None)
+        _close_next_try.pop(pid, None)
+        return True, True
+
+    n = _close_attempts.get(pid, 0) + 1
+    _close_attempts[pid] = n
+    if n >= _CLOSE_MAX_ATTEMPTS:
+        log.error(
+            "[%s] broker close FAILED %d/%d times for pos=%s (broker_pid=%s) — "
+            "giving up and recording DB close; broker SL/TP remain attached as "
+            "a backstop. RECONCILE MANUALLY.",
+            label, n, _CLOSE_MAX_ATTEMPTS, pid, broker_pid)
+        _close_attempts.pop(pid, None)
+        _close_next_try.pop(pid, None)
+        return True, True
+
+    _close_next_try[pid] = now_ts + _CLOSE_RETRY_SEC
+    log.warning(
+        "[%s] broker close not confirmed for pos=%s (broker_pid=%s) — attempt "
+        "%d/%d, retrying in %.0fs; trigger stays PENDING",
+        label, pid, broker_pid, n, _CLOSE_MAX_ATTEMPTS, _CLOSE_RETRY_SEC)
+    return False, True
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -167,20 +235,15 @@ def _check_triggers(current_price: float) -> None:
 
                 if decision.need_active_close:
                     # Unlike SL/TP (attached at the broker, auto-closed there),
-                    # actively close the MetaAPI position; otherwise the DB flattens
-                    # but the real position rides on to its attached SL/TP.
-                    entry_order = (
-                        sess.query(Order)
-                        .filter_by(position_id=pos.id, condition="ENTRY")
-                        .first()
-                    )
-                    broker_pid = entry_order.broker_order_id if entry_order else None
-                    closed_ok = close_position_by_id(broker_pid) if broker_pid else False
-                    if not closed_ok:
-                        log.warning(
-                            "[%s] broker close not confirmed for pos=%s "
-                            "(broker_pid=%s) — recording DB close anyway; broker "
-                            "SL/TP remain attached as a backstop", label, pos.id, broker_pid)
+                    # actively close the MetaAPI position via the per-broker
+                    # client. An unconfirmed close leaves this trigger PENDING
+                    # and the position open in the DB — retried with backoff
+                    # (see _attempt_broker_close) instead of flattening while
+                    # the real position rides on at the broker.
+                    finalize, _ = _attempt_broker_close(
+                        sess, pos, label, time.time())
+                    if not finalize:
+                        break  # keep trigger PENDING; retry on a later tick
 
                 # Mark this trigger as triggered
                 trigger.status = "TRIGGERED"

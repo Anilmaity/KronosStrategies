@@ -222,6 +222,112 @@ def place_market_order(
     return None
 
 
+# ---------------------------------------------------------------------------
+# Per-account client (mirrors strategies/shared/metaapi_client.py) — the env
+# singleton below resolves the region from the env token, which is
+# client-scoped and cannot call the provisioning API, so it falls back to
+# META_DEFAULT_REGION and 504s on accounts in other regions (the Jul-14
+# TIME_EXIT failures). The per-broker creds resolve their own region the same
+# way the entry manager's working order path does.
+# ---------------------------------------------------------------------------
+
+class MetaApiClient:
+    """Per-account MetaAPI REST client (close path only — the monitor never
+    opens positions)."""
+
+    def __init__(self, account_id: str, token: str) -> None:
+        self.account_id = account_id
+        self.token = token
+        self._trading_url_cache: str | None = None
+
+    def _headers(self) -> dict:
+        return {"auth-token": self.token, "Content-Type": "application/json"}
+
+    def _trading_url(self) -> str:
+        """Resolve and cache the regional trading host for this account.
+        Precedence: META_REGION override -> provisioning lookup -> default."""
+        if self._trading_url_cache:
+            return self._trading_url_cache
+
+        region = _REGION_OVERRIDE
+        if region:
+            log.info("[MetaAPI] Using META_REGION override: %s", region)
+        else:
+            try:
+                resp = requests.get(
+                    f"{_PROVISION_URL}/users/current/accounts/{self.account_id}",
+                    headers=self._headers(),
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                region = resp.json().get("region") or _DEFAULT_REGION
+            except Exception:
+                log.warning("[MetaAPI] Could not fetch account region — defaulting to %s",
+                            _DEFAULT_REGION)
+                region = _DEFAULT_REGION
+
+        self._trading_url_cache = f"https://mt-client-api-v1.{region}.{_CLIENT_DOMAIN}"
+        log.info("[MetaAPI] Resolved trading host: %s (account %s)",
+                 self._trading_url_cache, self.account_id)
+        return self._trading_url_cache
+
+    def close_position_by_id(self, meta_position_id: str) -> bool:
+        """Close an open MetaAPI position on THIS account. False on any error."""
+        if _DRY_RUN:
+            log.info("[MetaAPI DRY_RUN] close_position_by_id positionId=%s", meta_position_id)
+            return True
+        if not meta_position_id or meta_position_id == "dry-run":
+            return False
+
+        payload = {"actionType": "POSITION_CLOSE_ID", "positionId": meta_position_id}
+        try:
+            url = f"{self._trading_url()}/users/current/accounts/{self.account_id}/trade"
+            resp = requests.post(url, headers=self._headers(), json=payload, timeout=_TIMEOUT)
+            resp.raise_for_status()
+            log.info("[MetaAPI] Position closed | account=%s positionId=%s",
+                     self.account_id, meta_position_id)
+            return True
+        except requests.HTTPError as exc:
+            log.warning(
+                "[MetaAPI] close_position HTTP %s (account=%s): %s",
+                exc.response.status_code, self.account_id, exc.response.text,
+            )
+        except Exception:
+            log.exception("[MetaAPI] Failed to close position %s (account=%s)",
+                          meta_position_id, self.account_id)
+        return False
+
+
+_CLIENT_CACHE: dict[str, "MetaApiClient"] = {}
+
+
+def client_for_broker(session, user_broker_id) -> "MetaApiClient | None":
+    """Return a MetaApiClient for the broker's stored creds, or None (-> caller
+    falls back to the env-singleton close)."""
+    from shared.models import UserBroker
+    from shared.crypto import decrypt_token
+
+    broker = session.query(UserBroker).filter_by(id=user_broker_id).first()
+    if broker is None:
+        log.warning("[MetaAPI] UserBroker %s not found", user_broker_id)
+        return None
+    acct = (getattr(broker, "meta_account_id", "") or "").strip()
+    enc = getattr(broker, "meta_api_token_enc", "") or ""
+    if not acct or not enc:
+        log.warning("[MetaAPI] account %s has no per-account creds", user_broker_id)
+        return None
+    if acct in _CLIENT_CACHE:
+        return _CLIENT_CACHE[acct]
+    try:
+        token = decrypt_token(enc)
+    except Exception as e:
+        log.error("[MetaAPI] decrypt failed for %s: %s", user_broker_id, e)
+        return None
+    client = MetaApiClient(acct, token)
+    _CLIENT_CACHE[acct] = client
+    return client
+
+
 def close_position_by_id(meta_position_id: str) -> bool:
     """
     Close an open MetaAPI position by its positionId.

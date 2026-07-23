@@ -207,6 +207,35 @@ class MetaApiClient:
         log.info("[MetaAPI] Resolved trading host: %s", self._trading_url_cache)
         return self._trading_url_cache
 
+    def close_position_by_id(self, meta_position_id: str) -> bool:
+        """Close an open MetaAPI position on THIS account. False on any error.
+        Mirrored in position_manager/shared — the monitor's active exits
+        (TIME_EXIT/TRAIL) close through this per-account path since the
+        2026-07-23 fix (env-singleton closes hit the wrong region/account)."""
+        if _DRY_RUN:
+            log.info("[MetaAPI DRY_RUN] close_position_by_id positionId=%s", meta_position_id)
+            return True
+        if not meta_position_id or meta_position_id == "dry-run":
+            return False
+
+        payload = {"actionType": "POSITION_CLOSE_ID", "positionId": meta_position_id}
+        try:
+            url = f"{self._trading_url()}/users/current/accounts/{self.account_id}/trade"
+            resp = requests.post(url, headers=self._headers(), json=payload, timeout=_TIMEOUT)
+            resp.raise_for_status()
+            log.info("[MetaAPI] Position closed | account=%s positionId=%s",
+                     self.account_id, meta_position_id)
+            return True
+        except requests.HTTPError as exc:
+            log.warning(
+                "[MetaAPI] close_position HTTP %s (account=%s): %s",
+                exc.response.status_code, self.account_id, exc.response.text,
+            )
+        except Exception:
+            log.exception("[MetaAPI] Failed to close position %s (account=%s)",
+                          meta_position_id, self.account_id)
+        return False
+
     def _get_symbol_spec(self, broker_symbol: str) -> dict:
         """Fetch and cache the broker's specification for a symbol.
 
