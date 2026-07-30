@@ -31,6 +31,8 @@ NOTE: winners pay 3-6R by design; expect ~29% WR with static exits.
 """
 from __future__ import annotations
 
+import logging
+import os
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -38,6 +40,8 @@ import pandas as pd
 
 from backtest_strategies._shared_ta import ensure_utc_ts
 from backtest_strategies.base import Signal, StrategyConfig
+
+log = logging.getLogger(__name__)
 
 NAME = "KRONOS_S94_SWEEP_REVERSAL"
 CONFIG = StrategyConfig(
@@ -57,7 +61,12 @@ CONFIG = StrategyConfig(
 _SWING_K     = 10      # fractal half-width for swing levels
 _CONFIRM_N   = 15      # bars allowed to close back through the level
 _ENTRY_TTL   = 30      # M5 bars the retest entry stays armed
-_LEVEL_TTL   = 1440    # M5 bars a swing/session level stays active
+# M5 bars a swing/session level stays active. env-tunable (opt15 Task 10):
+# S94_LEVEL_TTL_BARS. 1440 (default, unchanged) is the FULL backtest level-
+# universe depth; live windows are usually shorter and see a truncated set of
+# old swing/session levels -- the module's known live<->backtest divergence
+# (a one-time WARN fires in _detect when the window is shorter than this).
+_LEVEL_TTL   = int(os.getenv("S94_LEVEL_TTL_BARS", "1440"))
 _STOP_BUF    = 0.10    # stop: extreme + 10% of penetration
 _SD_MULT     = 2.0     # TP: extreme + 2 x break-bar leg (reversal direction)
 _MIN_RR      = 1.0     # skip if |TP-entry| < |stop-entry|
@@ -76,29 +85,152 @@ MIN_BARS_5M = _MIN_M5
 # ── Pending-setup state (persists across runner ticks in-process) ─────────────
 # Each armed setup: {side, level, stop, tp, armed_after, expires_at}
 _pending: list[dict] = []
-_last_conf_bar = None      # dedup: one detection pass per closed M5 bar
+
+# ── Incremental level/sweep machine state (opt15 Task 10) ─────────────────────
+# The level/sweep walk is INCREMENTAL: instead of rebuilding the whole window
+# from born=0 every closed M5 bar (O(n x levels) each tick), the machine state
+# is persisted here and only bars newer than `last_ts` are stepped. Full-rebuild
+# fallback fires when the window origin changes (window slid past the state
+# origin) or on any inconsistency -- so the result is always identical to the
+# old full-window walk (guarded byte-for-byte by tests/test_s94_parity.py).
+#
+# Indices stored in the machine (born / break_i) are 0-based OFFSETS FROM
+# `origin_ts` -- while the origin is stable they equal the current window
+# position, so every `i - born` / `i - break_i` bar-count comparison keeps the
+# exact semantics of the old window-relative walk. When the origin moves the
+# whole machine is discarded and rebuilt, so no stale offset ever survives.
+_state: dict | None = None
+_ttl_warned = False        # one-time WARN when window shorter than _LEVEL_TTL
 
 
 def reset_state() -> None:
-    """Clear armed setups + dedup memory (used by tests)."""
-    global _pending, _last_conf_bar
+    """Clear armed setups + the incremental level machine (used by tests)."""
+    global _pending, _state, _ttl_warned
     _pending = []
-    _last_conf_bar = None
+    _state = None
+    _ttl_warned = False
+
+
+def _new_state(origin_ts) -> dict:
+    """Fresh (empty) level/sweep machine anchored at `origin_ts`."""
+    return {
+        "origin_ts": origin_ts,
+        "last_ts": None,
+        "last_idx": None,
+        "levels": [],          # {price, side, kind, born, break_i, extreme}
+        "cur_day": None,
+        "day_hi": None,
+        "day_lo": None,
+        "sess_state": {},
+    }
+
+
+def _step_bar(a: int, h, l, c, day, hour, hmax, lmin) -> list[dict]:
+    """Advance the persistent level/sweep machine (`_state`) by ONE bar at
+    window index `a`. Returns the confirmation hits produced ON THIS bar.
+
+    This is the exact body of the old per-bar loop iteration, lifted verbatim so
+    that stepping bars one-at-a-time across ticks (incremental) is identical to
+    looping over every bar in one pass (full rebuild). `a` is an offset from the
+    machine origin == current window position while the origin is stable."""
+    st = _state
+    levels = st["levels"]
+
+    if day[a] != st["cur_day"]:
+        if st["day_hi"] is not None:
+            st["levels"] = [lv for lv in levels if lv["kind"] != "PD"]
+            levels = st["levels"]
+            levels.append({"price": st["day_hi"], "side": "high", "kind": "PD",
+                           "born": a, "break_i": None, "extreme": 0.0})
+            levels.append({"price": st["day_lo"], "side": "low", "kind": "PD",
+                           "born": a, "break_i": None, "extreme": 0.0})
+        st["cur_day"], st["day_hi"], st["day_lo"] = day[a], h[a], l[a]
+        st["sess_state"] = {}
+    else:
+        st["day_hi"], st["day_lo"] = max(st["day_hi"], h[a]), min(st["day_lo"], l[a])
+
+    sess_state = st["sess_state"]
+    for name, start, end in _SESSIONS:
+        if start <= hour[a] < end:
+            s = sess_state.setdefault(name, [h[a], l[a]])
+            s[0], s[1] = max(s[0], h[a]), min(s[1], l[a])
+        elif name in sess_state and hour[a] >= end:
+            s = sess_state.pop(name)
+            levels.append({"price": s[0], "side": "high", "kind": "session",
+                           "born": a, "break_i": None, "extreme": 0.0})
+            levels.append({"price": s[1], "side": "low", "kind": "session",
+                           "born": a, "break_i": None, "extreme": 0.0})
+
+    j = a - _SWING_K
+    if j >= _SWING_K:
+        if h[j] == hmax[j]:
+            levels.append({"price": h[j], "side": "high", "kind": "swing",
+                           "born": a, "break_i": None, "extreme": 0.0})
+        if l[j] == lmin[j]:
+            levels.append({"price": l[j], "side": "low", "kind": "swing",
+                           "born": a, "break_i": None, "extreme": 0.0})
+
+    hits: list[dict] = []
+    kill: list[dict] = []
+    for lv in levels:
+        if lv["kind"] != "PD" and a - lv["born"] > _LEVEL_TTL:
+            kill.append(lv)
+            continue
+        if lv["break_i"] is None:
+            if lv["side"] == "high" and h[a] > lv["price"]:
+                lv["break_i"], lv["extreme"] = a, h[a]
+            elif lv["side"] == "low" and l[a] < lv["price"]:
+                lv["break_i"], lv["extreme"] = a, l[a]
+        else:
+            lv["extreme"] = max(lv["extreme"], h[a]) if lv["side"] == "high" \
+                else min(lv["extreme"], l[a])
+            back = c[a] < lv["price"] if lv["side"] == "high" \
+                else c[a] > lv["price"]
+            if back:
+                hits.append(lv)
+                kill.append(lv)
+            elif a - lv["break_i"] >= _CONFIRM_N:
+                kill.append(lv)
+    for lv in kill:
+        levels.remove(lv)
+    return hits
 
 
 def _detect(w5m: pd.DataFrame, now_utc: datetime) -> None:
-    """Walk the M5 window with the level/sweep state machine and arm a setup
-    for any sweep whose CONFIRMATION lands on the last closed bar. The walk is
-    deterministic over the window, so re-running it each new bar reproduces
-    the same live levels the offline backtest saw (window >= _LEVEL_TTL bars
-    gives exact parity; shorter windows just see fewer old swing levels)."""
-    global _pending, _last_conf_bar
+    """Advance the level/sweep state machine and arm a setup for any sweep whose
+    CONFIRMATION lands on the last closed bar.
+
+    INCREMENTAL (opt15 Task 10): the machine (`_state`) is persisted across
+    ticks. When the window origin is unchanged and the last-processed bar is
+    still in the window, only bars newer than `last_ts` are stepped; otherwise
+    the machine is rebuilt from born=0 over the whole window (window slid /
+    first call / any inconsistency). Confirmations are harvested ONLY at the
+    window's last bar -- exactly as the old full-window walk did -- so the armed
+    pendings are identical either way (tests/test_s94_parity.py is the gate)."""
+    global _pending, _state, _ttl_warned
 
     t = w5m["time"]
     bar_time = t.iloc[-1]
-    if bar_time == _last_conf_bar:
+    origin_ts = t.iloc[0]
+    n = len(w5m)
+    last = n - 1
+
+    # one-time WARN: a window shorter than the full level-universe depth sees a
+    # TRUNCATED level set vs the offline backtest (fewer old swing/session
+    # levels) -- the module's conceded live<->backtest divergence.
+    if not _ttl_warned and n < _LEVEL_TTL:
+        _ttl_warned = True
+        log.warning(
+            "S94 window %d M5 bars < level TTL %d: level universe truncated vs "
+            "backtest (older swing/session levels missing). Raise "
+            "RESEARCH_WIN_5M toward %d for full parity.",
+            n, _LEVEL_TTL, _LEVEL_TTL,
+        )
+
+    # dedup: this exact closed bar (same origin) was already processed
+    if (_state is not None and _state["last_ts"] is not None
+            and _state["origin_ts"] == origin_ts and bar_time == _state["last_ts"]):
         return
-    _last_conf_bar = bar_time
 
     # epoch seconds regardless of the frame's datetime unit (s/us/ns, tz-aware
     # or naive) — an int64 cast alone mis-scales non-ns units and collapses
@@ -113,79 +245,35 @@ def _detect(w5m: pd.DataFrame, now_utc: datetime) -> None:
     h = w5m["high"].to_numpy(float)
     l = w5m["low"].to_numpy(float)
     c = w5m["close"].to_numpy(float)
-    n = len(w5m)
-    last = n - 1
 
-    # swing fractals, confirmed _SWING_K bars later (no look-ahead)
+    # swing fractals, confirmed _SWING_K bars later (no look-ahead). Recomputed
+    # over the whole (stable-origin) window each call -- a cheap vectorized pass;
+    # a bar's centered value depends only on [j-K, j+K], which are stable closed
+    # bars, so it equals the full-rebuild value for every stepped bar.
     roll = 2 * _SWING_K + 1
     hmax = pd.Series(h).rolling(roll, center=True).max().to_numpy()
     lmin = pd.Series(l).rolling(roll, center=True).min().to_numpy()
 
-    levels: list[dict] = []       # {price, side, kind, born, break_i, extreme}
+    # Incremental if the origin is unchanged AND the last-processed bar is still
+    # at its stored position with the stored timestamp AND at least one new bar
+    # exists; else full rebuild from scratch.
+    start_idx = None
+    if (_state is not None and _state["origin_ts"] == origin_ts
+            and _state["last_idx"] is not None):
+        li = _state["last_idx"]
+        if 0 <= li < last and t.iloc[li] == _state["last_ts"]:
+            start_idx = li + 1
+    if start_idx is None:
+        _state = _new_state(origin_ts)
+        start_idx = 0
+
     confirmed: list[dict] = []
-    cur_day = None
-    day_hi = day_lo = None
-    sess_state: dict = {}
-
-    for i in range(n):
-        if day[i] != cur_day:
-            if day_hi is not None:
-                levels = [lv for lv in levels if lv["kind"] != "PD"]
-                levels.append({"price": day_hi, "side": "high", "kind": "PD",
-                               "born": i, "break_i": None, "extreme": 0.0})
-                levels.append({"price": day_lo, "side": "low", "kind": "PD",
-                               "born": i, "break_i": None, "extreme": 0.0})
-            cur_day, day_hi, day_lo = day[i], h[i], l[i]
-            sess_state = {}
-        else:
-            day_hi, day_lo = max(day_hi, h[i]), min(day_lo, l[i])
-
-        for name, start, end in _SESSIONS:
-            if start <= hour[i] < end:
-                st = sess_state.setdefault(name, [h[i], l[i]])
-                st[0], st[1] = max(st[0], h[i]), min(st[1], l[i])
-            elif name in sess_state and hour[i] >= end:
-                st = sess_state.pop(name)
-                levels.append({"price": st[0], "side": "high", "kind": "session",
-                               "born": i, "break_i": None, "extreme": 0.0})
-                levels.append({"price": st[1], "side": "low", "kind": "session",
-                               "born": i, "break_i": None, "extreme": 0.0})
-
-        j = i - _SWING_K
-        if j >= _SWING_K:
-            if h[j] == hmax[j]:
-                levels.append({"price": h[j], "side": "high", "kind": "swing",
-                               "born": i, "break_i": None, "extreme": 0.0})
-            if l[j] == lmin[j]:
-                levels.append({"price": l[j], "side": "low", "kind": "swing",
-                               "born": i, "break_i": None, "extreme": 0.0})
-
-        hits: list[dict] = []
-        kill: list[dict] = []
-        for lv in levels:
-            if lv["kind"] != "PD" and i - lv["born"] > _LEVEL_TTL:
-                kill.append(lv)
-                continue
-            if lv["break_i"] is None:
-                if lv["side"] == "high" and h[i] > lv["price"]:
-                    lv["break_i"], lv["extreme"] = i, h[i]
-                elif lv["side"] == "low" and l[i] < lv["price"]:
-                    lv["break_i"], lv["extreme"] = i, l[i]
-            else:
-                lv["extreme"] = max(lv["extreme"], h[i]) if lv["side"] == "high" \
-                    else min(lv["extreme"], l[i])
-                back = c[i] < lv["price"] if lv["side"] == "high" \
-                    else c[i] > lv["price"]
-                if back:
-                    hits.append(lv)
-                    kill.append(lv)
-                elif i - lv["break_i"] >= _CONFIRM_N:
-                    kill.append(lv)
-        for lv in kill:
-            levels.remove(lv)
-
-        if hits and i == last:
+    for a in range(start_idx, n):
+        hits = _step_bar(a, h, l, c, day, hour, hmax, lmin)
+        if a == last:
             confirmed = hits
+    _state["last_ts"] = bar_time
+    _state["last_idx"] = last
 
     if not confirmed:
         return
