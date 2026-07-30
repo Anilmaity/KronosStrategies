@@ -39,6 +39,7 @@ import logging
 import os
 import sys
 import time
+from dataclasses import replace
 from datetime import datetime, time as dtime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -47,7 +48,9 @@ from regime.regime_engine import (
     RegimeSnapshot as RegimeState,  # dataclass, not the DB row
     compute_regime,
     fetch_regime_frames,
+    session_for_hour,
 )
+from shared.market_timing import is_market_closed_utc
 from shared.models import (
     ManagedStrategy,
     ManagerAction,
@@ -191,6 +194,67 @@ def _open_managed_positions(sess, us_ids) -> int:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Regime memoisation (opt15 Task 11)
+# ──────────────────────────────────────────────────────────────────────────────
+# compute_regime recomputed the full regime every 60s tick, including D1
+# structure (~1440x/day for ~1 new D1 bar). The snapshot only *changes* when a
+# closed bar on D1/H4/H1/M15 advances; the UTC-hour roll moves nothing but the
+# clock-derived session / market_closed. So memoise on those last-closed-bar
+# timestamps + UTC hour and, on a hit, re-derive only session/market_closed
+# from the clock. vol/trend/bias are pure functions of the OHLC frames whose
+# timestamps are in the key, so a hit presents exactly what a recompute would -
+# the gating policies that read snap.vol_regime/trend_regime/*_bias see no
+# difference. Mirrors strategies/backtest/manager_sim_engine.py.
+_REGIME_CACHE: "dict[tuple, RegimeState]" = {}
+# Bound the cache: a forward-only live feed only ever hits the newest key, so a
+# small ceiling prevents unbounded growth in the long-running loop.
+_REGIME_CACHE_MAX = 64
+
+
+def _regime_cache_key(frames: dict, now_utc: datetime) -> tuple:
+    """Last-closed-bar timestamps of (D1, H4, H1, M15) + UTC hour. M5/M1 are
+    intentionally excluded - they no longer feed any classification."""
+    def _last_ts(tf: str):
+        df = frames.get(tf)
+        if df is None or len(df) == 0:
+            return None
+        return df["time"].iloc[-1]
+
+    return (_last_ts("1d"), _last_ts("4h"), _last_ts("1h"),
+            _last_ts("15m"), now_utc.hour)
+
+
+def compute_regime_cached(
+    frames: dict,
+    now_utc: datetime,
+    symbol: str = SYMBOL,
+    cache: "dict | None" = None,
+) -> RegimeState:
+    """compute_regime with a last-closed-bar memo (opt15 Task 11).
+
+    On a cache hit the cached snapshot is returned with only session /
+    market_closed refreshed from the wall clock; every regime classification
+    (vol/trend/d1_bias/h4_bias) is unchanged because it is a pure function of
+    the frames, whose last-closed-bar timestamps are part of the key.
+    """
+    if cache is None:
+        cache = _REGIME_CACHE
+    key = _regime_cache_key(frames, now_utc)
+    cached = cache.get(key)
+    if cached is not None:
+        return replace(
+            cached,
+            session=session_for_hour(now_utc.hour),
+            market_closed=is_market_closed_utc(now_utc),
+        )
+    snap = compute_regime(frames, now_utc, symbol=symbol)
+    cache[key] = snap
+    while len(cache) > _REGIME_CACHE_MAX:
+        cache.pop(next(iter(cache)))   # evict oldest; never revisited in a forward feed
+    return snap
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Core tick (pure w.r.t. wall clock & network — testable with any Session)
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -327,7 +391,7 @@ def run() -> None:
         try:
             now_utc = datetime.now(timezone.utc)
             frames = fetch_regime_frames(SYMBOL)
-            snap = compute_regime(frames, now_utc, symbol=SYMBOL)
+            snap = compute_regime_cached(frames, now_utc, symbol=SYMBOL)
 
             sess = Session()
             try:

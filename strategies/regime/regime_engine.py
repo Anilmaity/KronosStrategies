@@ -39,8 +39,7 @@ from datetime import datetime
 import pandas as pd
 
 from strategy.ict_engine import (
-    get_htf_bias,
-    get_liquidity_targets,
+    _swing_points,
     get_market_structure,
 )
 from shared.market_timing import is_market_closed_utc
@@ -70,13 +69,15 @@ SESSION_RANGES: tuple[tuple[int, int, str], ...] = (
 )
 
 # timeframe -> days of history, for fetch_regime_frames
+# opt15 Task 11: 5m/1m dropped. They fed ONLY details.m5_structure /
+# m1_structure (display-only, no live consumer), yet cost 2 of 6 OANDA calls
+# and ~1,300 of ~4,600 candles per 60s tick. Fetching them added zero
+# classification value, so they are gone.
 FRAME_SPEC: dict[str, int] = {
     "1d": 120,
     "4h": 90,
     "1h": 30,
     "15m": 10,
-    "5m": 3,
-    "1m": 1,
 }
 
 
@@ -185,10 +186,56 @@ def _safe_structure(df: pd.DataFrame) -> str:
     return get_market_structure(df)
 
 
-def _safe_swings(df: pd.DataFrame) -> dict:
+def _htf_bias(s4h: str, s1h: str) -> str:
+    """ict_engine.get_htf_bias's rule applied to ALREADY-computed structures.
+
+    Kept local (opt15 Task 11) so H4 swing points feed both the bias and
+    details.swings_h4 from a single _structure_and_swings() pass, instead of
+    get_htf_bias recomputing H4 structure a second time.
+    """
+    if s4h == "bullish" and s1h in ("bullish", "ranging"):
+        return "long"
+    if s4h == "bearish" and s1h in ("bearish", "ranging"):
+        return "short"
+    return "neutral"
+
+
+def _structure_and_swings(df: pd.DataFrame, lookback: int = 3) -> tuple[str, dict]:
+    """Fused equivalent of get_market_structure(df) + get_liquidity_targets(df).
+
+    Both of those recompute _swing_points internally; the regime tick needs
+    both for D1 and for H4, so compute the swing frame ONCE and derive the
+    structure label and the nearest-swing liquidity targets from it. Output is
+    identical to calling the two ict_engine helpers separately (proven by
+    test_structure_and_swings_matches_ict_helpers). opt15 Task 11.
+    """
     if df is None or df.empty:
-        return {"nearest_high": None, "nearest_low": None}
-    return get_liquidity_targets(df)
+        return "ranging", {"nearest_high": None, "nearest_low": None}
+
+    sp = _swing_points(df, lookback)
+    highs = sp[sp["swing_high"]]["high"].values
+    lows = sp[sp["swing_low"]]["low"].values
+
+    # Matches get_liquidity_targets: nearest = last confirmed swing (or None).
+    swings = {
+        "nearest_high": float(highs[-1]) if len(highs) else None,
+        "nearest_low": float(lows[-1]) if len(lows) else None,
+    }
+
+    # Matches get_market_structure: length guard first, then HH/HL from the
+    # last two confirmed swings - reusing the swing frame already computed.
+    if len(df) < lookback * 2 + 3 or len(highs) < 2 or len(lows) < 2:
+        return "ranging", swings
+
+    hh = highs[-1] > highs[-2]
+    hl = lows[-1] > lows[-2]
+    lh = highs[-1] < highs[-2]
+    ll = lows[-1] < lows[-2]
+    if hh and hl:
+        return "bullish", swings
+    if lh and ll:
+        return "bearish", swings
+    return "ranging", swings
 
 
 def _f(x: float) -> float | None:
@@ -208,21 +255,26 @@ def compute_regime(
     """Classify the current market regime from OHLC frames. Pure — no I/O.
 
     `frames` keys follow tsdb_reader timeframe strings: '1d', '4h', '1h',
-    '15m', '5m', '1m' (see FRAME_SPEC / fetch_regime_frames). Missing or
-    short frames degrade to neutral classifications rather than raising.
+    '15m' (see FRAME_SPEC / fetch_regime_frames). Missing or short frames
+    degrade to neutral classifications rather than raising. (5m/1m were dropped
+    in opt15 Task 11 - they fed only display-only details; any still passed in
+    are ignored.)
     """
     d1 = _frame(frames, "1d")
     h4 = _frame(frames, "4h")
     h1 = _frame(frames, "1h")
     m15 = _frame(frames, "15m")
-    m5 = _frame(frames, "5m")
-    m1 = _frame(frames, "1m")
 
-    # Directional bias ---------------------------------------------------
-    d1_bias = _safe_structure(d1)
-    h4_bias = (
-        get_htf_bias(h4, h1) if not (h4.empty or h1.empty) else "neutral"
-    )
+    # Directional bias + liquidity swings --------------------------------
+    # Compute D1 and H4 swing points ONCE each (opt15 Task 11): the structure
+    # label and details.swings_* both derive from the same pass, instead of
+    # get_market_structure + get_liquidity_targets recomputing swings twice.
+    d1_bias, swings_d1 = _structure_and_swings(d1)
+    h4_structure, swings_h4 = _structure_and_swings(h4)
+    if h4.empty or h1.empty:
+        h4_bias = "neutral"
+    else:
+        h4_bias = _htf_bias(h4_structure, get_market_structure(h1))
 
     # Volatility regime: ATR(14, H1) vs its trailing distribution --------
     atr_h1 = float("nan")
@@ -249,10 +301,13 @@ def compute_regime(
         "er_h1": _f(er_h1),
         "er_m15": _f(er_m15),
         "m15_structure": _safe_structure(m15),
-        "m5_structure": _safe_structure(m5),
-        "m1_structure": _safe_structure(m1),
-        "swings_d1": _safe_swings(d1),
-        "swings_h4": _safe_swings(h4),
+        # opt15 Task 11: 5m/1m frames no longer fetched. Keep the keys present
+        # (empty string) for one release so any external reader degrades
+        # gracefully instead of KeyError-ing.
+        "m5_structure": "",
+        "m1_structure": "",
+        "swings_d1": swings_d1,
+        "swings_h4": swings_h4,
         "hour_utc": int(now_utc.hour),
     }
 

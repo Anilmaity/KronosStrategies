@@ -120,6 +120,9 @@ services:
       TIGERDATA_URL:    ${TIGERDATA_URL:-}
       SYMBOL:           XAU_USD
       MANAGER_LOOP_SEC: "60"
+      # opt15 Task 11: bump the candle cache TTL past the 60s loop so the
+      # 4 regime frames actually hit cache (default 20s < 60s never did).
+      OANDA_CANDLE_TTL_SEC: "90"
       DRY_RUN:          "true"     # safe first deploy: log intended flips only
 
   # ───────────────────────────────────────────────────────────────────────────

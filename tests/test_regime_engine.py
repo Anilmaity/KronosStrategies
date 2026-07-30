@@ -339,4 +339,5 @@ def test_empty_frames_degrade_safely():
 
 
 def test_frame_spec_matches_design():
-    assert FRAME_SPEC == {"1d": 120, "4h": 90, "1h": 30, "15m": 10, "5m": 3, "1m": 1}
+    # opt15 Task 11: 5m/1m dropped (fed only display-only details.m5/m1_structure).
+    assert FRAME_SPEC == {"1d": 120, "4h": 90, "1h": 30, "15m": 10}
