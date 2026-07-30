@@ -8,9 +8,11 @@ TimescaleDB, so the strategies no longer depend on the tick DB or the tick
 collectors. A short in-process TTL cache keeps OANDA request volume low even
 though the runners poll every few seconds.
 
-Public API (unchanged):
-    fetch_candles(tf, days, symbol) -> OHLCV DataFrame
-    fetch_latest_ltp(symbol)        -> float | None
+Public API:
+    fetch_candles(tf, days, symbol)  -> OHLCV DataFrame        (unchanged)
+    fetch_latest_ltp(symbol)         -> float | None           (unchanged)
+    fetch_latest_bidask(symbol)      -> tuple[float, float] | None
+    fetch_latest_spread(symbol)      -> float | None
 
 `_connect()` is retained only for the offline DB utility scripts that still
 import it (backfill/validate); the live trading path never calls it.
@@ -24,6 +26,8 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from dotenv import load_dotenv
 
 log = logging.getLogger(__name__)
@@ -70,9 +74,37 @@ _session.headers.update({
     "Authorization":          f"Bearer {_OANDA_API_KEY}",
     "Accept-Datetime-Format": "RFC3339",
 })
+# Retry transient server/rate-limit errors on GETs (all OANDA reads are GET);
+# mirrors tick_data_collector/oanda_tick_lib/_client.py. 401/403 are not retried.
+# raise_on_status=False lets _oanda_get() inspect the final response as it does today.
+_retry = Retry(
+    total=3,
+    backoff_factor=0.5,                              # waits: 0 s, 0.5 s, 1 s, 2 s
+    status_forcelist={429, 500, 502, 503, 504},
+    allowed_methods={"GET"},
+    raise_on_status=False,
+)
+_session.mount("https://", HTTPAdapter(max_retries=_retry))
 
 _cache_lock = threading.Lock()
-_candle_cache: dict = {}   # (symbol, gran, days) -> (expires_at_epoch, DataFrame)
+_candle_cache: dict = {}   # (symbol, gran, days) -> (cached_at_epoch, DataFrame)
+
+
+def _cache_fresh(gran: str, cached_at: float, now: float) -> bool:
+    """True while a cached candle frame may still be served.
+
+    Plain TTL for every granularity, plus an extra bar-boundary check for the
+    fast frames so a freshly-closed bar is never masked by a still-live TTL:
+      * M1 -> invalidate once a new UTC minute boundary has passed
+      * S5 -> invalidate once a new 5-second boundary has passed
+    """
+    if now - cached_at >= _CANDLE_TTL:
+        return False
+    if gran == "M1" and int(now / 60) > int(cached_at / 60):
+        return False
+    if gran == "S5" and int(now / 5) > int(cached_at / 5):
+        return False
+    return True
 
 # ── legacy DB DSN (offline scripts only) ─────────────────────────────────────
 _TIGERDATA_URL = os.getenv("TIGERDATA_URL", "").strip()
@@ -163,7 +195,7 @@ def fetch_candles(tf: str, days: int = 7, symbol: str = "XAU_USD") -> pd.DataFra
 
     with _cache_lock:
         hit = _candle_cache.get(key)
-        if hit and hit[0] > now:
+        if hit and _cache_fresh(gran, hit[0], now):
             return hit[1].copy()
 
     try:
@@ -185,7 +217,7 @@ def fetch_candles(tf: str, days: int = 7, symbol: str = "XAU_USD") -> pd.DataFra
     df = df.dropna(subset=["open", "close"]).reset_index(drop=True)
 
     with _cache_lock:
-        _candle_cache[key] = (now + _CANDLE_TTL, df)
+        _candle_cache[key] = (now, df)
     return df.copy()
 
 
@@ -202,3 +234,33 @@ def fetch_latest_ltp(symbol: str = "XAU_USD") -> float | None:
     except Exception as exc:
         log.warning("[OANDA] fetch_latest_ltp error (%s): %s", symbol, exc)
         return None
+
+
+def fetch_latest_bidask(symbol: str = "XAU_USD") -> tuple[float, float] | None:
+    """Return (bid_close, ask_close) from the latest OANDA S5 candle, or None on error.
+
+    Mirrors fetch_latest_ltp but requests price="BA" so both sides are returned.
+    Uncached today (same as fetch_latest_ltp); kept as a thin single-call helper so
+    a short TTL cache can wrap it later without changing callers.
+    """
+    url = f"{_OANDA_BASE}/instruments/{symbol}/candles"
+    params = {"count": 1, "granularity": "S5", "price": "BA"}
+    try:
+        body = _oanda_get(url, params)
+        candles = body.get("candles", [])
+        if not candles:
+            return None
+        last = candles[-1]
+        return float(last["bid"]["c"]), float(last["ask"]["c"])
+    except Exception as exc:
+        log.warning("[OANDA] fetch_latest_bidask error (%s): %s", symbol, exc)
+        return None
+
+
+def fetch_latest_spread(symbol: str = "XAU_USD") -> float | None:
+    """Return the latest ask-minus-bid spread (price units), or None on error."""
+    ba = fetch_latest_bidask(symbol)
+    if ba is None:
+        return None
+    bid, ask = ba
+    return ask - bid
