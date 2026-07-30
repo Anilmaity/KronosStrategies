@@ -22,7 +22,8 @@ from shared.models import (
     StrategySignal, ManagedStrategy, ManagerConfig,
 )
 from shared.metaapi_client import client_for_broker
-from shared.tsdb_reader import fetch_latest_ltp
+from shared.tsdb_reader import fetch_latest_ltp, fetch_latest_spread
+from shared.event_gate import event_window_open
 from strategy.ict_engine import EntrySignal
 
 log = logging.getLogger(__name__)
@@ -84,6 +85,37 @@ DUP_GUARD_PROX_PTS = float(os.getenv("DUP_GUARD_PROX_PTS", "2.0"))
 # always_on child would otherwise trade straight through it.
 SOFT_BRAKE_AT_ENTRY = os.getenv("SOFT_BRAKE_AT_ENTRY", "true").strip().lower() \
     not in ("false", "0", "no")
+
+
+def _flag_on(name: str) -> bool:
+    """Env flag with default-OFF semantics (opt15 Global Constraint 1: every new
+    trading-behaviour gate ships default-OFF). On only for on/true/1/yes."""
+    return os.getenv(name, "off").strip().lower() in ("on", "true", "1", "yes")
+
+
+# ── Market gates (2026-07-30, opt15 task5) — all DEFAULT OFF ──────────────────
+# Three additional entry gates slotted after the static news blackout and before
+# the broker call. Each is env-gated (default off) and records a distinct
+# StrategySignal.rejection_reason. With none set, place_entry behaves exactly as
+# the pre-task5 chain (no DB/network consult happens).
+#
+# 1) Correlation budget: reject a NEW entry when a DIFFERENT UserStrategy on the
+#    SAME account already holds a same-side position whose entry sits within
+#    CORR_GUARD_POINTS. _duplicate_open_same_side guards the account within a
+#    time window; this is the cross-strategy price-proximity budget with no
+#    window (a portfolio must not stack correlated risk across sibling books).
+CORR_GUARD = _flag_on("CORR_GUARD")
+CORR_GUARD_POINTS = float(os.getenv("CORR_GUARD_POINTS", "2.0"))
+# 2) Event-gate news window: consult shared.event_gate.event_window_open (a
+#    hard-coded 2025-2026 major-macro calendar, fail-open). Complements the
+#    static NEWS_BLACKOUT_UTC clock window — both can be active at once.
+NEWS_EVENT_GATE = _flag_on("NEWS_EVENT_GATE")
+# 3) Spread gate: reject when the live ask-bid spread exceeds SPREAD_GATE_MAX_FRAC
+#    of the stop distance (a fill paying >1/4 of the stop in spread is negative-EV
+#    the same way a too-tight stop is). Missing spread data fails OPEN with one
+#    WARN — a data hiccup must never halt trading.
+SPREAD_GATE = _flag_on("SPREAD_GATE")
+SPREAD_GATE_MAX_FRAC = float(os.getenv("SPREAD_GATE_MAX_FRAC", "0.25"))
 
 
 def _parse_utc_windows(spec: str) -> list[tuple[dtime, dtime]]:
@@ -307,6 +339,91 @@ def _losing_open_same_side(user_broker_id, symbol: str, side: str,
             sess.close()
 
 
+# ── Market gates (opt15 task5) ────────────────────────────────────────────────
+
+def _correlated_open_other_strategy(user_broker_id, user_strategy_id, symbol: str,
+                                    side: str, entry_price: float,
+                                    sess=None) -> tuple[bool, str]:
+    """(blocked, detail). True when a DIFFERENT UserStrategy on the SAME account
+    (`user_broker_id`) holds an OPEN same-side position in `symbol` whose entry
+    price is within CORR_GUARD_POINTS of this signal's entry — a cross-strategy
+    correlation budget. Opposite-side and far-away positions are ignored, and the
+    current UserStrategy is excluded (same-strategy dupes are
+    _duplicate_open_same_side's job). DEFAULT OFF (CORR_GUARD): no DB read
+    happens when the gate is off.
+
+    `sess` (opt15 task4/5 pattern): reuse place_entry's consolidated session when
+    threaded in; otherwise open a short own session."""
+    if not CORR_GUARD:
+        return False, ""
+    own = sess is None
+    if own:
+        sess = Session()
+    try:
+        rows = (
+            sess.query(Position)
+            .join(UserStrategy, Position.user_strategy_id == UserStrategy.id)
+            .filter(
+                UserStrategy.user_broker_id == user_broker_id,
+                UserStrategy.id != user_strategy_id,
+                Position.symbol == symbol,
+                Position.quantity > 0,
+            )
+            .all()
+        )
+        for p in rows:
+            p_side = "BUY" if float(p.avg_buy_price or 0) > 0 else "SELL"
+            if p_side != side:
+                continue
+            p_entry = float(p.avg_buy_price if p_side == "BUY" else p.avg_sell_price)
+            if abs(p_entry - float(entry_price)) <= CORR_GUARD_POINTS:
+                return True, (f"correlated: sibling {p_side} @ {p_entry:.2f} "
+                              f"within {CORR_GUARD_POINTS:.1f}pt of {float(entry_price):.2f}")
+        return False, ""
+    finally:
+        if own:
+            sess.close()
+
+
+def _event_gate_blocks(now_utc) -> bool:
+    """True when NEWS_EVENT_GATE is on AND a major macro event is within the
+    event_gate window of `now_utc`. event_window_open fails OPEN internally (a
+    calendar build error returns True), so this gate can only ever ADD
+    rejections when explicitly armed. DEFAULT OFF: the calendar is not consulted
+    when the gate is off."""
+    if not NEWS_EVENT_GATE:
+        return False
+    return not event_window_open(now_utc)
+
+
+def _spread_gate_blocks(symbol: str, entry_price: float,
+                        stop_loss: float | None) -> tuple[bool, str, float | None]:
+    """(blocked, detail, observed_spread). When SPREAD_GATE is on, fetch the live
+    ask-bid spread and reject when spread > SPREAD_GATE_MAX_FRAC x |entry - sl|.
+    Missing spread data -> fail OPEN with one WARN (never block trading on a data
+    hiccup). observed_spread is returned (when fetched) so the caller can stitch
+    it into the audit row for later friction analysis. DEFAULT OFF: no spread is
+    fetched when the gate is off."""
+    if not SPREAD_GATE:
+        return False, "", None
+    spread = fetch_latest_spread(symbol)
+    if spread is None:
+        log.warning("[GATE] no live spread for %s -- spread gate fail-open, "
+                    "allowing entry", symbol)
+        return False, "no_spread", None
+    spread = float(spread)
+    sl_dist = (abs(float(entry_price) - float(stop_loss))
+               if stop_loss is not None else 0.0)
+    if sl_dist <= 0:
+        # No usable stop distance to scale against — pass through but still
+        # record the observed spread.
+        return False, "no_sl", spread
+    budget = SPREAD_GATE_MAX_FRAC * sl_dist
+    detail = (f"spread {spread:.2f}pt vs budget {budget:.2f}pt "
+              f"({SPREAD_GATE_MAX_FRAC:.2f} x {sl_dist:.2f}pt stop)")
+    return spread > budget, detail, spread
+
+
 # Variation tag → DB Strategy.name. Runners pass `variation="VAR2"` etc; we use
 # this to select the correct Strategy row (each variation has its own
 # entry_quantity and its own deployed UserStrategy).
@@ -464,8 +581,14 @@ def _log_signal_fired(strategy_id, symbol, signal: EntrySignal) -> uuid.UUID | N
         sess.close()
 
 
-def _update_signal_status(signal_log_id, status, *, rejection_reason=None, position_id=None):
-    """Update an existing StrategySignal row's status and related fields."""
+def _update_signal_status(signal_log_id, status, *, rejection_reason=None,
+                          position_id=None, note=None):
+    """Update an existing StrategySignal row's status and related fields.
+
+    `note` (opt15 task5): a short audit fragment appended to the row's `reason`
+    (StrategySignal has no dedicated details column). Used to record the observed
+    spread-at-entry on a placed trade so future friction analysis has real data.
+    """
     if signal_log_id is None:
         return
     sess = Session()
@@ -478,6 +601,10 @@ def _update_signal_status(signal_log_id, status, *, rejection_reason=None, posit
             row.rejection_reason = rejection_reason[:500]
         if position_id is not None:
             row.position_id = position_id
+        if note:
+            base = row.reason or ""
+            merged = f"{base} | {note}" if base else str(note)
+            row.reason = merged[:500]
         sess.commit()
     except Exception:
         sess.rollback()
@@ -547,6 +674,10 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
         # Persist the signal as FIRED before anything else can fail.
         signal_log_id = _log_signal_fired(ctx["strategy_id"], symbol, signal)
 
+        # opt15 task5: spread-at-entry, recorded into the audit row on a placed
+        # trade (None unless the spread gate is armed AND fetches a value).
+        observed_spread = None
+
         open_n = _open_position_count(ctx["user_strategy_id"], sess=sess)
         if open_n >= max(1, int(max_concurrent)):
             _update_signal_status(signal_log_id, "REJECTED",
@@ -572,6 +703,15 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
                      NEWS_BLACKOUT_UTC)
             return False
 
+        # ── Market gate: event-window news (opt15 task5, DEFAULT OFF) ─────────────
+        # Sibling of the static blackout: a hard-coded major-macro calendar. Both
+        # can be active; either one rejecting is enough.
+        if _event_gate_blocks(datetime.now(timezone.utc)):
+            _update_signal_status(signal_log_id, "REJECTED",
+                                  rejection_reason="news_event")
+            log.info("[ENTRY] blocked: within a major macro-event window")
+            return False
+
         sl_dist = (abs(float(signal.entry_price) - float(signal.stop_loss))
                    if signal.stop_loss is not None else None)
         if sl_dist is not None and 0 < sl_dist < MIN_SL_DIST_PTS:
@@ -589,6 +729,16 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
             log.info("[ENTRY] blocked: sibling strategy already holds this setup "
                      "(same side within %.0f min / %.1f pt)",
                      DUP_GUARD_MIN, DUP_GUARD_PROX_PTS)
+            return False
+
+        # ── Market gate: correlation budget (opt15 task5, DEFAULT OFF) ────────────
+        corr_bad, corr_detail = _correlated_open_other_strategy(
+            ctx["user_broker_id"], ctx["user_strategy_id"], symbol,
+            signal.side, signal.entry_price, sess=sess)
+        if corr_bad:
+            _update_signal_status(signal_log_id, "REJECTED",
+                                  rejection_reason=corr_detail[:200])
+            log.info("[ENTRY] blocked: %s", corr_detail)
             return False
 
         brake_hit, brake_detail = _managed_soft_brake(ctx["user_strategy_id"], sess=sess)
@@ -609,6 +759,21 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
             _update_signal_status(signal_log_id, "REJECTED",
                                   rejection_reason=drift_reason[:200])
             log.info("[ENTRY] blocked: %s", drift_detail)
+            return False
+
+        # ── Market gate: live spread vs stop distance (opt15 task5, DEFAULT OFF) ──
+        # Last gate before the broker: fetches live spread, so it runs only once
+        # every cheaper gate has passed. Fails OPEN on missing data. When it does
+        # fetch a value the spread is stashed for the audit row regardless of the
+        # verdict below (only reached on a pass).
+        spread_bad, spread_detail, spread_val = _spread_gate_blocks(
+            symbol, signal.entry_price, signal.stop_loss)
+        if spread_val is not None:
+            observed_spread = spread_val
+        if spread_bad:
+            _update_signal_status(signal_log_id, "REJECTED",
+                                  rejection_reason=f"spread: {spread_detail}"[:200])
+            log.info("[ENTRY] blocked: spread gate -- %s", spread_detail)
             return False
 
         # ── Risk-normalized sizing (Phase-1 redesign) ─────────────────────────────
@@ -786,7 +951,12 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
 
             sess.commit()
 
-            _update_signal_status(signal_log_id, "PLACED", position_id=position.id)
+            # opt15 task5: stitch the observed spread-at-entry into the audit row
+            # (when the spread gate fetched one) for later friction analysis.
+            placed_note = (f"spread={observed_spread:.2f}"
+                           if observed_spread is not None else None)
+            _update_signal_status(signal_log_id, "PLACED", position_id=position.id,
+                                  note=placed_note)
 
             log.info(
                 "[ENTRY] %s %s qty=%.2f @ %.2f | SL=%.2f TP=%.2f | %s | pos_id=%s",
