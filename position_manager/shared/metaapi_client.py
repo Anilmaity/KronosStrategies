@@ -14,7 +14,10 @@ and cached for the lifetime of the process.
 from __future__ import annotations
 
 import os
+import time
 import logging
+from uuid import uuid4
+
 import requests
 from dotenv import load_dotenv
 
@@ -149,6 +152,202 @@ def _apply_stops_floor(side: str, entry_price: float, stop_loss: float, take_pro
     return stop_loss, take_profit, adjusted
 
 
+# ---------------------------------------------------------------------------
+# opt15 Task 2: safe retries with verify-before-retry
+#
+# A MetaAPI market order that 504s or times out MUST NOT be blindly resent -- a
+# timeout does not mean the order failed. Every retry first looks the order's
+# clientId up via the positions/orders endpoint; only a positive "absent"
+# confirmation permits a re-POST. A failed lookup returns the error unchanged
+# (exactly the pre-opt15 single-attempt behavior). Closes are idempotent
+# against a position id, so they just retry on timeout/5xx and treat an
+# already-closed position (404) as success. Set META_ORDER_MAX_RETRIES=0 to
+# restore the exact single-attempt behavior.
+# ---------------------------------------------------------------------------
+
+def _order_max_retries() -> int:
+    try:
+        return max(0, int(os.getenv("META_ORDER_MAX_RETRIES", "2")))
+    except ValueError:
+        return 2
+
+
+def _order_retry_base_sec() -> float:
+    try:
+        return max(0.0, float(os.getenv("META_ORDER_RETRY_BASE_SEC", "2")))
+    except ValueError:
+        return 2.0
+
+
+def _retry_backoff_sec(attempt: int, base_sec: float) -> float:
+    """Backoff before retry `attempt` (0-indexed). base 2 -> 2s, 5s, 12.5s..."""
+    return base_sec * (2.5 ** attempt)
+
+
+def _lookup_order_by_client_id(base_url: str, account_id: str, headers: dict,
+                               client_id: str,
+                               timeout: float = _TIMEOUT) -> tuple[str, str | None]:
+    """Positively determine whether an order/position tagged `client_id` exists.
+
+    Returns one of:
+      ("found", position_id)  -- the order landed; treat as success
+      ("absent", None)        -- confirmed not present; safe to re-POST
+      ("failed", None)        -- lookup inconclusive; caller must NOT retry
+    Any transport error or 5xx on the lookup is inconclusive ("failed"), so we
+    never re-POST an order we could not prove is absent.
+    """
+    for endpoint in ("positions", "orders"):
+        try:
+            resp = requests.get(
+                f"{base_url}/users/current/accounts/{account_id}/{endpoint}",
+                headers=headers, timeout=timeout,
+            )
+            if resp.status_code >= 500:
+                return "failed", None
+            resp.raise_for_status()
+            for item in (resp.json() or []):
+                if item.get("clientId") == client_id:
+                    pid = item.get("positionId") or item.get("id") or item.get("orderId")
+                    return "found", (str(pid) if pid is not None else None)
+        except Exception:
+            return "failed", None
+    return "absent", None
+
+
+def _post_order_with_retry(base_url: str, account_id: str, headers: dict,
+                           payload: dict, side: str, broker_symbol: str,
+                           volume: float, stop_loss: float,
+                           take_profit: float) -> str | None:
+    """POST a market order, retrying safely on timeout/5xx (opt15 Task 2).
+
+    Returns the broker positionId on success, None on failure. Preserves the
+    single-attempt success/error contract: 4xx and unexpected responses return
+    None without a retry, and META_ORDER_MAX_RETRIES=0 makes exactly one POST.
+    """
+    client_id = payload.get("clientId", "")
+    max_retries = _order_max_retries()
+    base_sec = _order_retry_base_sec()
+    url = f"{base_url}/users/current/accounts/{account_id}/trade"
+
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=_TIMEOUT)
+            if resp.status_code >= 500:
+                log.warning("[MetaAPI] order HTTP %s (clientId=%s) attempt %d/%d",
+                            resp.status_code, client_id, attempt + 1, max_retries + 1)
+            else:
+                resp.raise_for_status()          # 4xx -> HTTPError (not retried)
+                data = resp.json()
+                pos_id = data.get("positionId") or data.get("orderId") or ""
+                code = data.get("stringCode", "")
+                if "DONE" not in code and pos_id == "":
+                    log.warning("[MetaAPI] Unexpected trade response: %s", data)
+                    return None
+                log.info(
+                    "[MetaAPI] Order placed | %s %s vol=%.2f SL=%.2f TP=%.2f | positionId=%s",
+                    side, broker_symbol, volume, stop_loss, take_profit, pos_id,
+                )
+                return pos_id or None
+        except requests.HTTPError as exc:
+            sc = exc.response.status_code if exc.response is not None else "?"
+            txt = exc.response.text if exc.response is not None else ""
+            log.error("[MetaAPI] HTTP error %s (clientId=%s): %s", sc, client_id, txt)
+            return None
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            log.warning("[MetaAPI] order network error (clientId=%s) attempt %d/%d: %s",
+                        client_id, attempt + 1, max_retries + 1, exc)
+        except requests.RequestException as exc:
+            log.warning("[MetaAPI] order request error (clientId=%s) attempt %d/%d: %s",
+                        client_id, attempt + 1, max_retries + 1, exc)
+        except Exception:
+            log.exception("[MetaAPI] Failed to place order (clientId=%s)", client_id)
+            return None
+
+        # Only a transient failure (5xx / timeout / connection) reaches here.
+        if attempt >= max_retries:
+            log.error("[MetaAPI] order not placed after %d attempt(s) (clientId=%s) -- giving up",
+                      attempt + 1, client_id)
+            return None
+        if not client_id:
+            log.error("[MetaAPI] no clientId to verify -- not retrying")
+            return None
+        state, found_pid = _lookup_order_by_client_id(base_url, account_id, headers, client_id)
+        if state == "found":
+            log.info("[MetaAPI] verify-before-retry: clientId=%s already landed (positionId=%s)"
+                     " -- success, no re-POST", client_id, found_pid)
+            if found_pid:
+                return found_pid
+            log.error("[MetaAPI] clientId=%s landed but id unresolved -- RECONCILE MANUALLY",
+                      client_id)
+            return None
+        if state == "failed":
+            log.info("[MetaAPI] verify-before-retry: lookup FAILED for clientId=%s -- NOT retrying"
+                     " (cannot confirm order is absent)", client_id)
+            return None
+        delay = _retry_backoff_sec(attempt, base_sec)
+        log.info("[MetaAPI] verify-before-retry: clientId=%s confirmed ABSENT -- re-POST %d/%d"
+                 " after %.1fs", client_id, attempt + 1, max_retries, delay)
+        time.sleep(delay)
+
+    return None
+
+
+def _close_with_retry(base_url: str, account_id: str, headers: dict,
+                      meta_position_id: str, log_ctx: str = "") -> bool:
+    """Close a position by id, retrying on timeout/5xx (opt15 Task 2).
+
+    Idempotent: a 404 (position not found / already closed) counts as success,
+    matching how the monitor's _CLOSE_MAX_ATTEMPTS loop reasons about a flat
+    position. Other 4xx is terminal (not retried). META_ORDER_MAX_RETRIES=0
+    makes exactly one attempt. Returns True on close/already-closed, else False.
+    """
+    max_retries = _order_max_retries()
+    base_sec = _order_retry_base_sec()
+    url = f"{base_url}/users/current/accounts/{account_id}/trade"
+    payload = {"actionType": "POSITION_CLOSE_ID", "positionId": meta_position_id}
+    suffix = f" (account={log_ctx})" if log_ctx else ""
+
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=_TIMEOUT)
+            status = resp.status_code
+            if status == 404:
+                log.info("[MetaAPI] close positionId=%s -> 404 already closed%s -- success",
+                         meta_position_id, suffix)
+                return True
+            if status >= 500:
+                log.warning("[MetaAPI] close HTTP %s%s positionId=%s attempt %d/%d",
+                            status, suffix, meta_position_id, attempt + 1, max_retries + 1)
+            else:
+                resp.raise_for_status()          # other 4xx -> HTTPError (terminal)
+                log.info("[MetaAPI] Position closed%s | positionId=%s", suffix, meta_position_id)
+                return True
+        except requests.HTTPError as exc:
+            sc = exc.response.status_code if exc.response is not None else "?"
+            if sc == 404:
+                log.info("[MetaAPI] close positionId=%s -> 404 already closed%s -- success",
+                         meta_position_id, suffix)
+                return True
+            log.warning("[MetaAPI] close HTTP %s%s: %s", sc, suffix,
+                        exc.response.text if exc.response is not None else "")
+            return False
+        except (requests.Timeout, requests.ConnectionError, requests.RequestException) as exc:
+            log.warning("[MetaAPI] close network error%s positionId=%s attempt %d/%d: %s",
+                        suffix, meta_position_id, attempt + 1, max_retries + 1, exc)
+        except Exception:
+            log.exception("[MetaAPI] Failed to close position %s%s", meta_position_id, suffix)
+            return False
+
+        if attempt >= max_retries:
+            log.warning("[MetaAPI] close not confirmed after %d attempt(s)%s positionId=%s",
+                        attempt + 1, suffix, meta_position_id)
+            return False
+        delay = _retry_backoff_sec(attempt, base_sec)
+        time.sleep(delay)
+
+    return False
+
+
 def place_market_order(
     side: str,
     symbol: str,
@@ -195,31 +394,15 @@ def place_market_order(
         log.error("[MetaAPI] META_API_TOKEN / META_ACCOUNT_ID not configured")
         return None
 
-    try:
-        url = f"{_trading_url()}/users/current/accounts/{_ACCOUNT}/trade"
-        resp = requests.post(url, headers=_headers(), json=payload, timeout=_TIMEOUT)
-        resp.raise_for_status()
-        data = resp.json()
+    # opt15 Task 2: tag the order so a retry can verify-before-resend.
+    # With retries disabled the payload stays byte-identical to the old path.
+    if _order_max_retries() > 0:
+        payload["clientId"] = f"kr-{uuid4().hex[:16]}"
 
-        # MetaAPI returns orderId and positionId (same value for market orders)
-        pos_id = data.get("positionId") or data.get("orderId") or ""
-        code   = data.get("stringCode", "")
-
-        if "DONE" not in code and pos_id == "":
-            log.warning("[MetaAPI] Unexpected trade response: %s", data)
-            return None
-
-        log.info(
-            "[MetaAPI] Order placed | %s %s vol=%.2f SL=%.2f TP=%.2f | positionId=%s",
-            side, broker_symbol, volume, stop_loss, take_profit, pos_id,
-        )
-        return pos_id or None
-
-    except requests.HTTPError as exc:
-        log.error("[MetaAPI] HTTP error %s: %s", exc.response.status_code, exc.response.text)
-    except Exception:
-        log.exception("[MetaAPI] Failed to place order")
-    return None
+    return _post_order_with_retry(
+        _trading_url(), _ACCOUNT, _headers(), payload,
+        side, broker_symbol, volume, stop_loss, take_profit,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -279,23 +462,8 @@ class MetaApiClient:
         if not meta_position_id or meta_position_id == "dry-run":
             return False
 
-        payload = {"actionType": "POSITION_CLOSE_ID", "positionId": meta_position_id}
-        try:
-            url = f"{self._trading_url()}/users/current/accounts/{self.account_id}/trade"
-            resp = requests.post(url, headers=self._headers(), json=payload, timeout=_TIMEOUT)
-            resp.raise_for_status()
-            log.info("[MetaAPI] Position closed | account=%s positionId=%s",
-                     self.account_id, meta_position_id)
-            return True
-        except requests.HTTPError as exc:
-            log.warning(
-                "[MetaAPI] close_position HTTP %s (account=%s): %s",
-                exc.response.status_code, self.account_id, exc.response.text,
-            )
-        except Exception:
-            log.exception("[MetaAPI] Failed to close position %s (account=%s)",
-                          meta_position_id, self.account_id)
-        return False
+        return _close_with_retry(self._trading_url(), self.account_id,
+                                 self._headers(), meta_position_id, self.account_id)
 
 
 _CLIENT_CACHE: dict[str, "MetaApiClient"] = {}
@@ -340,20 +508,4 @@ def close_position_by_id(meta_position_id: str) -> bool:
     if not meta_position_id or meta_position_id == "dry-run":
         return False
 
-    payload = {"actionType": "POSITION_CLOSE_ID", "positionId": meta_position_id}
-
-    try:
-        url = f"{_trading_url()}/users/current/accounts/{_ACCOUNT}/trade"
-        resp = requests.post(url, headers=_headers(), json=payload, timeout=_TIMEOUT)
-        resp.raise_for_status()
-        log.info("[MetaAPI] Position closed | positionId=%s", meta_position_id)
-        return True
-    except requests.HTTPError as exc:
-        # 404 / position already closed is not fatal
-        log.warning(
-            "[MetaAPI] close_position HTTP %s (already closed?): %s",
-            exc.response.status_code, exc.response.text,
-        )
-    except Exception:
-        log.exception("[MetaAPI] Failed to close position %s", meta_position_id)
-    return False
+    return _close_with_retry(_trading_url(), _ACCOUNT, _headers(), meta_position_id, _ACCOUNT)

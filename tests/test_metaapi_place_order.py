@@ -10,6 +10,8 @@ def test_place_market_order_posts_to_account_url(monkeypatch):
     captured = {}
 
     class _Resp:
+        status_code = 200
+
         def raise_for_status(self):
             pass
 
