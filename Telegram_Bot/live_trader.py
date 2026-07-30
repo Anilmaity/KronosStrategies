@@ -714,6 +714,20 @@ async def handle_new_signal(msg) -> None:
     if bad:
         log.warning(f"[{msg.id}] malformed signal ({bad}) — skip")
         return
+    # Strategy-Manager gate: the primary account's UserStrategy row is this
+    # bot's on/off switch, flipped by the manager loop while armed. New entries
+    # only — replies, closes, sweeps, and broker reconciliation are never gated.
+    loop = asyncio.get_running_loop()
+    allowed = await loop.run_in_executor(
+        None, APIS_BY_LABEL["primary"].entries_allowed)
+    if allowed is not True:
+        why = ("manager_gate (strategy paused)" if allowed is False
+               else "manager_gate (DB unreachable — fail-closed)")
+        log.warning(f"[{msg.id}] {why} — skip")
+        await loop.run_in_executor(None, lambda: _record_signals(
+            sig, status="REJECTED", rejection_reason=why,
+            signal_at=msg.date.astimezone(timezone.utc).isoformat()))
+        return
     await sweep_stale_open()  # clear any wedged stale opens before the guard
     open_ids = await r.smembers(f"{REDIS_PREFIX}:open")
     if open_ids:

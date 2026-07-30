@@ -85,6 +85,30 @@ class ApisDashboard:
             connect_timeout=10,
         )
 
+    def entries_allowed(self) -> bool | None:
+        """Strategy-Manager gate for NEW entries: True only while this
+        dashboard's UserStrategy row is deployed AND is_active — the same flags
+        the manager loop flips on armed strategies (policy, kill-switch,
+        market-closed). Returns None when the DB can't be reached; callers must
+        treat None as not-allowed (fail-closed) so a paused strategy can never
+        trade through a DB outage. Exits/reconciliation are never gated.
+        """
+        try:
+            with self._connect() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT deployed, is_active FROM apis_userstrategy WHERE id = %s",
+                    (self.user_strategy_id,),
+                )
+                row = cur.fetchone()
+            if row is None:
+                log.warning("[%s] entries_allowed: UserStrategy %s not found",
+                            self.label, self.user_strategy_id)
+                return False
+            return bool(row[0]) and bool(row[1])
+        except Exception as e:
+            log.warning("[%s] entries_allowed: DB check failed (%s)", self.label, e)
+            return None
+
     def open_position(self, side: str, entry: float, volume: float,
                       broker_ticket: str | None = None) -> str | None:
         """Create an apis_position (+ ENTRY order) for a freshly-filled signal.
