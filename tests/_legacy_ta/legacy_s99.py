@@ -32,13 +32,6 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 
-from backtest_strategies._shared_ta import (
-    PendingRetrace,
-    atr_last,
-    check_touch,
-    ensure_utc_ts,
-    fvg_at,
-)
 from backtest_strategies.base import Signal, StrategyConfig
 
 NAME = "KRONOS_S99_MSS_FVG"
@@ -50,7 +43,7 @@ CONFIG = StrategyConfig(
                 "measurement). 6-15 sim: train PF 1.33 / test PF 1.22, "
                 "~5 trades/day.",
     cooldown_s=300,            # one M5 bar; pending-state machine is stricter
-    session_start_hour=None,   # hours gated inside get_signal (06-15 UTC)
+    session_start_hour=None,   # hours gated inside get_signal (1..15 UTC)
     session_end_hour=None,
     max_concurrent_positions=1,
 )
@@ -79,7 +72,7 @@ MIN_BARS_5M = _MIN_M5
 
 # ── Pending-setup state (persists across runner ticks in-process) ─────────────
 # {side, prox, sl, tp, expires_at, mss_bar_time}
-_pending: PendingRetrace | None = None
+_pending: dict | None = None
 _last_mss_bar = None      # dedup: one setup per MSS bar
 
 
@@ -88,6 +81,12 @@ def reset_state() -> None:
     global _pending, _last_mss_bar
     _pending = None
     _last_mss_bar = None
+
+
+def _atr(h: np.ndarray, l: np.ndarray, c: np.ndarray, n: int) -> float:
+    prev_c = np.concatenate(([c[0]], c[:-1]))
+    tr = np.maximum(h - l, np.maximum(np.abs(h - prev_c), np.abs(l - prev_c)))
+    return float(pd.Series(tr).rolling(n).mean().iloc[-1])
 
 
 def _last_confirmed_swings(h: np.ndarray, l: np.ndarray,
@@ -118,19 +117,20 @@ def _detect_mss(w5m: pd.DataFrame, now_utc: datetime) -> None:
     swing_hi, swing_lo = _last_confirmed_swings(h[:-1], l[:-1])
     if np.isnan(swing_hi) or np.isnan(swing_lo):
         return
-    a = atr_last(h, l, c, _ATR_N)
+    a = _atr(h, l, c, _ATR_N)
     if not (a > 0):
         return
     roll_hi = h[max(0, k - _SWEEP_N):k].max()
     roll_lo = l[max(0, k - _SWEEP_N):k].min()
 
-    kind, gap, prox, dist = fvg_at(h, l, k)
     side = 0
-    if roll_hi > swing_hi and c[k] < swing_lo and kind == "bear":
+    if roll_hi > swing_hi and c[k] < swing_lo and h[k] < l[k - 2]:
         side = -1
+        prox, dist = h[k], l[k - 2]
         sl = round(dist + _BUF_ATR * a, 2)
-    elif roll_lo < swing_lo and c[k] > swing_hi and kind == "bull":
+    elif roll_lo < swing_lo and c[k] > swing_hi and l[k] > h[k - 2]:
         side = 1
+        prox, dist = l[k], h[k - 2]
         sl = round(dist - _BUF_ATR * a, 2)
     if side == 0:
         return
@@ -138,19 +138,55 @@ def _detect_mss(w5m: pd.DataFrame, now_utc: datetime) -> None:
     if risk <= 0:
         return
     _last_mss_bar = bar_time
-    # the retrace must come AFTER the displacement bar closes — the MSS bar's
-    # own extreme IS the proximal edge, so probing it would fire instantly
-    # (optimizer parity: scan starts at k+1)
-    _pending = PendingRetrace(
-        side=side,
-        prox=float(prox),
-        sl=sl,
-        tp=round(prox + side * _TP_R * risk, 2),
-        armed_after=ensure_utc_ts(bar_time) + timedelta(minutes=5),
-        expires_at=now_utc + timedelta(minutes=5 * _RETRACE_W),
-        reason="S99_MSS_FVG_SHORT" if side < 0 else "S99_MSS_FVG_LONG",
-        max_hold_min=_MAX_HOLD_MIN,
-    )
+    armed_after = pd.Timestamp(bar_time)
+    if armed_after.tzinfo is None:
+        armed_after = armed_after.tz_localize("UTC")
+    _pending = {
+        "side": side,
+        "prox": float(prox),
+        "sl": sl,
+        "tp": round(prox + side * _TP_R * risk, 2),
+        # the retrace must come AFTER the displacement bar closes — the MSS
+        # bar's own extreme IS the proximal edge, so probing it would fire
+        # instantly (optimizer parity: scan starts at k+1)
+        "armed_after": armed_after + timedelta(minutes=5),
+        "expires_at": now_utc + timedelta(minutes=5 * _RETRACE_W),
+    }
+
+
+def _touch(probe_time, probe_hi: float, probe_lo: float) -> Signal | None:
+    """Fire when a post-MSS probe bar retraces into the armed FVG; cancel
+    instead when that bar has already blown through the stop (phantom guard)."""
+    global _pending
+    p = _pending
+    if p is None:
+        return None
+    t = pd.Timestamp(probe_time)
+    if t.tzinfo is None:
+        t = t.tz_localize("UTC")
+    if t < p["armed_after"]:
+        return None
+    if p["side"] < 0:
+        if probe_hi >= p["sl"]:
+            _pending = None            # retrace ran straight through the stop
+            return None
+        if probe_hi >= p["prox"]:
+            _pending = None
+            return Signal(side="SELL", entry_price=p["prox"],
+                          stop_loss=p["sl"], take_profit=p["tp"],
+                          reason="S99_MSS_FVG_SHORT",
+                          max_hold_min=_MAX_HOLD_MIN)
+    else:
+        if probe_lo <= p["sl"]:
+            _pending = None
+            return None
+        if probe_lo <= p["prox"]:
+            _pending = None
+            return Signal(side="BUY", entry_price=p["prox"],
+                          stop_loss=p["sl"], take_profit=p["tp"],
+                          reason="S99_MSS_FVG_LONG",
+                          max_hold_min=_MAX_HOLD_MIN)
+    return None
 
 
 def get_signal(w1m, w5m: pd.DataFrame, w15m, now_utc: datetime) -> Signal | None:
@@ -160,7 +196,7 @@ def get_signal(w1m, w5m: pd.DataFrame, w15m, now_utc: datetime) -> Signal | None
     if now_utc.hour not in _HOURS:
         _pending = None                # setups do not survive out of hours
         return None
-    if _pending is not None and now_utc >= _pending.expires_at:
+    if _pending is not None and now_utc >= _pending["expires_at"]:
         _pending = None
 
     _detect_mss(w5m, now_utc)
@@ -168,11 +204,9 @@ def get_signal(w1m, w5m: pd.DataFrame, w15m, now_utc: datetime) -> Signal | None
         return None
 
     # Probe the freshest CLOSED 1m bar first (fill ~1 min after the touch);
-    # fall back to the last closed M5 bar for 1m-less offline replays. A
-    # phantom-guard cancel and a fill both clear the pending (check_touch flag).
-    r = w1m.iloc[-1] if (w1m is not None and len(w1m) > 0) else w5m.iloc[-1]
-    clear, sig = check_touch(_pending, r["time"], float(r["high"]),
-                             float(r["low"]))
-    if clear:
-        _pending = None
-    return sig
+    # fall back to the last closed M5 bar for 1m-less offline replays.
+    if w1m is not None and len(w1m) > 0:
+        r = w1m.iloc[-1]
+        return _touch(r["time"], float(r["high"]), float(r["low"]))
+    r = w5m.iloc[-1]
+    return _touch(r["time"], float(r["high"]), float(r["low"]))

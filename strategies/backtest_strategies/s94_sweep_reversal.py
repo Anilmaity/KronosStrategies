@@ -36,6 +36,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 
+from backtest_strategies._shared_ta import ensure_utc_ts
 from backtest_strategies.base import Signal, StrategyConfig
 
 NAME = "KRONOS_S94_SWEEP_REVERSAL"
@@ -217,9 +218,7 @@ def _detect(w5m: pd.DataFrame, now_utc: datetime) -> None:
     if risk <= 0 or abs(tp - entry) / risk < _MIN_RR:
         return
 
-    armed_after = pd.Timestamp(bar_time)
-    if armed_after.tzinfo is None:
-        armed_after = armed_after.tz_localize("UTC")
+    armed_after = ensure_utc_ts(bar_time)
     _pending.append({
         "side": sign,
         "level": float(entry),
@@ -236,9 +235,7 @@ def _touch(probe_time, probe_hi: float, probe_lo: float) -> Signal | None:
     """Fire the oldest armed setup whose level the probe bar retested; cancel
     setups the probe has already blown through (phantom guard)."""
     global _pending
-    t = pd.Timestamp(probe_time)
-    if t.tzinfo is None:
-        t = t.tz_localize("UTC")
+    t = ensure_utc_ts(probe_time)
     for p in list(_pending):
         if t < p["armed_after"]:
             continue

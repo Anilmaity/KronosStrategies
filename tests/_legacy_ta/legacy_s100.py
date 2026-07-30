@@ -33,13 +33,6 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 
-from backtest_strategies._shared_ta import (
-    PendingRetrace,
-    atr_last,
-    check_touch,
-    ensure_utc_ts,
-    fvg_at,
-)
 from backtest_strategies.base import Signal, StrategyConfig
 
 NAME = "KRONOS_S100_M3_COMBO"
@@ -84,7 +77,7 @@ _MIN_M3       = _EMA_SLOW + _ATR_N   # closed M3 bars needed
 MIN_BARS_1M = 3 * _MIN_M3
 
 # ── Pending-setup state (persists across runner ticks in-process) ─────────────
-_pending: PendingRetrace | None = None
+_pending: dict | None = None
 _last_bar = None            # dedup: one detection pass per closed M3 bar
 
 
@@ -113,6 +106,12 @@ def _resample_m3(w1m: pd.DataFrame) -> pd.DataFrame:
     if (pd.Timestamp(last_m1) - pd.Timestamp(last_bucket)) < pd.Timedelta(minutes=2):
         df = df.iloc[:-1]
     return df.reset_index()
+
+
+def _atr(h: np.ndarray, l: np.ndarray, c: np.ndarray, n: int) -> float:
+    prev_c = np.concatenate(([c[0]], c[:-1]))
+    tr = np.maximum(h - l, np.maximum(np.abs(h - prev_c), np.abs(l - prev_c)))
+    return float(pd.Series(tr).rolling(n).mean().iloc[-1])
 
 
 def _rsi(c: np.ndarray, n: int) -> np.ndarray:
@@ -145,7 +144,7 @@ def _detect(m3: pd.DataFrame, now_utc: datetime) -> Signal | None:
     l = m3["low"].to_numpy(float)
     c = m3["close"].to_numpy(float)
     o = m3["open"].to_numpy(float)
-    a = atr_last(h, l, c, _ATR_N)
+    a = _atr(h, l, c, _ATR_N)
     if not (a > 0):
         return None
 
@@ -154,31 +153,30 @@ def _detect(m3: pd.DataFrame, now_utc: datetime) -> Signal | None:
     ema_s = close_s.ewm(span=_EMA_SLOW, adjust=False).mean().iloc[-1]
     d = 1 if ema_f > ema_s else -1
 
-    armed_after = ensure_utc_ts(bar_time)
+    armed_after = pd.Timestamp(bar_time)
+    if armed_after.tzinfo is None:
+        armed_after = armed_after.tz_localize("UTC")
 
     def _arm(kind: str, prox: float, sl: float) -> None:
         global _pending
-        _pending = PendingRetrace(
-            side=d,
-            prox=round(float(prox), 2),
-            sl=round(float(sl), 2),
-            tp=_tp(float(prox), float(sl), d),
-            armed_after=armed_after + timedelta(minutes=3),
-            expires_at=now_utc + timedelta(minutes=3 * _RETRACE_W),
-            reason=f"S100_{kind.upper()}_{'LONG' if d > 0 else 'SHORT'}",
-            max_hold_min=_MAX_HOLD_MIN,
-            kind=kind,
-        )
+        _pending = {
+            "kind": kind, "side": d, "prox": round(float(prox), 2),
+            "sl": round(float(sl), 2),
+            "tp": _tp(float(prox), float(sl), d),
+            "armed_after": armed_after + timedelta(minutes=3),
+            "expires_at": now_utc + timedelta(minutes=3 * _RETRACE_W),
+        }
 
     # 1) FVG in EMA direction (a newer FVG replaces an unfilled older setup)
-    kind_fvg, gap, prox_fvg, dist_fvg = fvg_at(h, l, k)
-    if d > 0 and kind_fvg == "bull":
+    if d > 0 and l[k] > h[k - 2]:
+        gap = l[k] - h[k - 2]
         if _MIN_FVG_ATR * a <= gap <= _MAX_GAP_ATR * a:
-            _arm("fvg", prox_fvg, dist_fvg - _BUF_ATR * a)
+            _arm("fvg", l[k], h[k - 2] - _BUF_ATR * a)
             return None
-    elif d < 0 and kind_fvg == "bear":
+    elif d < 0 and h[k] < l[k - 2]:
+        gap = l[k - 2] - h[k]
         if _MIN_FVG_ATR * a <= gap <= _MAX_GAP_ATR * a:
-            _arm("fvg", prox_fvg, dist_fvg + _BUF_ATR * a)
+            _arm("fvg", h[k], l[k - 2] + _BUF_ATR * a)
             return None
 
     # 2) OB: 3-bar break with displacement body, entry at zone EDGE
@@ -222,6 +220,42 @@ def _detect(m3: pd.DataFrame, now_utc: datetime) -> Signal | None:
     return None
 
 
+def _touch(probe_time, probe_hi: float, probe_lo: float) -> Signal | None:
+    """Fire when a post-detection probe bar retraces to the pending entry;
+    cancel when the probe has already pierced the stop (phantom guard)."""
+    global _pending
+    p = _pending
+    if p is None:
+        return None
+    t = pd.Timestamp(probe_time)
+    if t.tzinfo is None:
+        t = t.tz_localize("UTC")
+    if t < p["armed_after"]:
+        return None
+    kind = p["kind"].upper()
+    if p["side"] > 0:
+        if probe_lo <= p["sl"]:
+            _pending = None
+            return None
+        if probe_lo <= p["prox"]:
+            _pending = None
+            return Signal(side="BUY", entry_price=p["prox"],
+                          stop_loss=p["sl"], take_profit=p["tp"],
+                          reason=f"S100_{kind}_LONG",
+                          max_hold_min=_MAX_HOLD_MIN)
+    else:
+        if probe_hi >= p["sl"]:
+            _pending = None
+            return None
+        if probe_hi >= p["prox"]:
+            _pending = None
+            return Signal(side="SELL", entry_price=p["prox"],
+                          stop_loss=p["sl"], take_profit=p["tp"],
+                          reason=f"S100_{kind}_SHORT",
+                          max_hold_min=_MAX_HOLD_MIN)
+    return None
+
+
 def get_signal(w1m, w5m, w15m, now_utc: datetime) -> Signal | None:
     global _pending
     if w1m is None or len(w1m) < 3 * _MIN_M3:
@@ -229,7 +263,7 @@ def get_signal(w1m, w5m, w15m, now_utc: datetime) -> Signal | None:
     if now_utc.hour not in _HOURS:
         _pending = None             # setups do not survive out of hours
         return None
-    if _pending is not None and now_utc >= _pending.expires_at:
+    if _pending is not None and now_utc >= _pending["expires_at"]:
         _pending = None
 
     m3 = _resample_m3(w1m)
@@ -242,11 +276,5 @@ def get_signal(w1m, w5m, w15m, now_utc: datetime) -> Signal | None:
     if _pending is None:
         return None
 
-    # Retrace fill on the freshest 1m bar; the pending carries its own kind in
-    # the reason label. A phantom-guard cancel and a fill both clear it.
     r = w1m.iloc[-1]
-    clear, sig = check_touch(_pending, r["time"], float(r["high"]),
-                             float(r["low"]))
-    if clear:
-        _pending = None
-    return sig
+    return _touch(r["time"], float(r["high"]), float(r["low"]))
