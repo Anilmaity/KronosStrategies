@@ -65,6 +65,13 @@ MIN_SL_DIST_PTS = float(os.getenv("MIN_SL_DIST_PTS", "1.5"))
 # fills AT the level, so chasing beyond that is unmodelled risk.
 MAX_ENTRY_DRIFT_PTS = float(os.getenv("MAX_ENTRY_DRIFT_PTS", "0.5"))
 MAX_ENTRY_DRIFT_FRAC = float(os.getenv("MAX_ENTRY_DRIFT_FRAC", "0.25"))
+# Fail mode for the drift gate when NO live price is available to check against:
+#   "open"   (default) - allow the entry through, the current behaviour (a
+#            price-feed hiccup must never halt trading).
+#   "closed" - reject the entry with rejection_reason="entry_drift_noprice" so
+#            an unpriced fill is never opened. Opt-in per opt15 task4 (Global
+#            Constraint 1: a new trading-behaviour gate ships default-OFF).
+ENTRY_DRIFT_FAIL_MODE = os.getenv("ENTRY_DRIFT_FAIL_MODE", "open").strip().lower()
 # Cross-strategy duplicate guard: an open same-broker+symbol+side position
 # created within DUP_GUARD_MIN minutes whose entry sits within
 # DUP_GUARD_PROX_PTS is the same setup fired by a sibling (S93/S99 both trade
@@ -119,10 +126,15 @@ def _entry_drift_exceeded(side: str, entry_price: float, stop_loss: float | None
                           symbol: str) -> tuple[bool, str]:
     """(exceeded, detail). Positive drift = the market already ran in the trade
     direction (a BUY costs more / a SELL sells for less than modelled).
-    Measured live 2026-07-08..10 this cost ~$65/day. Fails OPEN on feed errors
-    so a price-feed hiccup can't halt trading."""
+    Measured live 2026-07-08..10 this cost ~$65/day. Defaults to failing OPEN on
+    feed errors so a price-feed hiccup can't halt trading; set
+    ENTRY_DRIFT_FAIL_MODE=closed to reject an unpriced entry instead."""
     ltp = fetch_latest_ltp(symbol)
     if ltp is None:
+        if ENTRY_DRIFT_FAIL_MODE == "closed":
+            log.warning("[GATE] no live price for drift check (%s) - fail-closed, "
+                        "rejecting entry", symbol)
+            return True, "entry_drift_noprice"
         log.warning("[GATE] no live price for drift check (%s) — allowing entry", symbol)
         return False, "no_ltp"
     drift = (float(ltp) - float(entry_price)) if side == "BUY" \
@@ -133,14 +145,25 @@ def _entry_drift_exceeded(side: str, entry_price: float, stop_loss: float | None
 
 
 def _duplicate_open_same_side(user_broker_id, symbol: str, side: str,
-                              entry_price: float) -> bool:
+                              entry_price: float, sess=None) -> bool:
     """True when the account already holds an OPEN same-side position in
     `symbol` opened within DUP_GUARD_MIN minutes and DUP_GUARD_PROX_PTS of this
-    signal's entry — a sibling strategy just took the same setup."""
+    signal's entry — a sibling strategy just took the same setup.
+
+    `sess` (opt15 task4): reuse place_entry's consolidated session when threaded
+    in; otherwise open a short own session."""
     if DUP_GUARD_MIN <= 0:
         return False
+    # opt15 task4: the age filter now runs IN SQL (created_at >= cutoff) instead
+    # of pulling every open position and filtering in Python. `cutoff` is
+    # computed IDENTICALLY to the old Python filter — an aware UTC instant
+    # (now_utc - DUP_GUARD_MIN). created_at is stored -5:30 (naive IST) and the
+    # prior code compared it likewise; this deliberately preserves the same
+    # (uncorrected) timezone semantics rather than "fixing" them.
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=DUP_GUARD_MIN)
-    sess = Session()
+    own = sess is None
+    if own:
+        sess = Session()
     try:
         rows = (
             sess.query(Position)
@@ -149,19 +172,11 @@ def _duplicate_open_same_side(user_broker_id, symbol: str, side: str,
                 UserStrategy.user_broker_id == user_broker_id,
                 Position.symbol == symbol,
                 Position.quantity > 0,
+                Position.created_at >= cutoff,
             )
             .all()
         )
         for p in rows:
-            # Age filter in Python: created_at is tz-aware from Postgres but
-            # the column default is Kolkata wall-time — normalise defensively.
-            created = p.created_at
-            if created is None:
-                continue
-            if created.tzinfo is None:
-                created = created.replace(tzinfo=timezone.utc)
-            if created < cutoff:
-                continue
             p_side = "BUY" if float(p.avg_buy_price or 0) > 0 else "SELL"
             if p_side != side:
                 continue
@@ -170,7 +185,8 @@ def _duplicate_open_same_side(user_broker_id, symbol: str, side: str,
                 return True
         return False
     finally:
-        sess.close()
+        if own:
+            sess.close()
 
 
 # Position P&L storage = points x lots (USD / 100 for XAUUSD). Keep in sync
@@ -202,15 +218,20 @@ def _todays_realized_usd(sess, us_ids) -> float:
     return float(total or 0) * _USD_PER_PNL_UNIT
 
 
-def _managed_soft_brake(user_strategy_id) -> tuple[bool, str]:
+def _managed_soft_brake(user_strategy_id, sess=None) -> tuple[bool, str]:
     """(blocked, detail). No NEW entries for a LIVE-armed managed strategy
     while today's realized P&L across the LIVE-armed roster sits at/under
     -soft_brake_usd (ManagerConfig.state). Open positions are untouched —
     this only stops adding fresh risk, mirroring the manager's soft-brake
-    semantics at the one layer the manager can't reach."""
+    semantics at the one layer the manager can't reach.
+
+    `sess` (opt15 task4): reuse place_entry's consolidated session when threaded
+    in; otherwise open a short own session."""
     if not SOFT_BRAKE_AT_ENTRY:
         return False, ""
-    sess = Session()
+    own = sess is None
+    if own:
+        sess = Session()
     try:
         mine = (sess.query(ManagedStrategy)
                 .filter_by(user_strategy_id=user_strategy_id).first())
@@ -230,7 +251,8 @@ def _managed_soft_brake(user_strategy_id) -> tuple[bool, str]:
             return True, f"daily P&L {pnl:+.2f} USD <= -{soft:.0f} soft brake"
         return False, ""
     finally:
-        sess.close()
+        if own:
+            sess.close()
 
 
 def _risk_sized_qty(entry_price: float, stop_loss: float | None,
@@ -252,11 +274,17 @@ def _risk_sized_qty(entry_price: float, stop_loss: float | None,
     return round(lots, 2), f"risk {RISK_PER_TRADE_USD:.0f} USD / {sl_dist:.2f} pts"
 
 
-def _losing_open_same_side(user_broker_id, symbol: str, side: str) -> bool:
+def _losing_open_same_side(user_broker_id, symbol: str, side: str,
+                           sess=None) -> bool:
     """True when the account already holds an open position in `symbol` on the
     same side with negative unrealized P&L (position_monitor keeps
-    Position.profit_loss current every second)."""
-    sess = Session()
+    Position.profit_loss current every second).
+
+    `sess` (opt15 task4): reuse place_entry's consolidated session when threaded
+    in; otherwise open a short own session."""
+    own = sess is None
+    if own:
+        sess = Session()
     try:
         rows = (
             sess.query(Position)
@@ -275,7 +303,8 @@ def _losing_open_same_side(user_broker_id, symbol: str, side: str) -> bool:
                 return True
         return False
     finally:
-        sess.close()
+        if own:
+            sess.close()
 
 
 # Variation tag → DB Strategy.name. Runners pass `variation="VAR2"` etc; we use
@@ -352,13 +381,19 @@ _VARIATION_STRATEGY_NAME = {
 # Context lookup
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _get_context(symbol: str = SYMBOL, variation: str | None = None) -> dict | None:
+def _get_context(symbol: str = SYMBOL, variation: str | None = None,
+                 sess=None) -> dict | None:
     """
     Return the active trading context for the given symbol + variation.
     Finds: UserStrategy (deployed + active) → Strategy → CurrencyPair.
     Returns dict with user_strategy_id, user_broker_id, currency_pair_id, quantity.
+
+    `sess` (opt15 task4): reuse place_entry's consolidated session when threaded
+    in; otherwise open a short own session.
     """
-    sess = Session()
+    own = sess is None
+    if own:
+        sess = Session()
     try:
         cp = sess.query(CurrencyPair).filter_by(symbol=symbol).first()
         if not cp:
@@ -397,7 +432,8 @@ def _get_context(symbol: str = SYMBOL, variation: str | None = None) -> dict | N
             "quantity": qty,
         }
     finally:
-        sess.close()
+        if own:
+            sess.close()
 
 
 def _log_signal_fired(strategy_id, symbol, signal: EntrySignal) -> uuid.UUID | None:
@@ -450,9 +486,14 @@ def _update_signal_status(signal_log_id, status, *, rejection_reason=None, posit
         sess.close()
 
 
-def _open_position_count(user_strategy_id: uuid.UUID) -> int:
-    """Number of currently-open (quantity > 0) positions for this UserStrategy."""
-    sess = Session()
+def _open_position_count(user_strategy_id: uuid.UUID, sess=None) -> int:
+    """Number of currently-open (quantity > 0) positions for this UserStrategy.
+
+    `sess` (opt15 task4): reuse place_entry's consolidated session when threaded
+    in; otherwise open a short own session."""
+    own = sess is None
+    if own:
+        sess = Session()
     try:
         return (
             sess.query(Position)
@@ -463,7 +504,8 @@ def _open_position_count(user_strategy_id: uuid.UUID) -> int:
             .count()
         )
     finally:
-        sess.close()
+        if own:
+            sess.close()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -490,268 +532,275 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
 
     Returns True on success, False if skipped or failed.
     """
-    ctx = _get_context(symbol, variation=variation)
-    if not ctx:
-        # No strategy_id known -> can't log; the misconfiguration is the bug.
-        return False
-
-    # Persist the signal as FIRED before anything else can fail.
-    signal_log_id = _log_signal_fired(ctx["strategy_id"], symbol, signal)
-
-    open_n = _open_position_count(ctx["user_strategy_id"])
-    if open_n >= max(1, int(max_concurrent)):
-        _update_signal_status(signal_log_id, "REJECTED",
-                              rejection_reason="open_position_cap")
-        log.info("[ENTRY] Concurrency cap reached (%d/%d open) — skipping new entry",
-                 open_n, max_concurrent)
-        return False
-
-    # ── No-add-to-loser guard (Phase-1 redesign) ──────────────────────────────
-    if NO_ADD_TO_LOSER and _losing_open_same_side(
-            ctx["user_broker_id"], symbol, signal.side):
-        _update_signal_status(signal_log_id, "REJECTED",
-                              rejection_reason="no_add_to_loser")
-        log.info("[ENTRY] blocked: open %s position on %s is underwater — "
-                 "not adding to a loser", signal.side, symbol)
-        return False
-
-    # ── Entry-quality gates (post 2026-07-09/10 kill-switch RCA) ─────────────
-    if _in_news_blackout(datetime.now(timezone.utc)):
-        _update_signal_status(signal_log_id, "REJECTED",
-                              rejection_reason="news_blackout")
-        log.info("[ENTRY] blocked: news blackout window (%s UTC)",
-                 NEWS_BLACKOUT_UTC)
-        return False
-
-    sl_dist = (abs(float(signal.entry_price) - float(signal.stop_loss))
-               if signal.stop_loss is not None else None)
-    if sl_dist is not None and 0 < sl_dist < MIN_SL_DIST_PTS:
-        _update_signal_status(
-            signal_log_id, "REJECTED",
-            rejection_reason=f"sl_too_tight: {sl_dist:.2f}pt < {MIN_SL_DIST_PTS}pt")
-        log.info("[ENTRY] blocked: stop %.2fpt < %.2fpt friction floor",
-                 sl_dist, MIN_SL_DIST_PTS)
-        return False
-
-    if _duplicate_open_same_side(ctx["user_broker_id"], symbol,
-                                 signal.side, signal.entry_price):
-        _update_signal_status(signal_log_id, "REJECTED",
-                              rejection_reason="duplicate_entry")
-        log.info("[ENTRY] blocked: sibling strategy already holds this setup "
-                 "(same side within %.0f min / %.1f pt)",
-                 DUP_GUARD_MIN, DUP_GUARD_PROX_PTS)
-        return False
-
-    brake_hit, brake_detail = _managed_soft_brake(ctx["user_strategy_id"])
-    if brake_hit:
-        _update_signal_status(signal_log_id, "REJECTED",
-                              rejection_reason=f"soft_daily_brake: {brake_detail}"[:200])
-        log.info("[ENTRY] blocked: %s", brake_detail)
-        return False
-
-    drift_bad, drift_detail = _entry_drift_exceeded(
-        signal.side, signal.entry_price, signal.stop_loss, symbol)
-    if drift_bad:
-        _update_signal_status(signal_log_id, "REJECTED",
-                              rejection_reason=f"entry_drift: {drift_detail}"[:200])
-        log.info("[ENTRY] blocked: %s", drift_detail)
-        return False
-
-    # ── Risk-normalized sizing (Phase-1 redesign) ─────────────────────────────
-    qty, sizing_reason = _risk_sized_qty(
-        signal.entry_price, signal.stop_loss, symbol, ctx["quantity"])
-    if qty is None:
-        _update_signal_status(signal_log_id, "REJECTED",
-                              rejection_reason=sizing_reason[:200])
-        log.info("[ENTRY] rejected by risk sizing: %s", sizing_reason)
-        return False
-    if sizing_reason != "fixed":
-        log.info("[SIZING] %s -> qty=%.2f lots", sizing_reason, qty)
-
-    # Fire MetaAPI market order FIRST. If broker rejects, we don't pollute the
-    # DB with phantom positions. On success we record the broker positionId on
-    # the Order so position_monitor / reconciliation can correlate.
-    # Per-account: open on the deployed account's own MetaAPI creds. Refuse
-    # (never fall back to the env account) if the account has no usable creds.
-    _sess = Session()
-    try:
-        _client = client_for_broker(_sess, ctx["user_broker_id"])
-    finally:
-        _sess.close()
-    if _client is None:
-        _update_signal_status(signal_log_id, "REJECTED",
-                              rejection_reason="no_account_credentials")
-        log.warning("[ENTRY] account %s has no usable MetaAPI creds — refusing to open",
-                    ctx["user_broker_id"])
-        return False
-    broker_position_id = _client.place_market_order(
-        side=signal.side,
-        symbol=symbol,
-        volume=qty,
-        stop_loss=signal.stop_loss,
-        take_profit=signal.take_profit,
-        entry_price=signal.entry_price,
-    )
-    if not broker_position_id:
-        _update_signal_status(signal_log_id, "REJECTED",
-                              rejection_reason="metaapi_rejection")
-        log.warning("[ENTRY] MetaAPI rejected order — skipping DB write")
-        return False
-
-    # ── Book at BROKER TRUTH (2026-07-07): fetch the real fill immediately
-    # (market fills land <1s). Falls back to the signal price on dry-run /
-    # timeout; fill_reconciler trues it up later either way. SL/TP trigger
-    # LEVELS stay signal-based; StrategySignal keeps the signal price audit.
-    fill_px = _client.get_position_fill(broker_position_id)
-    entry_px = float(fill_px) if fill_px else float(signal.entry_price)
-    if fill_px and abs(entry_px - float(signal.entry_price)) > 0.005:
-        log.info("[ENTRY] booked at broker fill %.2f (signal %.2f, drift %+.2f)",
-                 entry_px, float(signal.entry_price),
-                 entry_px - float(signal.entry_price))
-
+    # opt15 task4: ONE session threaded through context -> gates -> persist,
+    # committed once at the end of persist. Only the two audit helpers
+    # (_log_signal_fired / _update_signal_status) keep their own short
+    # sessions so the FIRED/REJECTED row survives a rollback here. Gate
+    # ORDER and semantics are unchanged from the pre-opt15 chain.
     sess = Session()
     try:
-        # ── 1. Position ───────────────────────────────────────────────────────
-        is_long = signal.side == "BUY"
-        position = Position(
-            id=uuid.uuid4(),
-            symbol=symbol,
-            avg_buy_price=Decimal(str(entry_px)) if is_long else Decimal("0"),
-            avg_sell_price=Decimal("0") if is_long else Decimal(str(entry_px)),
-            total_buy_quantity=Decimal(str(qty)) if is_long else Decimal("0"),
-            quantity=Decimal(str(qty)),
-            ltp=Decimal(str(entry_px)),
-            profit_loss=Decimal("0"),
-            profit_loss_percentage=Decimal("0"),
-            realized_profit_loss=Decimal("0"),
-            user_strategy_id=ctx["user_strategy_id"],
-            currencypair_id=ctx["currency_pair_id"],
-        )
-        sess.add(position)
-        sess.flush()  # populate position.id before FK references
+        ctx = _get_context(symbol, variation=variation, sess=sess)
+        if not ctx:
+            # No strategy_id known -> can't log; the misconfiguration is the bug.
+            return False
 
-        # ── 2. Entry Order ────────────────────────────────────────────────────
-        entry_order = Order(
-            id=uuid.uuid4(),
-            symbol=symbol,
-            price=Decimal(str(entry_px)),          # broker fill (signal px lives on StrategySignal)
-            condition="ENTRY",
+        # Persist the signal as FIRED before anything else can fail.
+        signal_log_id = _log_signal_fired(ctx["strategy_id"], symbol, signal)
+
+        open_n = _open_position_count(ctx["user_strategy_id"], sess=sess)
+        if open_n >= max(1, int(max_concurrent)):
+            _update_signal_status(signal_log_id, "REJECTED",
+                                  rejection_reason="open_position_cap")
+            log.info("[ENTRY] Concurrency cap reached (%d/%d open) — skipping new entry",
+                     open_n, max_concurrent)
+            return False
+
+        # ── No-add-to-loser guard (Phase-1 redesign) ──────────────────────────────
+        if NO_ADD_TO_LOSER and _losing_open_same_side(
+                ctx["user_broker_id"], symbol, signal.side, sess=sess):
+            _update_signal_status(signal_log_id, "REJECTED",
+                                  rejection_reason="no_add_to_loser")
+            log.info("[ENTRY] blocked: open %s position on %s is underwater — "
+                     "not adding to a loser", signal.side, symbol)
+            return False
+
+        # ── Entry-quality gates (post 2026-07-09/10 kill-switch RCA) ─────────────
+        if _in_news_blackout(datetime.now(timezone.utc)):
+            _update_signal_status(signal_log_id, "REJECTED",
+                                  rejection_reason="news_blackout")
+            log.info("[ENTRY] blocked: news blackout window (%s UTC)",
+                     NEWS_BLACKOUT_UTC)
+            return False
+
+        sl_dist = (abs(float(signal.entry_price) - float(signal.stop_loss))
+                   if signal.stop_loss is not None else None)
+        if sl_dist is not None and 0 < sl_dist < MIN_SL_DIST_PTS:
+            _update_signal_status(
+                signal_log_id, "REJECTED",
+                rejection_reason=f"sl_too_tight: {sl_dist:.2f}pt < {MIN_SL_DIST_PTS}pt")
+            log.info("[ENTRY] blocked: stop %.2fpt < %.2fpt friction floor",
+                     sl_dist, MIN_SL_DIST_PTS)
+            return False
+
+        if _duplicate_open_same_side(ctx["user_broker_id"], symbol,
+                                     signal.side, signal.entry_price, sess=sess):
+            _update_signal_status(signal_log_id, "REJECTED",
+                                  rejection_reason="duplicate_entry")
+            log.info("[ENTRY] blocked: sibling strategy already holds this setup "
+                     "(same side within %.0f min / %.1f pt)",
+                     DUP_GUARD_MIN, DUP_GUARD_PROX_PTS)
+            return False
+
+        brake_hit, brake_detail = _managed_soft_brake(ctx["user_strategy_id"], sess=sess)
+        if brake_hit:
+            _update_signal_status(signal_log_id, "REJECTED",
+                                  rejection_reason=f"soft_daily_brake: {brake_detail}"[:200])
+            log.info("[ENTRY] blocked: %s", brake_detail)
+            return False
+
+        drift_bad, drift_detail = _entry_drift_exceeded(
+            signal.side, signal.entry_price, signal.stop_loss, symbol)
+        if drift_bad:
+            # opt15 task4: a fail-closed no-price rejection carries the exact
+            # rejection_reason "entry_drift_noprice"; a normal adverse-drift
+            # rejection keeps the descriptive "entry_drift: ..." form.
+            drift_reason = (drift_detail if drift_detail == "entry_drift_noprice"
+                            else f"entry_drift: {drift_detail}")
+            _update_signal_status(signal_log_id, "REJECTED",
+                                  rejection_reason=drift_reason[:200])
+            log.info("[ENTRY] blocked: %s", drift_detail)
+            return False
+
+        # ── Risk-normalized sizing (Phase-1 redesign) ─────────────────────────────
+        qty, sizing_reason = _risk_sized_qty(
+            signal.entry_price, signal.stop_loss, symbol, ctx["quantity"])
+        if qty is None:
+            _update_signal_status(signal_log_id, "REJECTED",
+                                  rejection_reason=sizing_reason[:200])
+            log.info("[ENTRY] rejected by risk sizing: %s", sizing_reason)
+            return False
+        if sizing_reason != "fixed":
+            log.info("[SIZING] %s -> qty=%.2f lots", sizing_reason, qty)
+
+        # Fire MetaAPI market order FIRST. If broker rejects, we don't pollute the
+        # DB with phantom positions. On success we record the broker positionId on
+        # the Order so position_monitor / reconciliation can correlate.
+        # Per-account: open on the deployed account's own MetaAPI creds. Refuse
+        # (never fall back to the env account) if the account has no usable creds.
+        _client = client_for_broker(sess, ctx["user_broker_id"])
+        if _client is None:
+            _update_signal_status(signal_log_id, "REJECTED",
+                                  rejection_reason="no_account_credentials")
+            log.warning("[ENTRY] account %s has no usable MetaAPI creds — refusing to open",
+                        ctx["user_broker_id"])
+            return False
+        broker_position_id = _client.place_market_order(
             side=signal.side,
-            quantity=Decimal(str(qty)),
-            amount=Decimal(str(round(entry_px * qty, 2))),
-            order_type="MARKET",
-            status="EXECUTED",
-            reason=signal.reason,
-            broker_order_id=str(broker_position_id),
-            position_id=position.id,
-            user_broker_id=ctx["user_broker_id"],
+            symbol=symbol,
+            volume=qty,
+            stop_loss=signal.stop_loss,
+            take_profit=signal.take_profit,
+            entry_price=signal.entry_price,
         )
-        sess.add(entry_order)
+        if not broker_position_id:
+            _update_signal_status(signal_log_id, "REJECTED",
+                                  rejection_reason="metaapi_rejection")
+            log.warning("[ENTRY] MetaAPI rejected order — skipping DB write")
+            return False
 
-        # ── 3. SL Trigger ─────────────────────────────────────────────────────
-        # LONG: SL fires when price <= sl  (greater_than=False)
-        # SHORT: SL fires when price >= sl (greater_than=True)
-        close_side = "SELL" if is_long else "BUY"
-        is_trailing = bool(getattr(signal, "trailing", False))
+        # ── Book at BROKER TRUTH (2026-07-07): fetch the real fill immediately
+        # (market fills land <1s). Falls back to the signal price on dry-run /
+        # timeout; fill_reconciler trues it up later either way. SL/TP trigger
+        # LEVELS stay signal-based; StrategySignal keeps the signal price audit.
+        fill_px = _client.get_position_fill(broker_position_id)
+        entry_px = float(fill_px) if fill_px else float(signal.entry_price)
+        if fill_px and abs(entry_px - float(signal.entry_price)) > 0.005:
+            log.info("[ENTRY] booked at broker fill %.2f (signal %.2f, drift %+.2f)",
+                     entry_px, float(signal.entry_price),
+                     entry_px - float(signal.entry_price))
 
-        if is_trailing:
-            # ── 3+4. TRAIL Trigger (chandelier trailing stop) ─────────────────
-            # Replaces the static SL + fixed TP for a trend-follow leg. The
-            # trigger starts at signal.stop_loss (== entry -/+ k*ATR) and carries
-            # the trail DISTANCE in trail_points; position_monitor ratchets
-            # trigger_price off the high/low-water mark each tick, then fires on
-            # the usual price-cross and actively closes the broker position (the
-            # ratcheted level has no broker-side equivalent). The broker still
-            # holds the initial stop_loss (and the far take_profit) as an offline
-            # backstop. No TARGET trigger: the right tail is never capped.
-            trail_distance = abs(float(signal.entry_price) - float(signal.stop_loss))
-            trail_trigger = Trigger(
+        try:
+            # ── 1. Position ───────────────────────────────────────────────────────
+            is_long = signal.side == "BUY"
+            position = Position(
                 id=uuid.uuid4(),
                 symbol=symbol,
-                trigger_price=Decimal(str(signal.stop_loss)),   # initial stop level
+                avg_buy_price=Decimal(str(entry_px)) if is_long else Decimal("0"),
+                avg_sell_price=Decimal("0") if is_long else Decimal(str(entry_px)),
+                total_buy_quantity=Decimal(str(qty)) if is_long else Decimal("0"),
+                quantity=Decimal(str(qty)),
+                ltp=Decimal(str(entry_px)),
+                profit_loss=Decimal("0"),
+                profit_loss_percentage=Decimal("0"),
+                realized_profit_loss=Decimal("0"),
+                user_strategy_id=ctx["user_strategy_id"],
+                currencypair_id=ctx["currency_pair_id"],
+            )
+            sess.add(position)
+            sess.flush()  # populate position.id before FK references
+
+            # ── 2. Entry Order ────────────────────────────────────────────────────
+            entry_order = Order(
+                id=uuid.uuid4(),
+                symbol=symbol,
+                price=Decimal(str(entry_px)),          # broker fill (signal px lives on StrategySignal)
+                condition="ENTRY",
+                side=signal.side,
+                quantity=Decimal(str(qty)),
+                amount=Decimal(str(round(entry_px * qty, 2))),
                 order_type="MARKET",
-                side=close_side,
-                greater_than=not is_long,    # LONG fires on price<=stop; SHORT on price>=stop
-                quantity=Decimal(str(qty)),
-                trigger_type="TRAILING_STOPLOSS_POINTS",
-                trail_points=Decimal(str(round(trail_distance, 2))),
-                status="PENDING",
+                status="EXECUTED",
+                reason=signal.reason,
+                broker_order_id=str(broker_position_id),
                 position_id=position.id,
+                user_broker_id=ctx["user_broker_id"],
             )
-            sess.add(trail_trigger)
-        else:
-            # ── 3. SL Trigger ─────────────────────────────────────────────────
-            sl_trigger = Trigger(
-                id=uuid.uuid4(),
-                symbol=symbol,
-                trigger_price=Decimal(str(signal.stop_loss)),
-                order_type="MARKET",
-                side=close_side,
-                greater_than=not is_long,
-                quantity=Decimal(str(qty)),
-                trigger_type="STOPLOSS",
-                status="PENDING",
-                position_id=position.id,
+            sess.add(entry_order)
+
+            # ── 3. SL Trigger ─────────────────────────────────────────────────────
+            # LONG: SL fires when price <= sl  (greater_than=False)
+            # SHORT: SL fires when price >= sl (greater_than=True)
+            close_side = "SELL" if is_long else "BUY"
+            is_trailing = bool(getattr(signal, "trailing", False))
+
+            if is_trailing:
+                # ── 3+4. TRAIL Trigger (chandelier trailing stop) ─────────────────
+                # Replaces the static SL + fixed TP for a trend-follow leg. The
+                # trigger starts at signal.stop_loss (== entry -/+ k*ATR) and carries
+                # the trail DISTANCE in trail_points; position_monitor ratchets
+                # trigger_price off the high/low-water mark each tick, then fires on
+                # the usual price-cross and actively closes the broker position (the
+                # ratcheted level has no broker-side equivalent). The broker still
+                # holds the initial stop_loss (and the far take_profit) as an offline
+                # backstop. No TARGET trigger: the right tail is never capped.
+                trail_distance = abs(float(signal.entry_price) - float(signal.stop_loss))
+                trail_trigger = Trigger(
+                    id=uuid.uuid4(),
+                    symbol=symbol,
+                    trigger_price=Decimal(str(signal.stop_loss)),   # initial stop level
+                    order_type="MARKET",
+                    side=close_side,
+                    greater_than=not is_long,    # LONG fires on price<=stop; SHORT on price>=stop
+                    quantity=Decimal(str(qty)),
+                    trigger_type="TRAILING_STOPLOSS_POINTS",
+                    trail_points=Decimal(str(round(trail_distance, 2))),
+                    status="PENDING",
+                    position_id=position.id,
+                )
+                sess.add(trail_trigger)
+            else:
+                # ── 3. SL Trigger ─────────────────────────────────────────────────
+                sl_trigger = Trigger(
+                    id=uuid.uuid4(),
+                    symbol=symbol,
+                    trigger_price=Decimal(str(signal.stop_loss)),
+                    order_type="MARKET",
+                    side=close_side,
+                    greater_than=not is_long,
+                    quantity=Decimal(str(qty)),
+                    trigger_type="STOPLOSS",
+                    status="PENDING",
+                    position_id=position.id,
+                )
+                sess.add(sl_trigger)
+
+                # ── 4. TP Trigger ─────────────────────────────────────────────────
+                # LONG: TP fires when price >= tp (greater_than=True)
+                # SHORT: TP fires when price <= tp (greater_than=False)
+                tp_trigger = Trigger(
+                    id=uuid.uuid4(),
+                    symbol=symbol,
+                    trigger_price=Decimal(str(signal.take_profit)),
+                    order_type="MARKET",
+                    side=close_side,
+                    greater_than=is_long,
+                    quantity=Decimal(str(qty)),
+                    trigger_type="TARGET",
+                    status="PENDING",
+                    position_id=position.id,
+                )
+                sess.add(tp_trigger)
+
+            # ── 5. TIME_EXIT Trigger (optional per-leg max-hold) ──────────────────
+            # The Trigger.trigger_type enum has no TIMEOUT value, so we reuse CUSTOM
+            # and tag it order_type="TIME_EXIT". trigger_price holds the absolute
+            # UNIX expiry epoch (seconds) — NOT a price. position_monitor must
+            # special-case TIME_EXIT (fire on wall-clock), never on price.
+            max_hold_min = getattr(signal, "max_hold_min", None)
+            if max_hold_min:
+                import time as _time
+                expiry_epoch = _time.time() + float(max_hold_min) * 60.0
+                time_trigger = Trigger(
+                    id=uuid.uuid4(),
+                    symbol=symbol,
+                    trigger_price=Decimal(str(round(expiry_epoch, 2))),  # epoch, not price
+                    order_type="TIME_EXIT",
+                    side=close_side,
+                    greater_than=False,        # unused for TIME_EXIT; monitor ignores it
+                    quantity=Decimal(str(qty)),
+                    trigger_type="CUSTOM",
+                    status="PENDING",
+                    position_id=position.id,
+                )
+                sess.add(time_trigger)
+
+            sess.commit()
+
+            _update_signal_status(signal_log_id, "PLACED", position_id=position.id)
+
+            log.info(
+                "[ENTRY] %s %s qty=%.2f @ %.2f | SL=%.2f TP=%.2f | %s | pos_id=%s",
+                signal.side, symbol, qty,
+                entry_px, signal.stop_loss, signal.take_profit,
+                signal.reason, position.id,
             )
-            sess.add(sl_trigger)
+            return True
 
-            # ── 4. TP Trigger ─────────────────────────────────────────────────
-            # LONG: TP fires when price >= tp (greater_than=True)
-            # SHORT: TP fires when price <= tp (greater_than=False)
-            tp_trigger = Trigger(
-                id=uuid.uuid4(),
-                symbol=symbol,
-                trigger_price=Decimal(str(signal.take_profit)),
-                order_type="MARKET",
-                side=close_side,
-                greater_than=is_long,
-                quantity=Decimal(str(qty)),
-                trigger_type="TARGET",
-                status="PENDING",
-                position_id=position.id,
-            )
-            sess.add(tp_trigger)
-
-        # ── 5. TIME_EXIT Trigger (optional per-leg max-hold) ──────────────────
-        # The Trigger.trigger_type enum has no TIMEOUT value, so we reuse CUSTOM
-        # and tag it order_type="TIME_EXIT". trigger_price holds the absolute
-        # UNIX expiry epoch (seconds) — NOT a price. position_monitor must
-        # special-case TIME_EXIT (fire on wall-clock), never on price.
-        max_hold_min = getattr(signal, "max_hold_min", None)
-        if max_hold_min:
-            import time as _time
-            expiry_epoch = _time.time() + float(max_hold_min) * 60.0
-            time_trigger = Trigger(
-                id=uuid.uuid4(),
-                symbol=symbol,
-                trigger_price=Decimal(str(round(expiry_epoch, 2))),  # epoch, not price
-                order_type="TIME_EXIT",
-                side=close_side,
-                greater_than=False,        # unused for TIME_EXIT; monitor ignores it
-                quantity=Decimal(str(qty)),
-                trigger_type="CUSTOM",
-                status="PENDING",
-                position_id=position.id,
-            )
-            sess.add(time_trigger)
-
-        sess.commit()
-
-        _update_signal_status(signal_log_id, "PLACED", position_id=position.id)
-
-        log.info(
-            "[ENTRY] %s %s qty=%.2f @ %.2f | SL=%.2f TP=%.2f | %s | pos_id=%s",
-            signal.side, symbol, qty,
-            entry_px, signal.stop_loss, signal.take_profit,
-            signal.reason, position.id,
-        )
-        return True
-
-    except Exception as e:
-        sess.rollback()
-        log.exception("[ENTRY] Failed to persist entry signal")
-        _update_signal_status(signal_log_id, "REJECTED",
-                              rejection_reason=f"db_error: {type(e).__name__}: {e}")
-        return False
+        except Exception as e:
+            sess.rollback()
+            log.exception("[ENTRY] Failed to persist entry signal")
+            _update_signal_status(signal_log_id, "REJECTED",
+                                  rejection_reason=f"db_error: {type(e).__name__}: {e}")
+            return False
     finally:
         sess.close()
