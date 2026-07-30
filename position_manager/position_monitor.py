@@ -42,6 +42,40 @@ from trigger_logic import (
 SYMBOL        = "XAU_USD"
 POLL_INTERVAL = 1   # seconds
 
+# opt15(task3): throttle DB write amplification. pos.ltp / pos.profit_loss and
+# the CurrencyPair.ltp mirror are pure functions of the live price -- when the
+# price has not moved the value written is byte-identical, so skipping the write
+# is a genuine no-op that no consumer (dashboards, kill-switch) can observe. We
+# still refresh at least once every MONITOR_PNL_WRITE_SEC as a heartbeat (so a
+# freshly opened position picks up a live ltp within the window). Trigger
+# *firing* is never throttled -- it is evaluated against the live price on every
+# tick below, independent of this gate.
+MONITOR_PNL_WRITE_SEC = float(os.getenv("MONITOR_PNL_WRITE_SEC", "5"))
+_last_write_price: float | None = None   # price at the last ltp/pnl write
+_last_write_ts: float = 0.0              # unix ts of the last ltp/pnl write
+
+
+def _reset_write_throttle() -> None:
+    """Reset the price-mirror write throttle (used by tests)."""
+    global _last_write_price, _last_write_ts
+    _last_write_price = None
+    _last_write_ts = 0.0
+
+
+def _should_write_price(now_ts: float, current_price: float) -> bool:
+    """True when the ltp/pnl price mirror should be persisted this tick.
+
+    Writes when the price moved since the last written value, or when the
+    MONITOR_PNL_WRITE_SEC heartbeat interval has elapsed. An unchanged price
+    within the window is skipped -- the value would be identical.
+    """
+    return (
+        _last_write_price is None
+        or current_price != _last_write_price
+        or (now_ts - _last_write_ts) >= MONITOR_PNL_WRITE_SEC
+    )
+
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -156,54 +190,70 @@ def _attempt_broker_close(sess, pos: Position, label: str,
 # Core monitor tick
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _update_currency_ltp(current_price: float) -> None:
-    """Persist the latest price to CurrencyPair.ltp on every tick."""
-    sess = Session()
-    try:
-        cp = sess.query(CurrencyPair).filter_by(symbol=SYMBOL).first()
-        if cp:
-            cp.ltp = str(current_price)
-            sess.commit()
-    except Exception:
-        sess.rollback()
-        log.exception("[LTP UPDATE] Failed to update CurrencyPair ltp")
-    finally:
-        sess.close()
-
-
 def _check_triggers(current_price: float) -> None:
-    """Evaluate all pending triggers against current_price and close positions when hit."""
+    """Evaluate all pending triggers against current_price and close positions when hit.
+
+    One Session per tick (opt15 task3): the CurrencyPair.ltp mirror, the
+    per-position ltp / unrealized-P&L refresh (throttled), the PENDING-trigger
+    read (ONE batched query for all open positions), and every close share a
+    single session and a single commit. The broker-close path is unchanged.
+    Trigger *decisions* are evaluated against the live price on every tick,
+    independent of the price-mirror throttle.
+    """
+    global _last_write_price, _last_write_ts
+
+    now_ts = time.time()
+    write_price = _should_write_price(now_ts, current_price)
+
     sess = Session()
     try:
+        # (3) CurrencyPair LTP mirror -- throttled to the same cadence as the
+        # per-position P&L write, folded into this tick's single session.
+        if write_price:
+            cp = sess.query(CurrencyPair).filter_by(symbol=SYMBOL).first()
+            if cp:
+                cp.ltp = str(current_price)
+
         open_positions = (
             sess.query(Position)
             .filter(Position.symbol == SYMBOL, Position.quantity > 0)
             .all()
         )
 
-        for pos in open_positions:
-            # Update live LTP and unrealized P&L. quantity is in LOTS; the
-            # contract factor converts $-move × lots into USD (see
-            # trigger_logic module docstring for the units convention).
-            qty = float(pos.quantity) * USD_PER_POINT_PER_LOT
-            avg_buy = float(pos.avg_buy_price)
-            avg_sell = float(pos.avg_sell_price)
-
-            pos.ltp = Decimal(str(current_price))
-            if avg_buy > 0:
-                unrealized = (current_price - avg_buy) * qty
-            elif avg_sell > 0:
-                unrealized = (avg_sell - current_price) * qty
-            else:
-                unrealized = 0.0
-            pos.profit_loss = Decimal(str(round(unrealized, 2)))
-
-            # Evaluate pending triggers
-            pending = (
+        # (1) Kill the N+1: one PENDING-trigger read for ALL open positions,
+        # grouped by position in Python (was one SELECT per position per tick).
+        pos_ids = [pos.id for pos in open_positions]
+        triggers_by_pos: dict = {}
+        if pos_ids:
+            for trig in (
                 sess.query(Trigger)
-                .filter_by(position_id=pos.id, status="PENDING")
+                .filter(Trigger.position_id.in_(pos_ids),
+                        Trigger.status == "PENDING")
                 .all()
-            )
+            ):
+                triggers_by_pos.setdefault(trig.position_id, []).append(trig)
+
+        for pos in open_positions:
+            # (2) Refresh live LTP and unrealized P&L only when the price moved
+            # or the heartbeat elapsed. quantity is in LOTS; the contract factor
+            # converts $-move × lots into USD (see trigger_logic module docstring
+            # for the units convention).
+            if write_price:
+                qty = float(pos.quantity) * USD_PER_POINT_PER_LOT
+                avg_buy = float(pos.avg_buy_price)
+                avg_sell = float(pos.avg_sell_price)
+
+                pos.ltp = Decimal(str(current_price))
+                if avg_buy > 0:
+                    unrealized = (current_price - avg_buy) * qty
+                elif avg_sell > 0:
+                    unrealized = (avg_sell - current_price) * qty
+                else:
+                    unrealized = 0.0
+                pos.profit_loss = Decimal(str(round(unrealized, 2)))
+
+            # Evaluate pending triggers (batch-fetched above, grouped per pos).
+            pending = triggers_by_pos.get(pos.id, [])
 
             for trigger in pending:
                 # All TP/SL/TIME_EXIT/TRAIL semantics live in trigger_logic
@@ -287,6 +337,11 @@ def _check_triggers(current_price: float) -> None:
                 break  # one close per position per tick
 
         sess.commit()
+        # Record the write only after a successful commit: a rolled-back tick
+        # must not convince the next tick that the mirror is already current.
+        if write_price:
+            _last_write_price = current_price
+            _last_write_ts = now_ts
 
     except Exception:
         sess.rollback()
@@ -314,7 +369,8 @@ def run():
                     price = None
 
                 if price is not None:
-                    _update_currency_ltp(price)
+                    # CurrencyPair.ltp is now updated inside _check_triggers'
+                    # single per-tick session (opt15 task3).
                     _check_triggers(price)
                 else:
                     log.debug("[MONITOR] No LTP available — skipping tick")
