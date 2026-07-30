@@ -41,6 +41,21 @@ import legacy_s99  # noqa: E402
 import legacy_s100  # noqa: E402
 
 
+# ── Task-9 gates OFF for the Task-8 refactor-parity comparison ────────────────
+# opt15 Task 9 adds a SOFT M15 structure veto + a 1.5xATR gap cap to s93, both
+# DEFAULT ON. This file is the Task-8 shared-TA refactor-parity gate: it must
+# compare the NEW module's BASE behavior against the legacy oracle (which has
+# neither filter). So pin both Task-9 gates OFF here -- otherwise the fuzz grid
+# (gap up to 2.0 > 1.5xATR) would trip the cap and diverge from legacy. The
+# S93_SOFT_VETO=off path is itself the Task-9 regression guard; the dedicated
+# veto/cap behavior is covered in tests/test_s93_soft_veto.py. (s99/s100 do not
+# read these envs.)
+@pytest.fixture(autouse=True)
+def _s93_task9_gates_off(monkeypatch):
+    monkeypatch.setenv("S93_SOFT_VETO", "off")
+    monkeypatch.setenv("S93_GAP_CAP_ATR", "0")
+
+
 # ── comparison helpers ────────────────────────────────────────────────────────
 def _norm(sig):
     """Signal -> comparable golden tuple (side, entry, sl, tp, reason,
