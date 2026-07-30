@@ -29,6 +29,7 @@ from shared.tsdb_reader import fetch_latest_ltp
 from shared.models import Session, Position, Trigger, Order, UserStrategy, CurrencyPair
 from shared.market_timing import is_market_closed_utc
 from shared.metaapi_client import close_position_by_id, client_for_broker
+from shared import obs
 from trigger_logic import (
     USD_PER_POINT_PER_LOT,
     evaluate_trigger,
@@ -159,6 +160,7 @@ def _attempt_broker_close(sess, pos: Position, label: str,
         return True, True
 
     client = client_for_broker(sess, _get_user_broker_id(sess, pos))
+    obs.count("broker_close_attempt")   # opt15 task12: broker-close attempts
     closed_ok = (client.close_position_by_id(broker_pid) if client
                  else close_position_by_id(broker_pid))
     if closed_ok:
@@ -166,6 +168,7 @@ def _attempt_broker_close(sess, pos: Position, label: str,
         _close_next_try.pop(pid, None)
         return True, True
 
+    obs.count("broker_close_fail")      # opt15 task12: broker-close failures
     n = _close_attempts.get(pid, 0) + 1
     _close_attempts[pid] = n
     if n >= _CLOSE_MAX_ATTEMPTS:
@@ -174,6 +177,14 @@ def _attempt_broker_close(sess, pos: Position, label: str,
             "giving up and recording DB close; broker SL/TP remain attached as "
             "a backstop. RECONCILE MANUALLY.",
             label, n, _CLOSE_MAX_ATTEMPTS, pid, broker_pid)
+        # opt15 task12: the flatten-and-warn fallback leaves the DB and the broker
+        # potentially out of sync -> operator alert (log-only unless Telegram env set).
+        obs.alert(
+            "RECONCILE MANUALLY: %s broker close failed %d/%d for pos=%s "
+            "(broker_pid=%s); DB flattened, broker SL/TP still attached"
+            % (label, n, _CLOSE_MAX_ATTEMPTS, pid, broker_pid),
+            level="ERROR",
+        )
         _close_attempts.pop(pid, None)
         _close_next_try.pop(pid, None)
         return True, True
@@ -270,6 +281,7 @@ def _check_triggers(current_price: float) -> None:
                     continue
 
                 label = decision.label
+                obs.count("trigger_fire_" + str(label))   # opt15 task12: fires by type
                 if label == "TIME_EXIT":
                     log.info("[TRIGGER] TIME_EXIT fired | held past max-hold | pos=%s", pos.id)
                 elif label == "TRAIL":
@@ -371,7 +383,8 @@ def run():
                 if price is not None:
                     # CurrencyPair.ltp is now updated inside _check_triggers'
                     # single per-tick session (opt15 task3).
-                    _check_triggers(price)
+                    with obs.timer("monitor_tick_sec"):   # opt15 task12: tick duration
+                        _check_triggers(price)
                 else:
                     log.debug("[MONITOR] No LTP available — skipping tick")
 

@@ -24,6 +24,7 @@ from shared.models import (
 from shared.metaapi_client import client_for_broker
 from shared.tsdb_reader import fetch_latest_ltp, fetch_latest_spread
 from shared.event_gate import event_window_open
+from shared import obs
 from strategy.ict_engine import EntrySignal
 
 log = logging.getLogger(__name__)
@@ -591,6 +592,19 @@ def _update_signal_status(signal_log_id, status, *, rejection_reason=None,
     """
     if signal_log_id is None:
         return
+    # opt15 task12: this is the ONE place every gate outcome is finalized, so it
+    # is the single point to count rejections by reason (and placements). Counted
+    # here -- before the DB read -- so the metric reflects the decision itself,
+    # independent of whether the audit row can be loaded/written. Key on the
+    # reason's leading token (before the first ':' / space) so variable detail
+    # text does not fragment the counter (e.g. "sl_too_tight: 1.2pt < 1.5pt" ->
+    # reject_sl_too_tight).
+    if status == "REJECTED" and rejection_reason:
+        head = str(rejection_reason).split(":", 1)[0].strip().split()
+        key = (head[0][:40] if head else "unknown") or "unknown"
+        obs.count("reject_" + key)
+    elif status == "PLACED":
+        obs.count("entry_placed")
     sess = Session()
     try:
         row = sess.query(StrategySignal).filter_by(id=signal_log_id).first()
@@ -799,14 +813,16 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
             log.warning("[ENTRY] account %s has no usable MetaAPI creds — refusing to open",
                         ctx["user_broker_id"])
             return False
-        broker_position_id = _client.place_market_order(
-            side=signal.side,
-            symbol=symbol,
-            volume=qty,
-            stop_loss=signal.stop_loss,
-            take_profit=signal.take_profit,
-            entry_price=signal.entry_price,
-        )
+        # opt15 task12: signal->broker-ack placement duration.
+        with obs.timer("entry_placement_sec"):
+            broker_position_id = _client.place_market_order(
+                side=signal.side,
+                symbol=symbol,
+                volume=qty,
+                stop_loss=signal.stop_loss,
+                take_profit=signal.take_profit,
+                entry_price=signal.entry_price,
+            )
         if not broker_position_id:
             _update_signal_status(signal_log_id, "REJECTED",
                                   rejection_reason="metaapi_rejection")
@@ -819,10 +835,13 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
         # LEVELS stay signal-based; StrategySignal keeps the signal price audit.
         fill_px = _client.get_position_fill(broker_position_id)
         entry_px = float(fill_px) if fill_px else float(signal.entry_price)
-        if fill_px and abs(entry_px - float(signal.entry_price)) > 0.005:
-            log.info("[ENTRY] booked at broker fill %.2f (signal %.2f, drift %+.2f)",
-                     entry_px, float(signal.entry_price),
-                     entry_px - float(signal.entry_price))
+        if fill_px:
+            # opt15 task12: per-trade fill drift (broker fill vs signal price).
+            drift_pts = entry_px - float(signal.entry_price)
+            obs.observe("fill_drift_pts", drift_pts)
+            if abs(drift_pts) > 0.005:
+                log.info("[ENTRY] booked at broker fill %.2f (signal %.2f, drift %+.2f)",
+                         entry_px, float(signal.entry_price), drift_pts)
 
         try:
             # ── 1. Position ───────────────────────────────────────────────────────

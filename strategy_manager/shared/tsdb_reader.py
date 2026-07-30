@@ -30,6 +30,8 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from dotenv import load_dotenv
 
+from shared import obs   # opt15 task12: in-process metrics + alerting (no new deps)
+
 log = logging.getLogger(__name__)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -132,13 +134,44 @@ def _connect():
 
 
 # ── OANDA fetch ──────────────────────────────────────────────────────────────
+# opt15 task12: observe OANDA call latency + error count, and raise ONE operator
+# alert once the GET path has failed OANDA_ERROR_ALERT_THRESHOLD (default 5) times
+# in a row (reset on the next success). _oanda_get is the single chokepoint every
+# OANDA read flows through, so it is also where the periodic METRICS line is
+# emitted (flush_if_due, throttled to OBS_FLUSH_SEC) for every polling service.
+_OANDA_ERROR_ALERT_THRESHOLD = int(os.getenv("OANDA_ERROR_ALERT_THRESHOLD", "5"))
+_oanda_consec_errors = 0
+_oanda_alerted = False
+
+
 def _oanda_get(url: str, params: dict) -> dict:
-    resp = _session.get(url, params=params, timeout=_HTTP_TIMEOUT)
-    if resp.status_code in (401, 403):
-        raise RuntimeError(f"OANDA auth HTTP {resp.status_code} — check OANDA_API_KEY / practice flag")
-    if resp.status_code != 200:
-        raise RuntimeError(f"OANDA HTTP {resp.status_code}: {resp.text[:200]}")
-    return resp.json()
+    global _oanda_consec_errors, _oanda_alerted
+    _t0 = time.perf_counter()
+    try:
+        resp = _session.get(url, params=params, timeout=_HTTP_TIMEOUT)
+        if resp.status_code in (401, 403):
+            raise RuntimeError(f"OANDA auth HTTP {resp.status_code} — check OANDA_API_KEY / practice flag")
+        if resp.status_code != 200:
+            raise RuntimeError(f"OANDA HTTP {resp.status_code}: {resp.text[:200]}")
+        data = resp.json()
+    except Exception:
+        obs.count("oanda_errors")
+        _oanda_consec_errors += 1
+        if _oanda_consec_errors >= _OANDA_ERROR_ALERT_THRESHOLD and not _oanda_alerted:
+            obs.alert(
+                "OANDA GET failing: %d consecutive errors (last url %s)"
+                % (_oanda_consec_errors, url),
+                level="ERROR",
+            )
+            _oanda_alerted = True
+        raise
+    else:
+        obs.observe("oanda_call_sec", time.perf_counter() - _t0)
+        _oanda_consec_errors = 0
+        _oanda_alerted = False
+        return data
+    finally:
+        obs.flush_if_due(log)
 
 
 def _fetch_oanda_ohlc(instrument: str, granularity: str, days: int) -> list:

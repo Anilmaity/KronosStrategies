@@ -51,6 +51,7 @@ from regime.regime_engine import (
     session_for_hour,
 )
 from shared.market_timing import is_market_closed_utc
+from shared import obs
 from shared.models import (
     ManagedStrategy,
     ManagerAction,
@@ -301,6 +302,16 @@ def evaluate_tick(sess, snap: RegimeState, now_utc: datetime, dry_run: bool = Fa
             f"daily realized P&L {daily_pnl:.2f} USD <= -{float(cfg.kill_switch_loss_usd):.2f} "
             f"— pausing all armed strategies until next UTC day",
             snap,
+        )
+        # opt15 task12: operator alert on the hard kill-switch trip (obs imports
+        # cleanly here -- strategy_manager/shared/ carries its own obs.py copy).
+        # Log-only unless the Telegram alert env is set; never raises.
+        obs.count("kill_switch_trip")
+        obs.alert(
+            "KILL-SWITCH tripped: daily realized P&L %.2f USD <= -%.2f -- "
+            "all armed strategies paused until next UTC day"
+            % (daily_pnl, float(cfg.kill_switch_loss_usd)),
+            level="CRITICAL",
         )
 
     # ── Soft daily brake (Phase-1 redesign 2026-07-06) ───────────────────────
