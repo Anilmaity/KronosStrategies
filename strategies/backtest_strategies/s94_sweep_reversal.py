@@ -64,6 +64,14 @@ _MAX_HOLD_MIN = 1200   # 240 M5 bars
 _SESSIONS    = (("asia", 0, 7), ("london", 7, 12), ("ny", 12, 21))  # UTC
 _MIN_M5      = 24 * 12 + _SWING_K  # need at least ~1 day of M5 for PD levels
 
+# Runner MIN_BARS contract (opt15 Task 7): smallest M5 window get_signal
+# tolerates. research_runner asserts RESEARCH_WIN_5M >= this at startup so an
+# undersized window fails LOUD instead of silently no-trading (CHALLENGE_XAU
+# defect class). Derived from _MIN_M5 -- never a second hardcoded literal.
+# (Note: _LEVEL_TTL=1440 is the FULL level-universe depth; the module runs on
+# shorter windows with a truncated universe -- _MIN_M5 is the hard floor.)
+MIN_BARS_5M = _MIN_M5
+
 # ── Pending-setup state (persists across runner ticks in-process) ─────────────
 # Each armed setup: {side, level, stop, tp, armed_after, expires_at}
 _pending: list[dict] = []

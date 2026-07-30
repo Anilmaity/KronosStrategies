@@ -58,6 +58,12 @@ _HOURS       = (7, 8, 9, 12, 13, 14)   # London + NY killzones
 _MAX_HOLD_MIN = 120
 _MIN_M5      = _ATR_N + 4
 
+# Runner MIN_BARS contract (opt15 Task 7): the smallest M5 window get_signal
+# tolerates. research_runner asserts RESEARCH_WIN_5M >= this at startup so an
+# undersized window fails LOUD instead of silently no-trading (CHALLENGE_XAU
+# defect class). Derived from _MIN_M5 -- never a second hardcoded literal.
+MIN_BARS_5M = _MIN_M5
+
 # ── Pending-setup state (persists across runner ticks in-process) ─────────────
 _pending: dict | None = None
 _last_fvg_bar = None      # dedup: one setup per FVG bar

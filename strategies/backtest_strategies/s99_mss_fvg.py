@@ -64,6 +64,12 @@ _HOURS      = tuple(range(6, 16))     # 06:00..15:59 UTC — Asia hours 1-5
 _MAX_HOLD_MIN = 480
 _MIN_M5     = _SWEEP_N + 3 * _SWING_W + 4
 
+# Runner MIN_BARS contract (opt15 Task 7): smallest M5 window get_signal
+# tolerates. research_runner asserts RESEARCH_WIN_5M >= this at startup so an
+# undersized window fails LOUD instead of silently no-trading (CHALLENGE_XAU
+# defect class). Derived from _MIN_M5 -- never a second hardcoded literal.
+MIN_BARS_5M = _MIN_M5
+
 # ── Pending-setup state (persists across runner ticks in-process) ─────────────
 # {side, prox, sl, tp, expires_at, mss_bar_time}
 _pending: dict | None = None

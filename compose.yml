@@ -23,6 +23,11 @@ services:
   tick_data_collector:
     build: ./tick_data_collector
     restart: always
+    mem_limit: 256m
+    # opt15: no live-path reader of ltp - collectors moved behind the
+    # data-archive profile; start explicitly with --profile data-archive
+    # if the archive is wanted
+    profiles: ["data-archive"]
     env_file: .env
     environment:
       TSDB_TARGET:      ${TSDB_TARGET:-tigerdata}
@@ -34,6 +39,11 @@ services:
   tick_data_collector_xagusd:
     build: ./tick_data_collector
     restart: always
+    mem_limit: 256m
+    # opt15: no live-path reader of ltp - collectors moved behind the
+    # data-archive profile; start explicitly with --profile data-archive
+    # if the archive is wanted
+    profiles: ["data-archive"]
     env_file: .env
     environment:
       TSDB_TARGET:      ${TSDB_TARGET:-tigerdata}
@@ -48,6 +58,11 @@ services:
   tick_data_collector_btcusd:
     build: ./tick_data_collector
     restart: always
+    mem_limit: 256m
+    # opt15: no live-path reader of ltp - collectors moved behind the
+    # data-archive profile; start explicitly with --profile data-archive
+    # if the archive is wanted
+    profiles: ["data-archive"]
     env_file: .env
     environment:
       TSDB_TARGET:      ${TSDB_TARGET:-tigerdata}
@@ -60,6 +75,9 @@ services:
   position_manager:
     build: ./position_manager
     restart: always
+    mem_limit: 384m
+    # opt15: mem cap only. Heartbeat-file touch not yet wired in this loop
+    # (Task 7 instrumented research_runner.py only) -> no healthcheck here yet.
     env_file: .env
     environment:
       TSDB_TARGET:   ${TSDB_TARGET:-tigerdata}
@@ -93,6 +111,9 @@ services:
   strategy_manager:
     build: ./strategy_manager
     restart: always
+    mem_limit: 384m
+    # opt15: mem cap only. Heartbeat-file touch not yet wired in this loop
+    # (Task 7 instrumented research_runner.py only) -> no healthcheck here yet.
     env_file: .env
     environment:
       TSDB_TARGET:      ${TSDB_TARGET:-tigerdata}
@@ -129,6 +150,14 @@ services:
     build: ./strategies
     restart: always
     command: python research_runner.py
+    mem_limit: 384m
+    healthcheck:
+      # research_runner.py touches /tmp/hb every loop iteration (opt15 Task 7)
+      test: ["CMD-SHELL", "find /tmp/hb -mmin -5 | grep -q hb"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     env_file: .env
     environment:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
@@ -150,6 +179,9 @@ services:
     build: ./strategies
     restart: always
     command: python fill_reconciler.py
+    mem_limit: 384m
+    # opt15: mem cap only. Heartbeat-file touch not yet wired in this loop
+    # (Task 7 instrumented research_runner.py only) -> no healthcheck here yet.
     env_file: .env
     environment:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
@@ -163,6 +195,14 @@ services:
     build: ./strategies
     restart: always
     command: python research_runner.py
+    mem_limit: 384m
+    healthcheck:
+      # research_runner.py touches /tmp/hb every loop iteration (opt15 Task 7)
+      test: ["CMD-SHELL", "find /tmp/hb -mmin -5 | grep -q hb"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     env_file: .env
     environment:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
@@ -183,6 +223,14 @@ services:
     build: ./strategies
     restart: always
     command: python research_runner.py
+    mem_limit: 384m
+    healthcheck:
+      # research_runner.py touches /tmp/hb every loop iteration (opt15 Task 7)
+      test: ["CMD-SHELL", "find /tmp/hb -mmin -5 | grep -q hb"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     env_file: .env
     environment:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
@@ -205,6 +253,14 @@ services:
     build: ./strategies
     restart: always
     command: python research_runner.py
+    mem_limit: 384m
+    healthcheck:
+      # research_runner.py touches /tmp/hb every loop iteration (opt15 Task 7)
+      test: ["CMD-SHELL", "find /tmp/hb -mmin -5 | grep -q hb"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     env_file: .env
     environment:
       TSDB_TARGET: ${TSDB_TARGET:-tigerdata}

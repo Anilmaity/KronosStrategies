@@ -60,6 +60,11 @@ log = logging.getLogger("research_runner")
 # runner otherwise looks dead. Emit a throttled heartbeat instead of nothing.
 HEARTBEAT_SEC = int(os.getenv("RESEARCH_HEARTBEAT_SEC", "900"))
 
+# Heartbeat FILE (opt15 Task 7): the loop touches this every iteration so the
+# compose healthcheck (`find /tmp/hb -mmin -5 | grep -q hb`) can tell a wedged
+# container from a live one. Distinct from the idle LOG heartbeat above.
+HEARTBEAT_FILE = os.getenv("HEARTBEAT_FILE", "/tmp/hb")
+
 _last_1m_time:      object          = None
 _last_entry_ts:     datetime | None = None
 _last_heartbeat_ts: datetime | None = None
@@ -79,6 +84,71 @@ def _should_heartbeat(now: datetime, last: datetime | None, interval_s: int) -> 
     if last is None:
         return True
     return (now - last).total_seconds() >= interval_s
+
+
+def _touch_heartbeat() -> None:
+    """Refresh the heartbeat file's mtime so the compose healthcheck sees a
+    live loop. Guarded: a non-Linux dev box (or any I/O hiccup) must NEVER
+    crash the trading loop over a liveness file."""
+    try:
+        with open(HEARTBEAT_FILE, "w") as fh:
+            fh.write("1")
+    except OSError:
+        pass
+
+
+def _win_from_env() -> tuple[int, int, int]:
+    """Configured runner windows, read FRESH from env (so the assert reflects
+    the live container env and stays testable). Mirrors the WIN_* defaults."""
+    return (
+        int(os.getenv("RESEARCH_WIN_1M", "60")),
+        int(os.getenv("RESEARCH_WIN_5M", "80")),
+        int(os.getenv("RESEARCH_WIN_15M", "100")),
+    )
+
+
+def _min_bars_violations(mod, win_1m: int, win_5m: int, win_15m: int):
+    """Pure check: return [(frame, required, configured), ...] for every frame
+    whose configured window is smaller than the module's declared MIN_BARS_*.
+
+    A module that declares no MIN_BARS_* (or a non-int) for a frame is simply
+    not checked on that frame -- the assert is opt-in per strategy."""
+    checks = (
+        ("1M", getattr(mod, "MIN_BARS_1M", None), win_1m),
+        ("5M", getattr(mod, "MIN_BARS_5M", None), win_5m),
+        ("15M", getattr(mod, "MIN_BARS_15M", None), win_15m),
+    )
+    out = []
+    for frame, need, have in checks:
+        if isinstance(need, int) and not isinstance(need, bool) and have < need:
+            out.append((frame, need, have))
+    return out
+
+
+def _assert_min_bars(mod, win_1m: int | None = None,
+                     win_5m: int | None = None,
+                     win_15m: int | None = None) -> None:
+    """Startup guard against the CHALLENGE_XAU defect class: a runner window
+    smaller than the strategy's validated lookback makes get_signal() return
+    None on every tick -- a SILENT no-trade. Fail LOUD (sys.exit(2)) instead.
+
+    Windows default to the live env (RESEARCH_WIN_*); explicit args override
+    for testing."""
+    env_1m, env_5m, env_15m = _win_from_env()
+    win_1m = env_1m if win_1m is None else win_1m
+    win_5m = env_5m if win_5m is None else win_5m
+    win_15m = env_15m if win_15m is None else win_15m
+
+    violations = _min_bars_violations(mod, win_1m, win_5m, win_15m)
+    if violations:
+        for frame, need, have in violations:
+            log.error(
+                "[%s FATAL] RESEARCH_WIN_%s=%d < MIN_BARS_%s=%d required by "
+                "the strategy. Undersized window -> get_signal stays silent "
+                "(the CHALLENGE_XAU defect class). Raise RESEARCH_WIN_%s.",
+                MODULE, frame, have, frame, need, frame,
+            )
+        sys.exit(2)
 
 
 def _is_new_1m(candles) -> bool:
@@ -126,6 +196,10 @@ def main():
     if name not in _VARIATION_STRATEGY_NAME:
         sys.exit(f"NAME='{name}' not registered in entry_manager._VARIATION_STRATEGY_NAME")
 
+    # Fail LOUD at startup if a configured window is below the strategy's
+    # declared minimum (silent no-trade guard -- CHALLENGE_XAU defect class).
+    _assert_min_bars(mod)
+
     log.info(
         "research_runner starting: module=%s NAME=%s cd=%ds session=%s..%s",
         MODULE, name, cfg.cooldown_s, cfg.session_start_hour, cfg.session_end_hour,
@@ -133,6 +207,7 @@ def main():
 
     while True:
         try:
+            _touch_heartbeat()   # liveness for the compose healthcheck
             if is_market_closed_utc():
                 time.sleep(POLL_INTERVAL)
                 continue

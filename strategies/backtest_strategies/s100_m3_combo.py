@@ -69,6 +69,13 @@ _RETRACE_W    = 12          # M3 bars the pending setup stays tradeable (36 min)
 _MAX_HOLD_MIN = 72          # 24 M3 bars, engine parity
 _MIN_M3       = _EMA_SLOW + _ATR_N   # closed M3 bars needed
 
+# Runner MIN_BARS contract (opt15 Task 7): the requirement is on the w1m LENGTH
+# (this module resamples M1->M3 internally), matching get_signal's own guard
+# `len(w1m) < 3 * _MIN_M3`. research_runner asserts RESEARCH_WIN_1M >= this at
+# startup so an undersized window fails LOUD instead of silently no-trading
+# (CHALLENGE_XAU defect class). Derived from _MIN_M3 -- never a second literal.
+MIN_BARS_1M = 3 * _MIN_M3
+
 # ── Pending-setup state (persists across runner ticks in-process) ─────────────
 _pending: dict | None = None
 _last_bar = None            # dedup: one detection pass per closed M3 bar
