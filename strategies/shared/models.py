@@ -31,7 +31,13 @@ _session_factory = None
 def _get_engine():
     global _engine
     if _engine is None:
-        _engine = create_engine(database_connection_string, pool_size=60, max_overflow=10)
+        _engine = create_engine(
+            database_connection_string,
+            pool_size=int(os.getenv("DB_POOL_SIZE", "5")),
+            max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "5")),
+            pool_pre_ping=True,
+            pool_recycle=1800,
+        )
     return _engine
 
 

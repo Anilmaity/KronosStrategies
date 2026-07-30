@@ -34,6 +34,26 @@ class EntrySignal:
     max_hold_min: float | None = None   # optional time-exit (minutes); see base.Signal
     trailing: bool = False              # chandelier trailing exit; see base.Signal
 
+    @classmethod
+    def from_signal(cls, sig) -> "EntrySignal":
+        """Build an EntrySignal from a backtest_strategies.base.Signal.
+
+        Copies every shared field in ONE place so a new Signal field can't be
+        silently dropped by one runner's hand-written copy. Signal carries no
+        zone bounds, so both collapse to entry_price (the runners' convention).
+        """
+        return cls(
+            side=sig.side,
+            entry_price=float(sig.entry_price),
+            stop_loss=float(sig.stop_loss),
+            take_profit=float(sig.take_profit),
+            reason=sig.reason,
+            zone_low=float(sig.entry_price),
+            zone_high=float(sig.entry_price),
+            max_hold_min=getattr(sig, "max_hold_min", None),
+            trailing=bool(getattr(sig, "trailing", False)),
+        )
+
 
 @dataclass
 class FVGZone:
