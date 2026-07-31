@@ -147,3 +147,29 @@ def test_ensure_s5_cache_hit_and_empty(tmp_path, fake):
     s = fake([{"candles": []}])
     miss = bars.ensure_s5(tmp_path, _utc(2026, 6, 5, 9), _utc(2026, 6, 5, 9, 1))
     assert miss.empty and len(s.calls) == 1              # fetched, none exists
+
+
+def test_ensure_frames_cold_start_no_cache(tmp_path, fake):
+    """First live smoke run (2026-08-01): with NO existing parquet, the empty
+    object-dtype seed frame must not poison the merged time dtype."""
+    start, end = _utc(2026, 6, 1), _utc(2026, 6, 2)
+    fake([{"candles": [
+        _candle("2026-05-30T00:00:00.000000000Z", 1, 2, 0.5, 1.5),
+        _candle("2026-05-30T00:01:00.000000000Z", 1.5, 2.5, 1.0, 2.0),
+    ]}])
+    bars.ensure_frames(tmp_path, start, end)
+    m1 = pd.read_parquet(tmp_path / "is_XAU_USD_1m.parquet")
+    assert len(m1) == 2
+    assert str(pd.to_datetime(m1["time"], utc=True).dt.tz) == "UTC"
+    assert (tmp_path / "is_XAU_USD_1d.parquet").exists()
+
+
+def test_ensure_s5_cold_start_dtype(tmp_path, fake):
+    span0, span1 = _utc(2026, 6, 1, 12, 0), _utc(2026, 6, 1, 12, 1)
+    fake([{"candles": [
+        _candle("2026-06-01T12:00:%02d.000000000Z" % s, 1, 2, 0.5, 1.5)
+        for s in range(0, 60, 5)
+    ]}])
+    out = bars.ensure_s5(tmp_path, span0, span1)
+    assert len(out) == 12
+    assert str(out["time"].dt.tz) == "UTC"

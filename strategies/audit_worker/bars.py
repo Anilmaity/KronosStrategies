@@ -134,11 +134,16 @@ def ensure_frames(cache_dir: Path, period_start_utc: datetime,
         pieces.append(fetch_candles(
             "M1", m1["time"].max().to_pydatetime(), need_end.to_pydatetime()))
 
+    # Drop empty pieces BEFORE concat: an empty seed frame has object-dtype
+    # columns and poisons the merged time column's datetime dtype (cold-start
+    # crash caught by the first live smoke run, 2026-08-01).
+    pieces = [p for p in pieces if not p.empty]
+    if not pieces:
+        raise RuntimeError("no M1 candles available for the requested window")
     m1 = (pd.concat(pieces, ignore_index=True)
           .drop_duplicates(subset="time").sort_values("time")
           .reset_index(drop=True))
-    if m1.empty:
-        raise RuntimeError("no M1 candles available for the requested window")
+    m1["time"] = pd.to_datetime(m1["time"], utc=True)
     m1.to_parquet(m1_path, index=False)
 
     # Resample the higher TFs from naive-UTC M1 (house left/left convention).
@@ -180,9 +185,11 @@ def ensure_s5(cache_dir: Path, start_utc: datetime,
 
     fetched = fetch_candles("S5", start_ts.to_pydatetime(), end_ts.to_pydatetime())
     if not fetched.empty:
-        s5 = (pd.concat([s5, fetched], ignore_index=True)
+        pieces = [p for p in (s5, fetched) if not p.empty]
+        s5 = (pd.concat(pieces, ignore_index=True)
               .drop_duplicates(subset="time").sort_values("time")
               .reset_index(drop=True))
+        s5["time"] = pd.to_datetime(s5["time"], utc=True)
         s5.to_parquet(path, index=False)
     out = s5[(s5["time"] >= start_ts) & (s5["time"] < end_ts)]
     return out.reset_index(drop=True)
