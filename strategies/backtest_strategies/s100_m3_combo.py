@@ -28,6 +28,8 @@ existing $150/day brake at 0.10 lots -- NOT re-implemented here.
 """
 from __future__ import annotations
 
+import logging
+import os
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -41,6 +43,8 @@ from backtest_strategies._shared_ta import (
     fvg_at,
 )
 from backtest_strategies.base import Signal, StrategyConfig
+
+log = logging.getLogger(__name__)
 
 NAME = "KRONOS_S100_M3_COMBO"
 CONFIG = StrategyConfig(
@@ -76,23 +80,82 @@ _RETRACE_W    = 12          # M3 bars the pending setup stays tradeable (36 min)
 _MAX_HOLD_MIN = 72          # 24 M3 bars, engine parity
 _MIN_M3       = _EMA_SLOW + _ATR_N   # closed M3 bars needed
 
-# Runner MIN_BARS contract (opt15 Task 7): the requirement is on the w1m LENGTH
-# (this module resamples M1->M3 internally), matching get_signal's own guard
-# `len(w1m) < 3 * _MIN_M3`. research_runner asserts RESEARCH_WIN_1M >= this at
-# startup so an undersized window fails LOUD instead of silently no-trading
-# (CHALLENGE_XAU defect class). Derived from _MIN_M3 -- never a second literal.
-MIN_BARS_1M = 3 * _MIN_M3
+# ER trend-persistence gate constants (opt15 Task 15, DEFAULT OFF)
+# ----------------------------------------------------------------
+# Optional entry filter keyed on the Kaufman efficiency ratio (trend
+# persistence). S100's one known weakness is regime dependence -- its spec's only
+# losing period was 2023H2 (-273 pts, choppy/ranging tape); the gate lets an
+# operator suppress new entries when the market is not trending. The ratio +
+# thresholds are ported BYTE-FOR-BYTE from regime_engine (_efficiency_ratio /
+# _classify_trend: 24 CLOSED H1 bars, 30 CLOSED M15 bars, both > 0.35 -> TRENDING,
+# both < 0.20 -> RANGING, else MIXED). Parity against the regime engine on a
+# shared fixture is proven in tests/test_s100_er_gate.py.
+_ER_H1_BARS   = 24
+_ER_M15_BARS  = 30
+_ER_TRENDING  = 0.35
+_ER_RANGING   = 0.20
+_ER_MODES     = ("off", "ranging", "strict")
+
+
+def _er_gate_mode() -> str:
+    """Read S100_ER_GATE at call time (Task 9 pattern: the env is authoritative,
+    read fresh each tick, fail toward OFF). Unknown/blank -> 'off'.
+
+    Env S100_ER_GATE = off (default) | ranging | strict:
+      off      no gate -- byte-identical to the pre-Task-15 module.
+      ranging  block a NEW entry when trend_regime == RANGING.
+      strict   block a NEW entry when trend_regime != TRENDING (RANGING or MIXED).
+    """
+    mode = os.getenv("S100_ER_GATE", "off").strip().lower()
+    return mode if mode in _ER_MODES else "off"
+
+
+# Runner MIN_BARS contract (opt15 Task 7 + Task 15): the requirement is on the
+# w1m LENGTH (this module resamples M1 internally), matching get_signal's own
+# guard `len(w1m) < 3 * _MIN_M3`. research_runner asserts RESEARCH_WIN_1M >=
+# MIN_BARS_1M at startup so an undersized window fails LOUD instead of silently
+# no-trading (CHALLENGE_XAU defect class).
+#
+# The BASE floor is the scalper's own get_signal guard (3 * _MIN_M3 = 642). When
+# the ER gate is ENABLED (S100_ER_GATE != off) a valid 24-bar H1 efficiency ratio
+# needs 25 CLOSED H1 bars, so the floor RISES to _ER_MIN_BARS_1M. Extending
+# MIN_BARS_1M is precisely what makes the Task-7 runner assert REFUSE TO START an
+# armed s100 service whose window is too small: the operator's one arm-time step
+# is to widen RESEARCH_WIN_1M, and forgetting it fails LOUD, never silently. Read
+# from the env at import -- the runner imports this module once at container start
+# with the compose env already set and asserts against MIN_BARS_1M once. Both
+# floors derive from the constants above -- never a second hardcoded literal.
+_MIN_BARS_1M_BASE = 3 * _MIN_M3               # 642: EMA200 warm-up on ~214 M3 bars
+_ER_MIN_BARS_1M   = (_ER_H1_BARS + 2) * 60    # 1560: 25 closed H1 bars for a
+#                                               24-diff ratio + 1h headroom to
+#                                               absorb the dropped incomplete tail
+
+
+def _required_min_bars_1m(mode: str | None = None) -> int:
+    """The w1m-length floor for the current gate mode: the base scalper floor when
+    the ER gate is off, raised to cover a valid 24-bar H1 ratio when it is armed.
+    Defaults to the live S100_ER_GATE env; pass ``mode`` to query a hypothetical."""
+    mode = _er_gate_mode() if mode is None else mode
+    if mode == "off":
+        return _MIN_BARS_1M_BASE
+    return max(_MIN_BARS_1M_BASE, _ER_MIN_BARS_1M)
+
+
+# Frozen at import from S100_ER_GATE (see the contract above). Default off -> 642.
+MIN_BARS_1M = _required_min_bars_1m()
 
 # ── Pending-setup state (persists across runner ticks in-process) ─────────────
 _pending: PendingRetrace | None = None
 _last_bar = None            # dedup: one detection pass per closed M3 bar
+_er_warned = False          # one-shot WARN: gate on but window too short for ER
 
 
 def reset_state() -> None:
     """Clear the armed setup + dedup memory (used by tests)."""
-    global _pending, _last_bar
+    global _pending, _last_bar, _er_warned
     _pending = None
     _last_bar = None
+    _er_warned = False
 
 
 def _resample_m3(w1m: pd.DataFrame) -> pd.DataFrame:
@@ -222,6 +285,112 @@ def _detect(m3: pd.DataFrame, now_utc: datetime) -> Signal | None:
     return None
 
 
+# ── ER trend-persistence gate compute (opt15 Task 15) ────────────────────────
+# When armed, MIN_BARS_1M is extended so the runner guarantees a wide-enough w1m
+# (see the MIN_BARS contract above); these helpers then classify the regime from
+# that window. If w1m is nonetheless too short to form a valid 24-bar H1 ratio
+# (a transient data hiccup, never normal operation once armed), the gate FAILS
+# TOWARD OFF -- admitting the entry -- because a data gap must never BLOCK trading
+# (Global Constraint 1). The gate ships DEFAULT OFF; arming is an operator
+# decision informed by docs/research/2026-07-30-s100-er-gate.md.
+def _efficiency_ratio(closes: pd.Series, n_bars: int) -> float:
+    """Kaufman efficiency ratio |net|/path over the last ``n_bars`` moves.
+
+    Ported BYTE-FOR-BYTE from regime_engine._efficiency_ratio (opt15 Task 15;
+    parity asserted in tests/test_s100_er_gate.py). Uses the last n_bars+1
+    closes (n_bars diffs). NaN when history is short or the path length is zero.
+    """
+    c = closes.astype(float).dropna().reset_index(drop=True)
+    if len(c) < n_bars + 1:
+        return float("nan")
+    window = c.iloc[-(n_bars + 1):]
+    net = abs(float(window.iloc[-1]) - float(window.iloc[0]))
+    path = float(window.diff().abs().sum())
+    if path <= 0:
+        return float("nan")
+    return net / path
+
+
+def _classify_trend(er_h1: float, er_m15: float) -> str:
+    """TRENDING/RANGING/MIXED from the two efficiency ratios. Ported BYTE-FOR-
+    BYTE from regime_engine._classify_trend (opt15 Task 15)."""
+    if pd.isna(er_h1) or pd.isna(er_m15):
+        return "MIXED"
+    if er_h1 > _ER_TRENDING and er_m15 > _ER_TRENDING:
+        return "TRENDING"
+    if er_h1 < _ER_RANGING and er_m15 < _ER_RANGING:
+        return "RANGING"
+    return "MIXED"
+
+
+def _resample_closed(w1m: pd.DataFrame, rule: str, bucket_min: int) -> pd.DataFrame:
+    """M1 -> ``rule`` OHLC, CLOSED buckets only.
+
+    Same left-labelled default resample + incomplete-tail drop as _resample_m3
+    (a bucket is complete only once w1m reaches its last minute). Used only by
+    the ER gate so the ratio sees the SAME closed higher-TF bars the regime
+    engine would fetch from OANDA.
+    """
+    df = (w1m.set_index("time")
+          .resample(rule)
+          .agg({"open": "first", "high": "max", "low": "min", "close": "last"})
+          .dropna())
+    if len(df) == 0:
+        return df.reset_index()
+    last_m1 = w1m["time"].iloc[-1]
+    last_bucket = df.index[-1]
+    if (pd.Timestamp(last_m1) - pd.Timestamp(last_bucket)) < pd.Timedelta(
+            minutes=bucket_min - 1):
+        df = df.iloc[:-1]
+    return df.reset_index()
+
+
+def _er_trend_regime(w1m: pd.DataFrame) -> str | None:
+    """Classify the current trend regime from w1m alone, exactly as the regime
+    engine would from its H1/M15 frames. Returns 'TRENDING'|'RANGING'|'MIXED',
+    or None when history is too short to compute a valid ratio -- the caller
+    then FAILS TOWARD OFF (never MIXED, which would make `strict` block every
+    entry on a short window).
+    """
+    m15 = _resample_closed(w1m, "15min", 15)
+    h1 = _resample_closed(w1m, "1h", 60)
+    er_h1 = _efficiency_ratio(h1["close"], _ER_H1_BARS) if len(h1) else float("nan")
+    er_m15 = _efficiency_ratio(m15["close"], _ER_M15_BARS) if len(m15) else float("nan")
+    if pd.isna(er_h1) or pd.isna(er_m15):
+        return None
+    return _classify_trend(er_h1, er_m15)
+
+
+def _apply_er_gate(sig: Signal | None, w1m: pd.DataFrame) -> Signal | None:
+    """DEFAULT-OFF trend-persistence gate on a would-be entry.
+
+    off        -> return ``sig`` untouched (byte-identical to pre-Task-15).
+    ranging    -> None when trend_regime == RANGING, else ``sig``.
+    strict     -> None when trend_regime != TRENDING, else ``sig``.
+    Short window (cannot classify) -> ``sig`` (fail toward OFF) + one-time WARN.
+    """
+    global _er_warned
+    if sig is None:
+        return None
+    mode = _er_gate_mode()
+    if mode == "off":
+        return sig
+    regime = _er_trend_regime(w1m)
+    if regime is None:
+        if not _er_warned:
+            log.warning(
+                "S100_ER_GATE=%s but w1m too short for a 24-bar H1 ratio "
+                "(need WIN_1M>=%d); failing toward OFF (admitting entries) "
+                "until the runner window is widened", mode, _ER_MIN_BARS_1M)
+            _er_warned = True
+        return sig
+    if mode == "ranging" and regime == "RANGING":
+        return None
+    if mode == "strict" and regime != "TRENDING":
+        return None
+    return sig
+
+
 def get_signal(w1m, w5m, w15m, now_utc: datetime) -> Signal | None:
     global _pending
     if w1m is None or len(w1m) < 3 * _MIN_M3:
@@ -238,7 +407,7 @@ def get_signal(w1m, w5m, w15m, now_utc: datetime) -> Signal | None:
 
     sig = _detect(m3, now_utc)
     if sig is not None:
-        return sig
+        return _apply_er_gate(sig, w1m)     # DEFAULT OFF; no-op unless armed
     if _pending is None:
         return None
 
@@ -249,4 +418,4 @@ def get_signal(w1m, w5m, w15m, now_utc: datetime) -> Signal | None:
                              float(r["low"]))
     if clear:
         _pending = None
-    return sig
+    return _apply_er_gate(sig, w1m)         # DEFAULT OFF; no-op unless armed

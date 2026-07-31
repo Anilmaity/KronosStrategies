@@ -48,6 +48,12 @@ if _STRAT_DIR not in sys.path:
     sys.path.insert(0, _STRAT_DIR)
 
 from strategy.ict_engine import get_market_structure  # noqa: E402
+from regime.regime_engine import (  # noqa: E402  -- canonical ER (opt15 Task 15)
+    ER_H1_BARS,
+    ER_M15_BARS,
+    _classify_trend as _reg_classify_trend,
+    _efficiency_ratio as _reg_efficiency_ratio,
+)
 
 # House cost model (opt15 brief): friction is a per-round-trip point charge
 # deducted once from gross points. Base 0.45pt, stress 0.80pt.
@@ -477,6 +483,59 @@ class BiasEngine:
         h4o = h4_only_bias(h4_frame)
         self._cache[key] = (aligned, h4o)
         return aligned, h4o
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Trend-regime engine (Kaufman ER -- opt15 Task 15 S100 ER gate study)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TrendRegimeEngine:
+    """Precomputes H1/M15 closed-bar close arrays once and answers
+    trend-regime-at-now_utc queries with no look-ahead, using the CANONICAL
+    regime-engine efficiency ratio + classifier (imported, not re-derived).
+
+    An H1 bar labelled T is CLOSED at T+1h; an M15 bar at T is closed at T+15m,
+    so only fully-closed higher-TF bars as of ``now_utc`` feed the ratio -- the
+    exact windows the live regime engine (and the s100 module gate on a
+    WIN_1M>=1500 window) would see. ``regime_at`` returns
+    ``(label, er_h1, er_m15)`` where ``label`` is 'TRENDING'|'RANGING'|'MIXED'
+    or ``None`` when history is too short to classify (the study then FAILS
+    TOWARD OFF -- admits the trade -- mirroring the module's short-window path).
+    Results are memoized on the (h1_count, m15_count) closed-bar counts.
+    """
+
+    def __init__(self, h1: pd.DataFrame, m15: pd.DataFrame):
+        self._h1_close = h1["close"].to_numpy(float)
+        self._m15_close = m15["close"].to_numpy(float)
+        h1_open = h1["time"].astype("datetime64[ns]").astype("int64").to_numpy()
+        m15_open = m15["time"].astype("datetime64[ns]").astype("int64").to_numpy()
+        self._h1_close_ns = h1_open + int(_RULE_FREQ["1h"].value)
+        self._m15_close_ns = m15_open + int(_RULE_FREQ["15min"].value)
+        self._cache: dict[tuple, tuple] = {}
+
+    def _er(self, close_arr, close_ns, now_ns, n_bars) -> float:
+        hi = int(np.searchsorted(close_ns, now_ns, side="right"))  # closed [0:hi)
+        if hi < n_bars + 1:
+            return float("nan")
+        window = pd.Series(close_arr[hi - (n_bars + 1):hi])
+        return _reg_efficiency_ratio(window, n_bars)
+
+    def regime_at(self, now_utc_naive) -> tuple:
+        now_ns = _as_ns(now_utc_naive)
+        h_hi = int(np.searchsorted(self._h1_close_ns, now_ns, side="right"))
+        m_hi = int(np.searchsorted(self._m15_close_ns, now_ns, side="right"))
+        key = (h_hi, m_hi)
+        hit = self._cache.get(key)
+        if hit is not None:
+            return hit
+        er_h1 = self._er(self._h1_close, self._h1_close_ns, now_ns, ER_H1_BARS)
+        er_m15 = self._er(self._m15_close, self._m15_close_ns, now_ns, ER_M15_BARS)
+        if pd.isna(er_h1) or pd.isna(er_m15):
+            out = (None, er_h1, er_m15)
+        else:
+            out = (_reg_classify_trend(er_h1, er_m15), er_h1, er_m15)
+        self._cache[key] = out
+        return out
 
 
 # ──────────────────────────────────────────────────────────────────────────────
