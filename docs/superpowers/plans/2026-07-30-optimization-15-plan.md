@@ -527,8 +527,9 @@ Before any operator sets `META_ORDER_MAX_RETRIES > 0` on either service, confirm
    broker round-trip: with retries armed at default backoff, the idle-in-transaction hold
    stretches to roughly 30-60s against a 5+5 connection pool (Task 6). Either close/reopen
    the session around the broker call first, or accept the pool pressure knowingly.
-4. The position monitor's close-retry (Task 2) already blocks its 1s tick for up to ~7s;
-   armed order retries stack on the same class of delay.
+4. Once armed, the position monitor's close-retry (Task 2 — close and order retries share
+   `META_ORDER_MAX_RETRIES`) itself sleeps up to ~7s inside the 1s tick; armed order
+   retries stack on the same class of delay.
 
 **Recorded follow-ups (non-blocking):**
 - Runtime under-delivery alert in `research_runner`: the startup assert checks requested
@@ -544,4 +545,5 @@ Before any operator sets `META_ORDER_MAX_RETRIES > 0` on either service, confirm
 Two ops notes: the `ltp` tick archive stops accumulating from 2026-07-31 (collectors are
 behind the `data-archive` compose profile) — future tick-level research has a gap from that
 date unless the profile is run. Deploying the currently undeployed tail (`4cce6ac..HEAD`)
-requires rebuilding only the s100 service (`s100_m3_combo`).
+requires rebuilding only the s100 service (`s100_m3_combo`) for behavior — `410ecf8`'s s93
+edit is docstring-only, so rebuild s93 too only if byte-parity between box and git is wanted.
