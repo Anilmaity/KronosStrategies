@@ -18,3 +18,7 @@ tick_data_collector/Tick_Data_Generator/cache_data/
 # MetaAPI account credential drops (id + JWT token).
 account2.txt
 account*.txt
+
+# Compiled Python bytecode (never track; a review-fix commit once swept these in)
+__pycache__/
+*.pyc
