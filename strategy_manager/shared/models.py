@@ -541,3 +541,32 @@ class BacktestReport(BaseModel):
 
     def __repr__(self):
         return f"{self.run_label}:{self.strategy_id}"
+
+
+class ManagerBacktestRun(BaseModel):
+    """Manager Backtest tab job row (2026-07-31 plan). The backend's Django
+    model owns the schema (migration 0009); the strategies-stack
+    backtest_worker claims PENDING rows FIFO and writes result JSON back."""
+
+    __tablename__ = f"{APP_PREFIX}_managerbacktestrun"
+
+    label        = Column(String(120), nullable=False)
+    status       = Column(String(10), default="PENDING", nullable=False)
+    progress_pct = Column(Float, default=0.0, nullable=False)
+    phase        = Column(String(20), default="")
+    period_start = Column(Date, nullable=False)
+    period_end   = Column(Date, nullable=False)
+    params       = Column(JSON, default={})
+    result       = Column(JSON, nullable=True)
+    error        = Column(String, default="")
+    started_at   = Column(DateTime(timezone=True), nullable=True)
+    finished_at  = Column(DateTime(timezone=True), nullable=True)
+
+    requested_by_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey(f"{APP_PREFIX}_user.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    def __repr__(self):
+        return f"{self.label} [{self.status}] {self.period_start}..{self.period_end}"
