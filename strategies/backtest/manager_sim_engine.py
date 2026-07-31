@@ -367,6 +367,7 @@ def run_sim(
     frames: dict[str, pd.DataFrame],
     cfg: SimConfig,
     specs: list[StratSpec] | None = None,
+    progress_cb=None,
 ) -> SimResult:
     """Replay the Strategy Manager's regime-gated entry logic over historical bars.
 
@@ -376,6 +377,11 @@ def run_sim(
     cfg     : SimConfig controlling gating, friction, kill-switch, etc.
     specs   : list of StratSpec to simulate (default: STRAT_SPECS).
               Task-5 sensitivity runner passes a subset / different policy_params.
+    progress_cb : optional Callable[[float], None], invoked every 1000
+              processed M1 bars and once at loop end with done/total in
+              [0, 1]. Exceptions raised by the callback propagate out of
+              run_sim — that is the caller's cancellation path. None (the
+              default) leaves behavior byte-identical.
     """
     if specs is None:
         specs = STRAT_SPECS
@@ -429,7 +435,12 @@ def run_sim(
     gate_total:  dict[str, int] = {s.name: 0 for s in specs}
     gate_paused: dict[str, int] = {s.name: 0 for s in specs}
 
+    total_bars = i_end - i_start
+
     for i in range(i_start, i_end):
+        if progress_cb is not None and (i - i_start) % 1000 == 0:
+            progress_cb((i - i_start) / total_bars)
+
         bar    = df1m.iloc[i]
         now_ts = t1m.iloc[i]           # pd.Timestamp UTC
         now    = now_ts.to_pydatetime()  # Python datetime (tz-aware UTC)
@@ -609,6 +620,9 @@ def run_sim(
                  if gate_total[s.name] > 0 else 0.0
         for s in specs
     }
+
+    if progress_cb is not None:
+        progress_cb(1.0)
 
     return SimResult(
         trades=trades,
