@@ -137,6 +137,18 @@ def _as_ns(ts) -> int:
     return int(pd.Timestamp(ts).value)
 
 
+# Exit-scan start convention (opt15 Task 14 fix #2) -- UNIFORM across every arm
+# (baseline static, chandelier, TIME-replacement). The forward walk begins at
+# the first M1 bar whose time is STRICTLY AFTER ``entry_time`` (searchsorted
+# side="right"): the entry M5/M3 bar's own minute is excluded so no arm can fill
+# an exit off the same bar that produced the entry (no intra-entry-bar
+# look-ahead). All three simulators below call this one helper so the scan
+# origin is provably identical -- the arm comparison only ever differs in exit
+# LOGIC, never in where the scan starts.
+def _scan_start(t_ns: np.ndarray, entry_time) -> int:
+    return int(np.searchsorted(t_ns, _as_ns(entry_time), side="right"))
+
+
 def simulate_exit(
     t_ns: np.ndarray,
     high: np.ndarray,
@@ -161,10 +173,11 @@ def simulate_exit(
 
     ``t_ns``/``high``/``low``/``close`` are the full M1 arrays (int64 ns time).
     Entry fill is at ``entry_price``; the entry bar itself is excluded (scan
-    starts at the next M1 bar) to avoid intra-entry-bar look-ahead."""
+    starts at the next M1 bar, see ``_scan_start``) to avoid intra-entry-bar
+    look-ahead."""
     is_buy = side == "BUY"
     entry_ns = _as_ns(entry_time)
-    start = int(np.searchsorted(t_ns, entry_ns, side="right"))
+    start = _scan_start(t_ns, entry_time)
     n = t_ns.shape[0]
     max_hold_ns = None if max_hold_min is None else int(max_hold_min * 60 * 1_000_000_000)
 
@@ -189,6 +202,190 @@ def simulate_exit(
     px = close[n - 1]
     gross = (px - entry_price) if is_buy else (entry_price - px)
     return ExitResult(n - 1, px, "EOD", gross)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Chandelier trailing-exit simulation (opt15 Task 14)
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# Both simulators below share the baseline's conservative conventions: the same
+# ``_scan_start`` origin, SL/adverse checks BEFORE favorable ones within a bar,
+# and -- crucially -- no intra-bar look-ahead on the trail. The chandelier stop
+# for bar i is computed from the high/low-water mark INCLUDING bar i and is
+# checked only against bar i+1's low/high (a stop lifted by this bar's own high
+# can never be "hit" by this same bar). This mirrors the live monitor's ratchet
+# (position_manager/trigger_logic.ratchet_trail: LONG stop = max(cur, price-dist),
+# SHORT stop = min(cur, price+dist)) with dist = k*ATR; the trail level is
+# rounded to 2dp exactly as the live Numeric(25,2) column stores it.
+#
+# Difference from the CURRENTLY-wired live default (documented, not a bug): the
+# live TRAILING_STOPLOSS_POINTS trigger trails at a FIXED distance == the initial
+# risk R from tick 1 (base.Signal.trailing). This study instead measures an
+# ATR-scaled distance (k in {2.0,2.5,3.0}) that ACTIVATES only after +1R -- the
+# classic chandelier. Wiring any winning config is a separate operator decision
+# and would need the +1R-activation gate added to the monitor.
+
+
+def simulate_chandelier_exit(
+    t_ns: np.ndarray,
+    high: np.ndarray,
+    low: np.ndarray,
+    close: np.ndarray,
+    entry_time,
+    side: str,
+    entry_price: float,
+    sl: float,
+    atr: float,
+    k: float,
+    max_hold_min: float | None,
+    activate_r: float = 1.0,
+) -> ExitResult:
+    """Arm (a) -- FULL chandelier. The static SL holds until the favorable
+    excursion first reaches ``+activate_r * R`` (R = |entry - sl|); from then a
+    chandelier trail (LONG: high_water - k*ATR ; SHORT: low_water + k*ATR)
+    ratchets monotonically toward price and never loosens (floored at the static
+    SL). There is NO fixed take-profit -- winners run until the trail (or the
+    TIME backstop) closes them, which is the point of the study (tail capture).
+
+    ``atr`` is frozen at entry on the strategy's working timeframe (M5 for S94,
+    M3 for S100). Exit reasons: 'SL' (stopped before activation), 'TRAIL'
+    (stopped after activation), 'TIME' (max_hold flat-close), 'EOD'."""
+    is_buy = side == "BUY"
+    entry_ns = _as_ns(entry_time)
+    start = _scan_start(t_ns, entry_time)
+    n = t_ns.shape[0]
+    max_hold_ns = None if max_hold_min is None else int(max_hold_min * 60 * 1_000_000_000)
+    r = abs(entry_price - sl)
+    dist = k * atr
+    activated = False
+    stop = sl
+
+    if is_buy:
+        act_level = entry_price + activate_r * r
+        hw = -1e18
+        for i in range(start, n):
+            if low[i] <= stop:                       # adverse first (conservative)
+                return ExitResult(i, stop, "TRAIL" if activated else "SL",
+                                  stop - entry_price)
+            if high[i] > hw:
+                hw = high[i]
+            if not activated and hw >= act_level:
+                activated = True
+            if activated:
+                new_stop = round(hw - dist, 2)
+                if new_stop > stop:
+                    stop = new_stop
+            if max_hold_ns is not None and (t_ns[i] - entry_ns) >= max_hold_ns:
+                return ExitResult(i, close[i], "TIME", close[i] - entry_price)
+        return ExitResult(n - 1, close[n - 1], "EOD", close[n - 1] - entry_price)
+
+    act_level = entry_price - activate_r * r
+    lw = 1e18
+    for i in range(start, n):
+        if high[i] >= stop:
+            return ExitResult(i, stop, "TRAIL" if activated else "SL",
+                              entry_price - stop)
+        if low[i] < lw:
+            lw = low[i]
+        if not activated and lw <= act_level:
+            activated = True
+        if activated:
+            new_stop = round(lw + dist, 2)
+            if new_stop < stop:
+                stop = new_stop
+        if max_hold_ns is not None and (t_ns[i] - entry_ns) >= max_hold_ns:
+            return ExitResult(i, close[i], "TIME", entry_price - close[i])
+    return ExitResult(n - 1, close[n - 1], "EOD", entry_price - close[n - 1])
+
+
+def simulate_time_replace_exit(
+    t_ns: np.ndarray,
+    high: np.ndarray,
+    low: np.ndarray,
+    close: np.ndarray,
+    entry_time,
+    side: str,
+    entry_price: float,
+    sl: float,
+    tp: float,
+    atr: float,
+    k: float,
+    max_hold_min: float | None,
+) -> ExitResult:
+    """Arm (b) -- trail replacing ONLY the TIME backstop. Behaviour is byte-for-
+    byte the baseline static exit (SL checked before TP; a bar touching both is a
+    stop-out) UNTIL the trade reaches ``max_hold_min``. A trade that WOULD have
+    flat-closed at TIME instead converts to a chandelier trail
+    (high_water - k*ATR, floored at SL, TP dropped) from that bar forward,
+    exiting on the trail or 'EOD'. Trades that hit SL/TP (or 'EOD') before
+    max_hold are IDENTICAL to baseline, so this arm isolates exactly the TIME
+    subset -- the '64% of TIME exits were winners, trail don't cut' hypothesis.
+
+    When the chandelier stop implied at max_hold is already at/through the
+    max_hold bar's close (the trade gave back more than k*ATR from its peak),
+    the trade exits at that close -- i.e. identical to the baseline TIME exit
+    (no fictitious fill above/below market)."""
+    is_buy = side == "BUY"
+    entry_ns = _as_ns(entry_time)
+    start = _scan_start(t_ns, entry_time)
+    n = t_ns.shape[0]
+    max_hold_ns = None if max_hold_min is None else int(max_hold_min * 60 * 1_000_000_000)
+    dist = k * atr
+    in_trail = False
+    stop = sl
+
+    if is_buy:
+        hw = -1e18
+        for i in range(start, n):
+            if not in_trail:
+                if low[i] <= sl:
+                    return ExitResult(i, sl, "SL", sl - entry_price)
+                if high[i] >= tp:
+                    return ExitResult(i, tp, "TP", tp - entry_price)
+                if high[i] > hw:
+                    hw = high[i]
+                if max_hold_ns is not None and (t_ns[i] - entry_ns) >= max_hold_ns:
+                    cand = round(hw - dist, 2)
+                    if cand <= close[i]:            # room to run -> start trailing
+                        in_trail = True
+                        stop = cand if cand > sl else sl
+                        continue
+                    return ExitResult(i, close[i], "TIME", close[i] - entry_price)
+            else:
+                if low[i] <= stop:
+                    return ExitResult(i, stop, "TRAIL", stop - entry_price)
+                if high[i] > hw:
+                    hw = high[i]
+                new_stop = round(hw - dist, 2)
+                if new_stop > stop:
+                    stop = new_stop
+        return ExitResult(n - 1, close[n - 1], "EOD", close[n - 1] - entry_price)
+
+    lw = 1e18
+    for i in range(start, n):
+        if not in_trail:
+            if high[i] >= sl:
+                return ExitResult(i, sl, "SL", entry_price - sl)
+            if low[i] <= tp:
+                return ExitResult(i, tp, "TP", entry_price - tp)
+            if low[i] < lw:
+                lw = low[i]
+            if max_hold_ns is not None and (t_ns[i] - entry_ns) >= max_hold_ns:
+                cand = round(lw + dist, 2)
+                if cand >= close[i]:                # room to run -> start trailing
+                    in_trail = True
+                    stop = cand if cand < sl else sl
+                    continue
+                return ExitResult(i, close[i], "TIME", entry_price - close[i])
+        else:
+            if high[i] >= stop:
+                return ExitResult(i, stop, "TRAIL", entry_price - stop)
+            if low[i] < lw:
+                lw = low[i]
+            new_stop = round(lw + dist, 2)
+            if new_stop < stop:
+                stop = new_stop
+    return ExitResult(n - 1, close[n - 1], "EOD", entry_price - close[n - 1])
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -286,19 +483,39 @@ class BiasEngine:
 # Trade statistics
 # ──────────────────────────────────────────────────────────────────────────────
 
+def tail_capture(net_pts, top: int = 5) -> float:
+    """Sum of the ``top`` largest WINNING (net > 0) trades -- the 'tail capture'
+    metric the trailing-exit study (opt15 Task 14) turns on. Tail-carried edges
+    (S94: 29% WR, P&L in a few big winners) live or die by this number. Losers
+    are never counted (a 'winner' must be > 0); when fewer than ``top`` winners
+    exist, all of them are summed; with no winners the capture is 0.0."""
+    arr = np.asarray(list(net_pts), dtype=float)
+    wins = np.sort(arr[arr > 0])[::-1]      # descending
+    return float(wins[:top].sum())
+
+
 def trade_stats(net_pts) -> dict:
-    """PF, n, avg pts, maxDD, win-rate, total from a chronological list of net
-    (post-friction) point results. PF = sum(wins)/abs(sum(losses)); when there
-    are no losses PF is reported as inf (float('inf'))."""
+    """PF, n, avg pts, maxDD, win-rate, total, tail5 from a chronological list of
+    net (post-friction) point results. PF = sum(wins)/abs(sum(losses)); when
+    there are no losses PF is reported as inf (float('inf')). ``tail5`` = sum of
+    the top-5 winners (see tail_capture).
+
+    maxDD (opt15 Task 14 fix #1): the equity curve is seeded with a **0 origin**
+    before the running max, so a book that is underwater from trade 1 reports its
+    true peak-to-trough drawdown (the pre-fix cummax started at the first trade's
+    equity and understated DD for books that only ever lost)."""
     arr = np.asarray(list(net_pts), dtype=float)
     n = int(arr.shape[0])
     if n == 0:
         return {"n": 0, "pf": float("nan"), "avg_pts": float("nan"),
-                "max_dd": 0.0, "win_rate": float("nan"), "total": 0.0}
+                "max_dd": 0.0, "win_rate": float("nan"), "total": 0.0,
+                "tail5": 0.0}
     wins = arr[arr > 0].sum()
     losses = arr[arr < 0].sum()
     pf = float("inf") if losses == 0 else float(wins / abs(losses))
-    equity = np.cumsum(arr)
+    # seed a 0 equity origin so a from-trade-1 underwater book measures its full
+    # drawdown from the (pre-trade) peak of 0, not from the first trade's equity.
+    equity = np.concatenate(([0.0], np.cumsum(arr)))
     running_max = np.maximum.accumulate(equity)
     max_dd = float((equity - running_max).min())   # <= 0
     win_rate = float((arr > 0).mean())
@@ -309,6 +526,7 @@ def trade_stats(net_pts) -> dict:
         "max_dd": max_dd,
         "win_rate": win_rate,
         "total": float(arr.sum()),
+        "tail5": tail_capture(arr, 5),
     }
 
 
