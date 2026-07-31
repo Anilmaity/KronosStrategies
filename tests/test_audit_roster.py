@@ -48,3 +48,28 @@ def test_empty_snapshot():
     specs, notes = build_specs([])
     assert specs == []
     assert notes == ["empty roster snapshot: nothing to simulate"]
+
+
+def test_db_display_names_resolve_by_s_code():
+    """First live smoke run (2026-08-01): the snapshot carries DB display
+    names, not module NAMEs — they must resolve via the sNN code, and the
+    spec keeps the snapshot's name so live-delta joins stay consistent."""
+    snap = [
+        _entry("S93 FVG Scalp"),
+        _entry("S94 Sweep Reversal"),
+        _entry("S99 MSS FVG Reversal"),
+        _entry("S100 M3 Combo Scalper"),
+        _entry("Neymar Telegram Copy"),
+        _entry("Challenge XAU H4 Trend"),
+    ]
+    specs, notes = build_specs(snap)
+    assert [s.name for s in specs] == [
+        "S93 FVG Scalp", "S94 Sweep Reversal",
+        "S99 MSS FVG Reversal", "S100 M3 Combo Scalper",
+    ]
+    assert specs[0].module is MODULES["KRONOS_S93_FVG_SCALP"]
+    assert specs[3].module is MODULES["KRONOS_S100_M3_COMBO"]
+    assert sorted(notes) == [
+        "skipped Challenge XAU H4 Trend: not replayable",
+        "skipped Neymar Telegram Copy: not replayable",
+    ]
