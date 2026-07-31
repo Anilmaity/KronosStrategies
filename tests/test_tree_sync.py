@@ -118,12 +118,20 @@ def test_discovery_is_not_vacuous():
     assert len(pairs) >= 8, f"only discovered {len(pairs)} duplicated files"
 
 
+def _content(path):
+    """File bytes with line endings normalized. Windows checkouts (autocrlf)
+    can rewrite one working copy of a duplicated pair to CRLF while its twin
+    keeps LF; that is a checkout artifact, not content drift, and must not
+    trip the sync guard."""
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
 def test_duplicated_trees_are_byte_identical():
     """Every duplicated file must be byte-identical across trees, except the
     explicitly allowlisted structural divergences."""
     divergent = []
     for rel, tree, canonical_path, mirror_path in _discover_pairs():
-        if canonical_path.read_bytes() == mirror_path.read_bytes():
+        if _content(canonical_path) == _content(mirror_path):
             continue
         if (tree, rel) in ALLOWED_DIVERGENCES:
             continue
@@ -145,7 +153,7 @@ def test_allowlisted_pairs_are_actually_divergent():
         mirror_path = REPO_ROOT / tree / rel
         assert canonical_path.is_file(), f"allowlist references missing {rel}"
         assert mirror_path.is_file(), f"allowlist references missing {tree}/{rel}"
-        if canonical_path.read_bytes() == mirror_path.read_bytes():
+        if _content(canonical_path) == _content(mirror_path):
             stale.append(f"{tree}/{rel}")
     assert not stale, (
         "Allowlisted files are now byte-identical - remove the stale "
