@@ -64,15 +64,16 @@ def test_aggregates_wins_losses_and_excludes_open(db):
     # realized_profit_loss is stored in PnL UNITS (points x lots); live_summary
     # must report USD = units x 100 (first smoke run caught the missing factor).
     us = _seed(db, "KRONOS_S93_FVG_SCALP")
+    # NB: realized_profit_loss is Numeric(25, 2) — seed 2dp unit values only.
     _pos(db, us, 0.10, WIN_START + timedelta(days=1))
     _pos(db, us, -0.04, WIN_START + timedelta(days=2))
-    _pos(db, us, 0.075, WIN_START + timedelta(days=3))
+    _pos(db, us, 0.08, WIN_START + timedelta(days=3))
     _pos(db, us, 0.99, WIN_START + timedelta(days=4), qty=1)   # open: excluded
 
     out = live_summary(db, ["KRONOS_S93_FVG_SCALP"], WIN_START, WIN_END)
     agg = out["KRONOS_S93_FVG_SCALP"]
     assert agg["trades"] == 3
-    assert agg["pnl_usd"] == pytest.approx(13.5)   # 0.135 units -> $13.50
+    assert agg["pnl_usd"] == pytest.approx(14.0)   # 0.14 units -> $14.00
     assert agg["win_rate"] == pytest.approx(66.67)
 
 
