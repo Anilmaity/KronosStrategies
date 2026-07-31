@@ -475,3 +475,38 @@ Requirements:
 2. Add one line to the CLAUDE.md cross-cutting notes pointing at
    `shared/OPTIMIZATION_15_POINTS_2026-07-30.md` and this plan for the opt15 change log.
 3. Keep edits surgical — do not rewrite sections.
+
+---
+
+## Outcome (2026-07-31)
+
+All 17 tasks complete. Base branch `feat/strategy-manager` @ 3f7d2ce; work landed on
+`feat/optimization-15` (KronosStrategies) plus `feat/db-indexes` (Kronos_Backend, Task 16 only).
+
+- **Tasks 1-12** (platform hardening + gates): tsdb_reader cache/retry/bid-ask, MetaAPI
+  verify-before-retry, position_monitor N+1 fix + write throttling, entry_manager session
+  consolidation + drift-fail-mode + correlation/news/spread gates, connection-pool
+  right-sizing + duplicated-tree sync guard, compose mem_limits/healthchecks/data-archive
+  profile, shared TA consolidation, S93 SOFT structure veto + 1.5x-ATR gap cap (shipped ON),
+  S94 incremental detection parity, regime loop efficiency, metrics/alerting (`obs.py`).
+  All reviewed clean; only minor non-blocking notes recorded per task in `progress.md`.
+- **Task 13** (HTF-bias study): NO-SHIP — S94/S99 HTF veto fails the pre-registered OOS
+  profit rule. Research only, no wiring.
+- **Task 14** (chandelier trailing-exit study): S94 chandelier k=2.5 SHIP-strong
+  (test PF 1.31, stress PF 1.21); S100 marginal, time-replace arm preferred. Research
+  only — no live wiring in this task.
+- **Task 15** (S100 ER trend-persistence gate): DO-NOT-ARM — the pre-registered profit
+  test is undefined against an unprofitable offline 2025-26 baseline, though the strict
+  arm does cut the 2023H2 loss ~92%. Shipped wired but DEFAULT OFF (`S100_ER_GATE=off`).
+- **Task 16** (Kronos_Backend index migration): `Trigger(position,status)`,
+  `Position(symbol,quantity)`, `Order(condition,created_at)`, `Order(broker_order_id)`
+  indexes added on `feat/db-indexes`, commit `3236fa0`; tests green on in-memory SQLite.
+- **Task 17** (this task): documentation corrections — see `shared/CLAUDE.md` (data-flow
+  diagram fix + cross-cutting pointer) and this section.
+
+**Deploy (2026-07-31):** shipped to the `algorobos` box — 7 services rebuilt (`-p kronos`),
+all healthy; in-container asserts confirm S93 soft veto ON, gap cap 1.5x ATR, MetaAPI
+retries=0 (verify-before-retry client-id dedup path kept conservative pending prod
+observation). Compose merged additively (46 lines added / 0 removed). Every new gate from
+Tasks 5, 9, and 15 ships DEFAULT OFF except the validated S93 veto/gap-cap, per this plan's
+safety-first-defaults constraint.
