@@ -161,15 +161,16 @@ def _apply_stops_floor(side: str, entry_price: float, stop_loss: float, take_pro
 # confirmation permits a re-POST. A failed lookup returns the error unchanged
 # (exactly the pre-opt15 single-attempt behavior). Closes are idempotent
 # against a position id, so they just retry on timeout/5xx and treat an
-# already-closed position (404) as success. Set META_ORDER_MAX_RETRIES=0 to
-# restore the exact single-attempt behavior.
+# already-closed position (404) as success. Retries default OFF (0) until the
+# broker's clientId dedup guarantee is verified; set META_ORDER_MAX_RETRIES>0
+# to opt in.
 # ---------------------------------------------------------------------------
 
 def _order_max_retries() -> int:
     try:
-        return max(0, int(os.getenv("META_ORDER_MAX_RETRIES", "2")))
+        return max(0, int(os.getenv("META_ORDER_MAX_RETRIES", "0")))
     except ValueError:
-        return 2
+        return 0
 
 
 def _order_retry_base_sec() -> float:
