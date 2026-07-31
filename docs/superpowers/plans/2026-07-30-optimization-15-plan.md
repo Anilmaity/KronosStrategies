@@ -510,3 +510,38 @@ retries=0 (verify-before-retry client-id dedup path kept conservative pending pr
 observation). Compose merged additively (46 lines added / 0 removed). Every new gate from
 Tasks 5, 9, and 15 ships DEFAULT OFF except the validated S93 veto/gap-cap, per this plan's
 safety-first-defaults constraint.
+
+### Pre-arm checklist — META_ORDER_MAX_RETRIES
+
+Before any operator sets `META_ORDER_MAX_RETRIES > 0` on either service, confirm all of:
+
+1. Extend `_lookup_order_by_client_id` (both copies: `strategies/shared/metaapi_client.py`
+   and `position_manager/shared/metaapi_client.py`) to also query history-deals over the
+   attempt window. Today the lookup only checks live positions + open orders; a
+   landed-then-closed position (e.g. instant SL on a news spike) is invisible to it, reads
+   as "absent," and the retry re-POSTs a duplicate order. This is the one hole in the
+   verify-before-retry protocol from Task 2.
+2. Verify the broker's clientId dedup behavior end-to-end — the original reason the
+   default was flipped to 0 in `93256b3` is still unconfirmed.
+3. Know that `entry_manager` holds its consolidated DB transaction (Task 4) across the
+   broker round-trip: with retries armed at default backoff, the idle-in-transaction hold
+   stretches to roughly 30-60s against a 5+5 connection pool (Task 6). Either close/reopen
+   the session around the broker call first, or accept the pool pressure knowingly.
+4. The position monitor's close-retry (Task 2) already blocks its 1s tick for up to ~7s;
+   armed order retries stack on the same class of delay.
+
+**Recorded follow-ups (non-blocking):**
+- Runtime under-delivery alert in `research_runner`: the startup assert checks requested
+  WIN vs MIN_BARS, not the delivered frame length — the CHALLENGE_XAU defect class is
+  mitigated by the 2026-07-23 DAYS audit, not closed.
+- T15 test hermeticity: the MIN_BARS default test runs against ambient `S100_ER_GATE`
+  rather than pinning it; a `TrendRegimeEngine` unit test is also still missing.
+- T8: s100 OB-arm parity fixture still pending.
+- T7: `_win_from_env` defaults are duplicated with `main()` rather than sourced from one place.
+- T12: rejection counters are skipped when the FIRED audit write itself fails.
+- T4: IST-skew test is pending the platform-wide `created_at` TZ fix.
+
+Two ops notes: the `ltp` tick archive stops accumulating from 2026-07-31 (collectors are
+behind the `data-archive` compose profile) — future tick-level research has a gap from that
+date unless the profile is run. Deploying the currently undeployed tail (`4cce6ac..HEAD`)
+requires rebuilding only the s100 service (`s100_m3_combo`).

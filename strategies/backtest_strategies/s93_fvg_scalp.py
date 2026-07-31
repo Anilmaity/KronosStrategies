@@ -141,7 +141,9 @@ def _veto_enabled() -> bool:
 def _gap_cap_atr() -> float:
     """FVG gap cap as a multiple of ATR (env S93_GAP_CAP_ATR, default 1.5).
 
-    Returns 0.0 (cap disabled) for a value of 0, negative, or unparseable."""
+    Returns 0.0 (cap disabled) for a value of 0 or negative. An unparseable
+    value falls back to _GAP_CAP_ATR_DEFAULT (1.5, cap enabled) -- it does
+    NOT disable the cap, so a typo'd env value fails safe rather than open."""
     try:
         v = float(os.getenv("S93_GAP_CAP_ATR", str(_GAP_CAP_ATR_DEFAULT)))
     except (TypeError, ValueError):
