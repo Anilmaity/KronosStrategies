@@ -278,3 +278,29 @@ services:
       DRY_RUN: "true"              # PAPER until live fills match the backtest
 
   # S96 retired from the roster 2026-07-06 (operator decision) — service removed.
+
+  # Manager Backtest worker (2026-07-31 plan) — claims ManagerBacktestRun rows
+  # queued by the dashboard's Manager Backtest tab and replays the manager
+  # audit sim (M1 baseline + S5 ambiguity resolution). CPU/mem-capped so a
+  # running audit can never starve the live loops. audit_worker has no
+  # MetaAPI import on its path: this service cannot place orders.
+  backtest_worker:
+    build: ./strategies
+    restart: unless-stopped
+    command: python -m audit_worker.worker
+    cpus: 0.5
+    mem_limit: 700m
+    volumes:
+      - ./audit_cache:/app/audit_cache
+    healthcheck:
+      # worker touches /tmp/hb in the poll loop AND on every progress write
+      test: ["CMD-SHELL", "find /tmp/hb -mmin -5 | grep -q hb"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    env_file: .env
+    environment:
+      TSDB_TARGET: ${TSDB_TARGET:-tigerdata}
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+      AUDIT_CACHE_DIR: /app/audit_cache

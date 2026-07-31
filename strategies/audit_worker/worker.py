@@ -91,6 +91,9 @@ class ProgressWriter:
         self._last_write = 0.0
 
     def _write(self, phase: str, pct: float, force: bool = False):
+        # Long jobs never return to the main poll loop, so keep the container
+        # healthcheck fed from here as well.
+        _touch_heartbeat()
         now = time.monotonic()
         if not force and now - self._last_write < PROGRESS_MIN_INTERVAL_SEC:
             return
