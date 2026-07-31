@@ -19,12 +19,12 @@ import pandas as pd
 from sqlalchemy import text
 
 import shared.models as models
+from audit_worker import heartbeat
 from shared.models import ManagerBacktestRun
 
 log = logging.getLogger("audit_worker")
 
 CACHE_DIR = Path(os.getenv("AUDIT_CACHE_DIR", "/app/audit_cache"))
-HEARTBEAT_FILE = os.getenv("HEARTBEAT_FILE", "/tmp/hb")
 POLL_SEC = int(os.getenv("AUDIT_POLL_SEC", "10"))
 PROGRESS_MIN_INTERVAL_SEC = 5.0
 ERROR_MAX_LEN = 4000
@@ -47,10 +47,7 @@ def _utcnow():
 
 
 def _touch_heartbeat():
-    try:
-        Path(HEARTBEAT_FILE).write_text(str(int(time.time())))
-    except OSError:
-        pass
+    heartbeat.touch()
 
 
 def fail_stale_running(session) -> int:
@@ -121,12 +118,13 @@ class ProgressWriter:
 
 def process_run(session, run, cache_dir: Path = CACHE_DIR):
     """Execute one claimed run to a terminal state. Never raises for job
-    errors — FAILED/CANCELLED are written to the row."""
-    from audit_worker import bars, live_deltas, results, roster, s5_resolve
-    from backtest.manager_sim_engine import SimConfig, load_frames, run_sim
-
+    errors — FAILED/CANCELLED are written to the row. The engine imports live
+    INSIDE the try so a broken image (missing package, bad dep) lands on the
+    row as FAILED instead of crash-looping the container through the queue."""
     progress = ProgressWriter(session, run.id)
     try:
+        from audit_worker import bars, live_deltas, results, roster, s5_resolve
+        from backtest.manager_sim_engine import SimConfig, load_frames, run_sim
         p = run.params or {}
         start_utc = pd.Timestamp(run.period_start).tz_localize("UTC")
         end_utc = pd.Timestamp(run.period_end).tz_localize("UTC")
@@ -177,6 +175,11 @@ def process_run(session, run, cache_dir: Path = CACHE_DIR):
         results.trades_frame(gated.trades).to_csv(csv_path, index=False)
 
         run = session.get(ManagerBacktestRun, run.id)
+        session.refresh(run)
+        if run.status == "CANCELLED":
+            # A cancel that landed during a phase without checkpoints
+            # (resolving_s5 / comparing) must not be overwritten by DONE.
+            raise RunCancelled()
         run.result = results.assemble(gated, ungated, cfg, s5_report,
                                       per_strategy, notes, csv_path)
         run.status = "DONE"

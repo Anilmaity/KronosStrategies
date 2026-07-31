@@ -1,0 +1,14 @@
+# Superset of strategies/requirements.txt (the worker imports strategy modules,
+# the regime engine, and the manager-sim engine) + pyarrow for the parquet
+# bars cache.
+sqlalchemy>=2.0
+psycopg2-binary
+pandas
+numpy
+requests
+python-dotenv
+pytz
+yfinance>=0.2.40
+cryptography==42.0.5
+statsmodels
+pyarrow

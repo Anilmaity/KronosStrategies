@@ -284,8 +284,12 @@ services:
   # audit sim (M1 baseline + S5 ambiguity resolution). CPU/mem-capped so a
   # running audit can never starve the live loops. audit_worker has no
   # MetaAPI import on its path: this service cannot place orders.
+  # NOTE: repo-root build context (NOT ./strategies) — the worker also needs
+  # the strategy_manager package (policies/regime) baked into the image.
   backtest_worker:
-    build: ./strategies
+    build:
+      context: .
+      dockerfile: backtest_worker/Dockerfile
     restart: unless-stopped
     command: python -m audit_worker.worker
     cpus: 0.5

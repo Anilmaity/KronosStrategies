@@ -164,3 +164,23 @@ def test_no_metaapi_import_static_and_runtime():
     proc = subprocess.run([sys.executable, "-c", code],
                           capture_output=True, text=True, timeout=120)
     assert proc.returncode == 0, proc.stderr[-2000:]
+
+
+def test_container_parity_build_config():
+    """Final-review Critical #1 guard: the worker image must be built from the
+    REPO ROOT and bake in strategy_manager/ — a ./strategies context cannot
+    import strategy_manager.policies and every job would crash-loop."""
+    import yaml
+    repo = Path(_STRAT_DIR).parent
+    compose = yaml.safe_load((repo / "compose.yml").read_text(encoding="utf-8"))
+    build = compose["services"]["backtest_worker"]["build"]
+    assert build["context"] == "."
+    assert build["dockerfile"] == "backtest_worker/Dockerfile"
+
+    dockerfile = (repo / "backtest_worker" / "Dockerfile").read_text(
+        encoding="utf-8")
+    assert "COPY strategies/ /app/" in dockerfile
+    assert "COPY strategy_manager/ /app/strategy_manager/" in dockerfile
+    reqs = (repo / "backtest_worker" / "requirements.txt").read_text(
+        encoding="utf-8")
+    assert "pyarrow" in reqs, "parquet cache needs pyarrow in the image"

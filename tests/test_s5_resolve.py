@@ -83,13 +83,17 @@ def test_unambiguous_bar_untouched():
     assert rep["n_ambiguous"] == 0
 
 
-def test_time_exit_mid_bar_flips_to_tp():
+def test_time_exit_never_touched():
+    # step_position checks SL/TP before TIME, so a TIME verdict means neither
+    # level was touched in the exit bar; the resolver must leave TIME trades
+    # alone even when handed a bar that (impossibly) spans both levels.
     trade = _trade("TIME", exit_px=100.5, pnl=0.5)
-    s5 = _s5([(0, 99.9, 102.05)])   # tp touched within the minute, sl never
-    out, rep = resolve_ambiguous([trade], _m1(99.9, 102.05),
-                                 lambda a, b: s5, CFG)
-    assert out[0].outcome == "TP"
-    assert rep["n_flipped"] == 1
+    called = []
+    out, rep = resolve_ambiguous(
+        [trade], _m1(98.0, 103.0),
+        lambda a, b: called.append(1) or pd.DataFrame(), CFG)
+    assert out == [trade] and called == []
+    assert rep["n_ambiguous"] == 0
 
 
 def test_empty_s5_keeps_m1_verdict():

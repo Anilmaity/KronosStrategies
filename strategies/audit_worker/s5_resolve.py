@@ -6,8 +6,10 @@ wrong. For exactly those trades this module re-walks the exit minute on S5
 candles and settles which level was touched first, rewriting exit_px /
 outcome / pnl with the SAME friction formula step_position uses.
 
-Trades with outcome OPEN or TRAIL are never touched (trailing exits depend on
-a ratcheting stop level that an S5 walk of one minute cannot reproduce).
+Trades with outcome OPEN, TRAIL, or TIME are never touched (trailing exits
+depend on a ratcheting stop level that an S5 walk of one minute cannot
+reproduce; TIME exits by engine construction touched neither level in their
+exit bar — see _is_ambiguous).
 """
 from __future__ import annotations
 
@@ -19,7 +21,13 @@ from backtest.manager_sim_engine import SimConfig, TradeRecord
 
 
 def _is_ambiguous(trade: TradeRecord, bar: pd.Series) -> bool:
-    if trade.outcome not in ("TP", "SL", "TIME"):
+    # Only TP/SL verdicts can be ambiguous. TIME exits are excluded by
+    # construction: step_position checks SL then TP on the exit bar BEFORE the
+    # time check, so a non-trailing TIME trade touched neither level in that
+    # bar; the only trade that could reach TIME with a level touched is a
+    # trailing one, which this resolver must never rewrite (its stop ratchets
+    # intra-bar in ways one minute of S5 cannot reproduce).
+    if trade.outcome not in ("TP", "SL"):
         return False
     is_buy = trade.side == "BUY"
     # Mirror step_position's touch predicates: SL strict (< / >), TP inclusive.
@@ -29,8 +37,6 @@ def _is_ambiguous(trade: TradeRecord, bar: pd.Series) -> bool:
     else:
         sl_touch = bar["high"] > trade.sl
         tp_touch = bar["low"] <= trade.tp
-    if trade.outcome == "TIME":
-        return sl_touch or tp_touch
     return sl_touch and tp_touch
 
 

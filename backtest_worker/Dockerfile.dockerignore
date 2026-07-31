@@ -1,0 +1,10 @@
+# BuildKit per-Dockerfile ignore for backtest_worker/Dockerfile (repo-root
+# context). Keep the context to what the image actually copies.
+*
+!backtest_worker/requirements.txt
+!strategies/**
+!strategy_manager/**
+strategies/backtest/results/
+strategies/**/__pycache__/
+strategy_manager/**/__pycache__/
+strategies/.env

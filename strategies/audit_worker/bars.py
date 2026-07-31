@@ -37,6 +37,10 @@ INSTRUMENT = "XAU_USD"
 # it 130 so the D1 frame always has full regime-lookback depth.
 WARMUP_DAYS = 130
 
+# Minimum cached S5 bars inside a span before the cache may satisfy it without
+# a fetch (a full market minute holds 12; half covers thin-market minutes).
+S5_COVERAGE_MIN = 6
+
 _TF_RULES = {"5m": "5min", "15m": "15min", "1h": "1h", "4h": "4h", "1d": "1d"}
 
 _session = requests.Session()
@@ -59,9 +63,12 @@ def fetch_candles(granularity: str, start_utc: datetime,
     Returns columns time (tz-aware UTC), open, high, low, close, volume,
     sorted ascending, deduped. Empty DataFrame when OANDA has nothing.
     """
+    from audit_worker import heartbeat
+
     rows: list[dict] = []
     cursor = start_utc
     while cursor < end_utc:
+        heartbeat.touch()   # multi-month cold fetches outlast the healthcheck
         resp = _session.get(
             f"{_OANDA_BASE}/instruments/{INSTRUMENT}/candles",
             params={"granularity": granularity, "price": "M",
@@ -115,8 +122,10 @@ def ensure_frames(cache_dir: Path, period_start_utc: datetime,
         m1 = pd.DataFrame(columns=["time", "open", "high", "low", "close", "volume"])
 
     pieces = [m1]
-    # Head gap. Tolerance one day: coverage bounds move in whole fetches.
-    if m1.empty or m1["time"].min() > need_start + pd.Timedelta(days=1):
+    # Head gap. Tolerance 3 days: when need_start lands inside a weekend gap
+    # the earliest existing candle can sit ~2 days later than requested; a
+    # 1-day tolerance would refetch an empty head page on every call.
+    if m1.empty or m1["time"].min() > need_start + pd.Timedelta(days=3):
         head_end = (m1["time"].min().to_pydatetime() if not m1.empty
                     else need_end.to_pydatetime())
         pieces.append(fetch_candles("M1", need_start.to_pydatetime(), head_end))
@@ -146,9 +155,14 @@ def ensure_frames(cache_dir: Path, period_start_utc: datetime,
 
 def ensure_s5(cache_dir: Path, start_utc: datetime,
               end_utc: datetime) -> pd.DataFrame:
-    """S5 mid candles for [start_utc, end_utc], cached in one growing parquet.
-    Returns the span slice; empty DataFrame (never an exception) when OANDA
-    has no data for the span."""
+    """S5 mid candles for the HALF-OPEN span [start_utc, end_utc), cached in
+    one growing parquet. Returns the span slice; empty DataFrame (never an
+    exception) when OANDA has no data for the span.
+
+    Coverage rule: the cache satisfies a span only when it already holds at
+    least S5_COVERAGE_MIN bars inside it. A single boundary bar left behind by
+    an adjacent minute's fetch must NOT count as coverage — that would starve
+    the resolver of the other ~11 bars and silently undercount flips."""
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
     path = cache_dir / f"is_{INSTRUMENT}_S5.parquet"
@@ -158,20 +172,17 @@ def ensure_s5(cache_dir: Path, start_utc: datetime,
     if path.exists():
         s5 = pd.read_parquet(path)
         s5["time"] = pd.to_datetime(s5["time"], utc=True)
-        have = s5[(s5["time"] >= start_ts) & (s5["time"] <= end_ts)]
-        # A full minute holds 12 S5 buckets; if we already hold any bar in the
-        # span, treat it as covered (spans are single-minute exit windows).
-        if not have.empty:
+        have = s5[(s5["time"] >= start_ts) & (s5["time"] < end_ts)]
+        if len(have) >= S5_COVERAGE_MIN:
             return have.reset_index(drop=True)
     else:
         s5 = pd.DataFrame(columns=["time", "open", "high", "low", "close", "volume"])
 
     fetched = fetch_candles("S5", start_ts.to_pydatetime(), end_ts.to_pydatetime())
-    if fetched.empty:
-        return fetched
-    s5 = (pd.concat([s5, fetched], ignore_index=True)
-          .drop_duplicates(subset="time").sort_values("time")
-          .reset_index(drop=True))
-    s5.to_parquet(path, index=False)
-    out = s5[(s5["time"] >= start_ts) & (s5["time"] <= end_ts)]
+    if not fetched.empty:
+        s5 = (pd.concat([s5, fetched], ignore_index=True)
+              .drop_duplicates(subset="time").sort_values("time")
+              .reset_index(drop=True))
+        s5.to_parquet(path, index=False)
+    out = s5[(s5["time"] >= start_ts) & (s5["time"] < end_ts)]
     return out.reset_index(drop=True)
