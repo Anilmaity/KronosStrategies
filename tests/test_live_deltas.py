@@ -61,16 +61,18 @@ def _pos(s, us, realized, created_utc, qty=0):
 
 
 def test_aggregates_wins_losses_and_excludes_open(db):
+    # realized_profit_loss is stored in PnL UNITS (points x lots); live_summary
+    # must report USD = units x 100 (first smoke run caught the missing factor).
     us = _seed(db, "KRONOS_S93_FVG_SCALP")
-    _pos(db, us, 10.0, WIN_START + timedelta(days=1))
-    _pos(db, us, -4.0, WIN_START + timedelta(days=2))
-    _pos(db, us, 7.5, WIN_START + timedelta(days=3))
-    _pos(db, us, 99.0, WIN_START + timedelta(days=4), qty=1)   # open: excluded
+    _pos(db, us, 0.10, WIN_START + timedelta(days=1))
+    _pos(db, us, -0.04, WIN_START + timedelta(days=2))
+    _pos(db, us, 0.075, WIN_START + timedelta(days=3))
+    _pos(db, us, 0.99, WIN_START + timedelta(days=4), qty=1)   # open: excluded
 
     out = live_summary(db, ["KRONOS_S93_FVG_SCALP"], WIN_START, WIN_END)
     agg = out["KRONOS_S93_FVG_SCALP"]
     assert agg["trades"] == 3
-    assert agg["pnl_usd"] == pytest.approx(13.5)
+    assert agg["pnl_usd"] == pytest.approx(13.5)   # 0.135 units -> $13.50
     assert agg["win_rate"] == pytest.approx(66.67)
 
 
@@ -78,9 +80,9 @@ def test_ist_skew_window_edges(db):
     us = _seed(db, "KRONOS_S99_MSS_FVG")
     # 30 min BEFORE the UTC window start: with the +5:30 shift applied to the
     # bounds this row's stored stamp falls below lo -> excluded.
-    _pos(db, us, 5.0, WIN_START - timedelta(minutes=30))
+    _pos(db, us, 0.05, WIN_START - timedelta(minutes=30))
     # exactly at the window start: included.
-    _pos(db, us, 3.0, WIN_START)
+    _pos(db, us, 0.03, WIN_START)
     out = live_summary(db, ["KRONOS_S99_MSS_FVG"], WIN_START, WIN_END)
     assert out["KRONOS_S99_MSS_FVG"]["trades"] == 1
     assert out["KRONOS_S99_MSS_FVG"]["pnl_usd"] == pytest.approx(3.0)

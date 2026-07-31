@@ -16,6 +16,12 @@ from shared.models import Position, Strategy, UserStrategy
 
 _IST_SKEW = timedelta(hours=5, minutes=30)
 
+# Position.realized_profit_loss is stored in PnL UNITS (points x lots), not
+# dollars — same conversion entry_manager._todays_realized_usd applies. The
+# first DONE smoke run (2026-08-01) reported live "-$1.87" vs sim "-$51.73"
+# because this factor was missing.
+_USD_PER_PNL_UNIT = 100.0
+
 
 def _win_rate(wins: int, total: int) -> float:
     return round(100.0 * wins / total, 2) if total else 0.0
@@ -49,7 +55,7 @@ def live_summary(session, strategy_names: list[str], start_utc: datetime,
     for realized, name in rows:
         realized = float(realized or 0.0)
         agg = out.setdefault(name, {"pnl_usd": 0.0, "trades": 0, "_wins": 0})
-        agg["pnl_usd"] += realized
+        agg["pnl_usd"] += realized * _USD_PER_PNL_UNIT
         agg["trades"] += 1
         if realized > 0:
             agg["_wins"] += 1
