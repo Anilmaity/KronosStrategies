@@ -24,6 +24,7 @@ from shared.models import (
 from shared.metaapi_client import client_for_broker
 from shared.tsdb_reader import fetch_latest_ltp, fetch_latest_spread
 from shared.event_gate import event_window_open
+from shared.gate_rules import parse_utc_windows, in_news_blackout as _shared_in_blackout
 from shared import obs
 from strategy.ict_engine import EntrySignal
 
@@ -119,30 +120,16 @@ SPREAD_GATE = _flag_on("SPREAD_GATE")
 SPREAD_GATE_MAX_FRAC = float(os.getenv("SPREAD_GATE_MAX_FRAC", "0.25"))
 
 
-def _parse_utc_windows(spec: str) -> list[tuple[dtime, dtime]]:
-    """'12:25-12:45,13:55-14:05' -> [(time(12,25), time(12,45)), ...].
-    Malformed parts are logged and skipped, never fatal."""
-    wins: list[tuple[dtime, dtime]] = []
-    for part in (spec or "").split(","):
-        part = part.strip()
-        if not part:
-            continue
-        try:
-            a, b = part.split("-")
-            ah, am = a.split(":")
-            bh, bm = b.split(":")
-            wins.append((dtime(int(ah), int(am)), dtime(int(bh), int(bm))))
-        except ValueError:
-            log.warning("[GATE] bad blackout window %r — ignored", part)
-    return wins
+# Backward-compat alias: tests/test_entry_gates.py calls this private name
+# directly (em._parse_utc_windows(...)). Kept so that suite stays green
+# unchanged; the real implementation now lives in shared.gate_rules.
+_parse_utc_windows = parse_utc_windows
+
+_BLACKOUT_WINDOWS = parse_utc_windows(NEWS_BLACKOUT_UTC)
 
 
-_BLACKOUT_WINDOWS = _parse_utc_windows(NEWS_BLACKOUT_UTC)
-
-
-def _in_news_blackout(now_utc: datetime) -> bool:
-    t = now_utc.time()
-    return any(a <= t <= b for a, b in _BLACKOUT_WINDOWS)
+def _in_news_blackout(now_utc) -> bool:
+    return _shared_in_blackout(now_utc, _BLACKOUT_WINDOWS)
 
 
 def _drift_budget_pts(entry_price: float, stop_loss: float | None) -> float:
