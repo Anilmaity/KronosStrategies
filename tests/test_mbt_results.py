@@ -68,20 +68,31 @@ def test_sim_per_strategy_shape():
     assert "_wins" not in m["A"]["points"]
 
 
-def test_assemble_passthrough_and_arms():
+def test_build_arms_and_assemble_v2():
     gated = SimResult(trades=[_t(2.0)], regime_rows=[], kill_trips=["2026-06-05"],
                       paused_pct={"A": 10.0})
     ungated = SimResult(trades=[_t(2.0), _t(1.0, minutes=1)], regime_rows=[],
                         kill_trips=[], paused_pct={})
-    out = results.assemble(gated, ungated, CFG, {"n_ambiguous": 0},
-                           {"A": {"sim": {}, "live": None, "delta": None}},
-                           ["note1"], "/tmp/x.csv")
+    summary, curves = results.build_arms(gated, ungated, CFG)
+    out = results.assemble_v2(
+        per_strategy={"A": {"sim": {}, "live": None, "delta": None}},
+        summary=summary, curves=curves, s5_report={"n_ambiguous": 0},
+        notes=["note1"], trades_csv="/tmp/x.csv",
+        live_risk_usd_inferred=38.0, kill_trips=gated.kill_trips,
+        paused_pct=gated.paused_pct, ungated=ungated)
     assert set(out) == {"summary", "per_strategy", "equity_curve",
                        "s5_resolution", "trades_csv", "notes", "kill_trips",
-                       "paused_pct"}
+                       "paused_pct", "live_risk_usd_inferred"}
     assert out["summary"]["ungated"]["trades"] == 2
     assert out["equity_curve"]["gated"][0][1] == 2.0
     assert out["notes"] == ["note1"]
+    assert out["live_risk_usd_inferred"] == 38.0
+    assert out["kill_trips"] == ["2026-06-05"]
+    assert out["paused_pct"] == {"A": 10.0}
 
-    solo = results.assemble(gated, None, CFG, {}, {}, [], "x")
+    solo_summary, solo_curves = results.build_arms(gated, None, CFG)
+    solo = results.assemble_v2(
+        per_strategy={}, summary=solo_summary, curves=solo_curves,
+        s5_report={}, notes=[], trades_csv="x",
+        live_risk_usd_inferred=None, kill_trips=[], paused_pct={})
     assert "ungated" not in solo["summary"]

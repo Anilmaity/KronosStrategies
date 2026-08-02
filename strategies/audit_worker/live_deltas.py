@@ -101,17 +101,28 @@ def live_summary(session, strategy_names: list[str], start_utc: datetime,
 
 
 def deltas(sim: dict[str, dict], live: dict[str, dict]) -> dict[str, dict]:
-    """Per-strategy sim / live / delta blocks. Strategies the sim knows but
-    live never traded get live=None, delta=None."""
+    """Per-strategy sim / live / delta blocks, each covering the sizing-
+    invariant `points` sub-block and, when both sides have priced one, the
+    matched-`usd` sub-block. Strategies the sim knows but live never traded
+    get live=None, delta=None."""
     out: dict[str, dict] = {}
     for name, s in sim.items():
         l = live.get(name)
         entry: dict = {"sim": s, "live": l, "delta": None}
         if l is not None:
-            entry["delta"] = {
-                "pnl_usd": round(s["pnl_usd"] - l["pnl_usd"], 2),
-                "trades": s["trades"] - l["trades"],
-                "win_rate": round(s["win_rate"] - l["win_rate"], 2),
-            }
+            sp, lp = s["points"], l["points"]
+            delta: dict = {"points": {
+                "pnl_pts": round(sp["pnl_pts"] - lp["pnl_pts"], 4),
+                "trades": sp["trades"] - lp["trades"],
+                "win_rate": round(sp["win_rate"] - lp["win_rate"], 2),
+            }}
+            if "usd" in s and "usd" in l:
+                su, lu = s["usd"], l["usd"]
+                delta["usd"] = {
+                    "pnl_usd": round(su["pnl_usd"] - lu["pnl_usd"], 2),
+                    "trades": su["trades"] - lu["trades"],
+                    "win_rate": round(su["win_rate"] - lu["win_rate"], 2),
+                }
+            entry["delta"] = delta
         out[name] = entry
     return out

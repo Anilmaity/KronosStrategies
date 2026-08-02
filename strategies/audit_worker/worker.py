@@ -123,7 +123,9 @@ def process_run(session, run, cache_dir: Path = CACHE_DIR):
     row as FAILED instead of crash-looping the container through the queue."""
     progress = ProgressWriter(session, run.id)
     try:
-        from audit_worker import bars, live_deltas, results, roster, s5_resolve
+        from audit_worker import (
+            bars, live_deltas, reconcile, results, roster, s5_resolve, sizing,
+        )
         from backtest.manager_sim_engine import SimConfig, load_frames, run_sim
         p = run.params or {}
         start_utc = pd.Timestamp(run.period_start).tz_localize("UTC")
@@ -169,7 +171,22 @@ def process_run(session, run, cache_dir: Path = CACHE_DIR):
         live_map = live_deltas.live_summary(
             session, [s.name for s in specs],
             start_utc.to_pydatetime(), end_utc.to_pydatetime())
-        per_strategy = live_deltas.deltas(sim_map, live_map)
+        # infer live risk from this window's live losers (usd blocks)
+        live_losses = [b["usd"]["pnl_usd"] for b in live_map.values()
+                       if b["usd"]["pnl_usd"] < 0]
+        risk_usd = sizing.infer_live_risk_usd(live_losses)
+        if risk_usd is not None:
+            results.add_matched_usd(sim_map, gated.trades, risk_usd)
+        elif sim_map:
+            # Nothing to omit when the sim itself produced no strategies.
+            notes.append("matched-USD omitted: too few live losers to infer risk")
+        per_strategy = live_deltas.deltas(sim_map, live_map)   # points+usd sub-blocks
+        recon = reconcile.reconcile(
+            session, [s.name for s in specs],
+            start_utc.to_pydatetime(), end_utc.to_pydatetime(),
+            sim_counts={n: sim_map[n]["points"]["trades"] for n in sim_map})
+        for name, blk in per_strategy.items():
+            blk["reconciliation"] = recon.get(name, "unavailable")
 
         csv_path = str(Path(cache_dir) / f"trades_{run.id}.csv")
         results.trades_frame(gated.trades).to_csv(csv_path, index=False)
@@ -180,8 +197,12 @@ def process_run(session, run, cache_dir: Path = CACHE_DIR):
             # A cancel that landed during a phase without checkpoints
             # (resolving_s5 / comparing) must not be overwritten by DONE.
             raise RunCancelled()
-        run.result = results.assemble(gated, ungated, cfg, s5_report,
-                                      per_strategy, notes, csv_path)
+        summary, curves = results.build_arms(gated, ungated, cfg)
+        run.result = results.assemble_v2(
+            per_strategy=per_strategy, summary=summary, curves=curves,
+            s5_report=s5_report, notes=notes, trades_csv=csv_path,
+            live_risk_usd_inferred=risk_usd, kill_trips=gated.kill_trips,
+            paused_pct=gated.paused_pct, ungated=ungated)
         run.status = "DONE"
         run.progress_pct = 100.0
         run.phase = "comparing"

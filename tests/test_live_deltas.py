@@ -112,10 +112,25 @@ def test_name_filter(db):
 
 def test_deltas_math_and_live_missing():
     sim = {
-        "A": {"pnl_usd": 10.0, "trades": 4, "win_rate": 50.0},
-        "B": {"pnl_usd": -2.0, "trades": 1, "win_rate": 0.0},
+        "A": {"points": {"pnl_pts": 10.0, "trades": 4, "win_rate": 50.0},
+              "usd": {"pnl_usd": 100.0, "trades": 4, "win_rate": 50.0}},
+        "B": {"points": {"pnl_pts": -2.0, "trades": 1, "win_rate": 0.0}},
+        "D": {"points": {"pnl_pts": 1.0, "trades": 2, "win_rate": 50.0}},
     }
-    live = {"A": {"pnl_usd": 6.0, "trades": 5, "win_rate": 40.0}}
+    live = {
+        "A": {"points": {"pnl_pts": 6.0, "trades": 5, "win_rate": 40.0},
+              "usd": {"pnl_usd": 60.0, "trades": 5, "win_rate": 40.0}},
+        "D": {"points": {"pnl_pts": 0.5, "trades": 1, "win_rate": 100.0},
+              "usd": {"pnl_usd": 5.0, "trades": 1, "win_rate": 100.0}},
+    }
     out = deltas(sim, live)
-    assert out["A"]["delta"] == {"pnl_usd": 4.0, "trades": -1, "win_rate": 10.0}
+    assert out["A"]["delta"]["points"] == {"pnl_pts": 4.0, "trades": -1,
+                                           "win_rate": 10.0}
+    assert out["A"]["delta"]["usd"] == {"pnl_usd": 40.0, "trades": -1,
+                                        "win_rate": 10.0}
     assert out["B"]["live"] is None and out["B"]["delta"] is None
+    # sim has no usd block for D -> delta stays points-only, even though
+    # live priced one.
+    assert out["D"]["delta"]["points"] == {"pnl_pts": 0.5, "trades": 1,
+                                           "win_rate": -50.0}
+    assert "usd" not in out["D"]["delta"]

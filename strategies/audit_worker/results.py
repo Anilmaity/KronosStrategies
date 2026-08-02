@@ -121,14 +121,30 @@ def trades_frame(trades: list[TradeRecord]) -> pd.DataFrame:
     } for t in trades])
 
 
-def assemble(gated: SimResult, ungated: SimResult | None, cfg: SimConfig,
-             s5_report: dict, per_strategy: dict, notes: list[str],
-             trades_csv: str) -> dict:
+def build_arms(gated: SimResult, ungated: SimResult | None,
+               cfg: SimConfig) -> tuple[dict, dict]:
+    """Build the `summary`/`equity_curve` blocks `assemble_v2` expects, from
+    the gated (and optional ungated) SimResult arms. Lifted out of the old
+    `assemble` so the worker can build them before calling `assemble_v2`."""
     summary = {"gated": arm_summary(gated.trades, cfg)}
     curves = {"gated": equity_curve(gated.trades)}
     if ungated is not None:
         summary["ungated"] = arm_summary(ungated.trades, cfg)
         curves["ungated"] = equity_curve(ungated.trades)
+    return summary, curves
+
+
+def assemble_v2(*, per_strategy: dict, summary: dict, curves: dict,
+                s5_report: dict, notes: list[str], trades_csv: str,
+                live_risk_usd_inferred: float | None, kill_trips: list,
+                paused_pct: dict, ungated: SimResult | None = None) -> dict:
+    """Assemble the Manager Backtest result JSON (points+usd+reconciliation
+    per strategy, top-level matched-USD risk inference, extended notes).
+
+    `ungated` is accepted for call-site symmetry with the sim arms but is not
+    itself embedded — the caller folds it into `summary`/`curves` via
+    `build_arms` before calling this.
+    """
     return {
         "summary": summary,
         "per_strategy": per_strategy,
@@ -136,6 +152,7 @@ def assemble(gated: SimResult, ungated: SimResult | None, cfg: SimConfig,
         "s5_resolution": s5_report,
         "trades_csv": trades_csv,
         "notes": notes,
-        "kill_trips": gated.kill_trips,
-        "paused_pct": gated.paused_pct,
+        "live_risk_usd_inferred": live_risk_usd_inferred,
+        "kill_trips": kill_trips,
+        "paused_pct": paused_pct,
     }
