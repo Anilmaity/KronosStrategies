@@ -218,22 +218,27 @@ def _lookup_order_by_client_id(base_url: str, account_id: str, headers: dict,
 def _post_order_with_retry(base_url: str, account_id: str, headers: dict,
                            payload: dict, side: str, broker_symbol: str,
                            volume: float, stop_loss: float,
-                           take_profit: float) -> str | None:
+                           take_profit: float) -> tuple[str | None, str | None]:
     """POST a market order, retrying safely on timeout/5xx (opt15 Task 2).
 
-    Returns the broker positionId on success, None on failure. Preserves the
-    single-attempt success/error contract: 4xx and unexpected responses return
-    None without a retry, and META_ORDER_MAX_RETRIES=0 makes exactly one POST.
+    Returns (positionId, None) on success, (None, error_detail) on failure.
+    The error_detail carries the REAL broker reason so entry_manager can persist
+    it (2026-08-02 observability fix) instead of a bare 'metaapi_rejection'.
+    Preserves the single-attempt success/error contract: 4xx and unexpected
+    responses fail without a retry, and META_ORDER_MAX_RETRIES=0 makes exactly
+    one POST.
     """
     client_id = payload.get("clientId", "")
     max_retries = _order_max_retries()
     base_sec = _order_retry_base_sec()
     url = f"{base_url}/users/current/accounts/{account_id}/trade"
+    last_transient = ""
 
     for attempt in range(max_retries + 1):
         try:
             resp = requests.post(url, headers=headers, json=payload, timeout=_TIMEOUT)
             if resp.status_code >= 500:
+                last_transient = f"HTTP {resp.status_code}"
                 log.warning("[MetaAPI] order HTTP %s (clientId=%s) attempt %d/%d",
                             resp.status_code, client_id, attempt + 1, max_retries + 1)
             else:
@@ -243,54 +248,56 @@ def _post_order_with_retry(base_url: str, account_id: str, headers: dict,
                 code = data.get("stringCode", "")
                 if "DONE" not in code and pos_id == "":
                     log.warning("[MetaAPI] Unexpected trade response: %s", data)
-                    return None
+                    return None, f"unexpected response: {str(data)[:180]}"
                 log.info(
                     "[MetaAPI] Order placed | %s %s vol=%.2f SL=%.2f TP=%.2f | positionId=%s",
                     side, broker_symbol, volume, stop_loss, take_profit, pos_id,
                 )
-                return pos_id or None
+                return (pos_id or None), (None if pos_id else "empty positionId")
         except requests.HTTPError as exc:
             sc = exc.response.status_code if exc.response is not None else "?"
             txt = exc.response.text if exc.response is not None else ""
             log.error("[MetaAPI] HTTP error %s (clientId=%s): %s", sc, client_id, txt)
-            return None
+            return None, f"HTTP {sc}: {txt[:180]}"
         except (requests.Timeout, requests.ConnectionError) as exc:
+            last_transient = f"network error: {exc}"[:160]
             log.warning("[MetaAPI] order network error (clientId=%s) attempt %d/%d: %s",
                         client_id, attempt + 1, max_retries + 1, exc)
         except requests.RequestException as exc:
+            last_transient = f"request error: {exc}"[:160]
             log.warning("[MetaAPI] order request error (clientId=%s) attempt %d/%d: %s",
                         client_id, attempt + 1, max_retries + 1, exc)
-        except Exception:
+        except Exception as exc:
             log.exception("[MetaAPI] Failed to place order (clientId=%s)", client_id)
-            return None
+            return None, f"exception: {exc}"[:180]
 
         # Only a transient failure (5xx / timeout / connection) reaches here.
         if attempt >= max_retries:
             log.error("[MetaAPI] order not placed after %d attempt(s) (clientId=%s) -- giving up",
                       attempt + 1, client_id)
-            return None
+            return None, f"no broker ack after {attempt + 1} attempt(s) ({last_transient})"
         if not client_id:
             log.error("[MetaAPI] no clientId to verify -- not retrying")
-            return None
+            return None, f"transient, no clientId to verify ({last_transient})"
         state, found_pid = _lookup_order_by_client_id(base_url, account_id, headers, client_id)
         if state == "found":
             log.info("[MetaAPI] verify-before-retry: clientId=%s already landed (positionId=%s)"
                      " -- success, no re-POST", client_id, found_pid)
             if found_pid:
-                return found_pid
+                return found_pid, None
             log.error("[MetaAPI] clientId=%s landed but id unresolved -- RECONCILE MANUALLY",
                       client_id)
-            return None
+            return None, "landed but id unresolved -- RECONCILE"
         if state == "failed":
             log.info("[MetaAPI] verify-before-retry: lookup FAILED for clientId=%s -- NOT retrying"
                      " (cannot confirm order is absent)", client_id)
-            return None
+            return None, f"transient, order state unconfirmed ({last_transient})"
         delay = _retry_backoff_sec(attempt, base_sec)
         log.info("[MetaAPI] verify-before-retry: clientId=%s confirmed ABSENT -- re-POST %d/%d"
                  " after %.1fs", client_id, attempt + 1, max_retries, delay)
         time.sleep(delay)
 
-    return None
+    return None, f"exhausted retries ({last_transient})"
 
 
 def _close_with_retry(base_url: str, account_id: str, headers: dict,
@@ -475,6 +482,10 @@ class MetaApiClient:
         """
         broker_symbol = _SYMBOL_MAP.get(symbol, symbol)
         action = "ORDER_TYPE_BUY" if side == "BUY" else "ORDER_TYPE_SELL"
+        # Captured for entry_manager to persist the real reason on rejection
+        # (2026-08-02 observability fix). Reset per call; read only when this
+        # returns None. Sequential per-container placement → no race.
+        self._last_order_error: str | None = None
 
         # Honour the broker's stops level — widen SL/TP if too close to entry.
         if entry_price is not None:
@@ -499,6 +510,7 @@ class MetaApiClient:
 
         if not self.token or not self.account_id:
             log.error("[MetaAPI] account_id / token not configured")
+            self._last_order_error = "account_id/token not configured"
             return None
 
         # opt15 Task 2: tag the order so a retry can verify-before-resend.
@@ -506,10 +518,13 @@ class MetaApiClient:
         if _order_max_retries() > 0:
             payload["clientId"] = f"kr-{uuid4().hex[:16]}"
 
-        return _post_order_with_retry(
+        pid, err = _post_order_with_retry(
             self._trading_url(), self.account_id, self._headers(), payload,
             side, broker_symbol, volume, stop_loss, take_profit,
         )
+        if pid is None:
+            self._last_order_error = err or "unknown"
+        return pid
 
     def get_position_fill(self, position_id: str, *, retries: int = 6,
                           delay: float = 0.5) -> float | None:

@@ -816,9 +816,11 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
                 entry_price=signal.entry_price,
             )
         if not broker_position_id:
-            _update_signal_status(signal_log_id, "REJECTED",
-                                  rejection_reason="metaapi_rejection")
-            log.warning("[ENTRY] MetaAPI rejected order — skipping DB write")
+            detail = getattr(_client, "_last_order_error", None) or "unknown"
+            _update_signal_status(
+                signal_log_id, "REJECTED",
+                rejection_reason=f"metaapi_rejection: {detail}"[:500])
+            log.warning("[ENTRY] MetaAPI rejected order (%s) — skipping DB write", detail)
             return False
 
         # ── Book at BROKER TRUTH (2026-07-07): fetch the real fill immediately
