@@ -77,9 +77,11 @@ trades the sim takes and cannot be post-processed).
 Each per-strategy entry gains parallel `points` and `usd` sub-blocks on `sim`, `live`, `delta`.
 
 - **Points (headline).** Sim: sum `TradeRecord.pnl_pts`. Live: recover per-position points as
-  `realized_profit_loss / total_buy_quantity` (the original lot size; closed rows have
-  `quantity == 0` so the entry size must come from `total_buy_quantity`). PF/WR/pnl_pts on both
-  sides. Sizing-invariant — this is the fidelity verdict.
+  `realized_profit_loss / lots`, where `lots` is the ENTRY `Order.quantity` for that position
+  (`Order.condition == "ENTRY"`, joined on `position_id`). This is used instead of
+  `total_buy_quantity` because that column is 0 for shorts and `quantity` zeroes on close — the
+  ENTRY order is the only lot source valid for both sides. PF/WR/pnl_pts on both sides.
+  Sizing-invariant — this is the fidelity verdict.
 - **Matched-USD (secondary).** Infer the live risk budget from the window's live SL-exit
   losers: risk-sizing makes each loser cost ≈ `$R`, so `R̂ = median(|usd|)` over live losing
   trades. Re-price the sim's trades through the same `R̂ / (SL_dist × 100)` clamp
@@ -110,10 +112,14 @@ reconciliation block.
 Called in the worker "comparing" phase. Per strategy over the window (IST-skew applied to
 `created_at` exactly as `live_deltas.live_summary` does):
 
-- `live_generated` = count of `StrategySignal` rows.
-- `live_placed` = count `status == ACCEPTED`.
-- `rejected` = `{rejection_reason: count}` for `status == REJECTED`.
+- `live_generated` = count of `StrategySignal` rows (join `strategy_id → Strategy.name`).
+- `live_placed` = count `status == "PLACED"`.
+- `rejected` = `{rejection_reason: count}` for `status == "REJECTED"`.
 - `sim_trades` = count of sim trades for that strategy.
+
+(Status values per `models.py`: `FIRED` → `PLACED` | `REJECTED`. Window filter uses
+`StrategySignal.signal_at` with the same IST-skew handling `live_summary` applies to
+`Position.created_at`.)
 
 Emit a `reconciliation` block per strategy. If no `StrategySignal` rows exist for the window
 (e.g. a window before the 2026-07-11 audit table went live), mark reconciliation
@@ -151,8 +157,8 @@ top-level: "live_risk_usd_inferred": R̂ | null, "notes": [...]
 ## Error handling / edge cases
 
 - Empty window / no replayable roster → existing notes path.
-- Live closed position with `total_buy_quantity == 0` → skip that row for points, add note
-  (should not occur for a normally-closed position).
+- Live closed position with no ENTRY order or `Order.quantity == 0` → skip that row for points,
+  add note (should not occur for a normally-closed position).
 - Fewer live losers than the inference floor → matched-USD omitted or run-param fallback, noted.
 - `StrategySignal` rows absent for window → reconciliation `"unavailable"`.
 - IST-skew (+5:30) applied consistently to every `created_at` comparison (Position and
