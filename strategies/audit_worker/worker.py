@@ -171,9 +171,12 @@ def process_run(session, run, cache_dir: Path = CACHE_DIR):
         live_map = live_deltas.live_summary(
             session, [s.name for s in specs],
             start_utc.to_pydatetime(), end_utc.to_pydatetime())
-        # infer live risk from this window's live losers (usd blocks)
-        live_losses = [b["usd"]["pnl_usd"] for b in live_map.values()
-                       if b["usd"]["pnl_usd"] < 0]
+        # infer live risk from this window's individual live-trade losses
+        # (NOT live_map's per-strategy net usd -- that's one sample per
+        # strategy and can never reach sizing.infer_live_risk_usd's floor).
+        live_losses = live_deltas.trade_losses_usd(
+            session, [s.name for s in specs],
+            start_utc.to_pydatetime(), end_utc.to_pydatetime())
         risk_usd = sizing.infer_live_risk_usd(live_losses)
         if risk_usd is not None:
             results.add_matched_usd(sim_map, gated.trades, risk_usd)

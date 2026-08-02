@@ -5,7 +5,9 @@ import ast
 import os
 import subprocess
 import sys
+import uuid
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
@@ -20,8 +22,11 @@ if _STRAT_DIR not in sys.path:
     sys.path.insert(0, _STRAT_DIR)
 
 from audit_worker import worker  # noqa: E402
-from backtest.manager_sim_engine import SimResult  # noqa: E402
-from shared.models import ManagerBacktestRun  # noqa: E402
+from backtest.manager_sim_engine import SimResult, TradeRecord  # noqa: E402
+from shared.models import (  # noqa: E402
+    CurrencyPair, ManagerBacktestRun, Order, Position, Strategy,
+    StrategySignal, User, UserBroker, UserStrategy,
+)
 
 
 @pytest.fixture()
@@ -137,6 +142,132 @@ def test_cancel_mid_run(db, monkeypatch, tmp_path):
     assert claimed.status == "CANCELLED"
     assert claimed.finished_at is not None
     assert claimed.result is None
+
+
+_IST_SKEW = timedelta(hours=5, minutes=30)
+
+
+def _seed_live_strategy(s, name):
+    user = User(email=f"{uuid.uuid4()}@t.local")
+    cp = CurrencyPair(symbol="XAU_USD", name="XAU_USD")
+    strat = Strategy(name=name, apis_currencypair=cp)
+    ub = UserBroker(apis_user=user, api_key=str(uuid.uuid4()))
+    us = UserStrategy(apis_strategy=strat, apis_userbroker=ub)
+    s.add_all([user, cp, strat, ub, us])
+    s.flush()
+    return strat, us
+
+
+def _seed_closed_position(s, us, realized, created_utc, lots=0.10):
+    # Stored created_at is naive IST wall clock (get_kolkata_time convention),
+    # same treatment tests/test_live_deltas.py applies.
+    pos = Position(
+        symbol="XAU_USD", quantity=Decimal(0),
+        realized_profit_loss=Decimal(str(realized)),
+        user_strategy_id=us.id,
+        created_at=created_utc.replace(tzinfo=None) + _IST_SKEW,
+    )
+    s.add(pos)
+    s.flush()
+    # live_summary recovers sizing-invariant points via the ENTRY order's
+    # lots -- every seeded live Position needs one for the join to match.
+    s.add(Order(position_id=pos.id, condition="ENTRY",
+                quantity=Decimal(str(lots))))
+    s.flush()
+
+
+def _seed_signal(s, strat, status, reason, when_utc):
+    s.add(StrategySignal(
+        symbol="XAU_USD", side="BUY", entry_price=Decimal("2000"),
+        status=status, rejection_reason=reason, strategy_id=strat.id,
+        signal_at=when_utc + _IST_SKEW))
+    s.flush()
+
+
+def test_comparing_phase_end_to_end_with_seeded_roster(db, monkeypatch, tmp_path):
+    """Task 6 review finding: the comparing phase (sim_per_strategy ->
+    live_summary -> infer_live_risk_usd -> add_matched_usd -> deltas ->
+    reconcile -> assemble_v2) must be driven end-to-end with a non-empty
+    roster and real seeded data -- the only prior worker test
+    (test_done_path_writes_result) used an empty roster, which short-
+    circuits every branch this subsystem added (risk_usd stays None,
+    deltas stays {}, the reconciliation loop body never runs)."""
+    from audit_worker import bars
+    import backtest.manager_sim_engine as engine
+
+    STRAT_NAME = "S93 FVG Scalp"   # resolves via roster._s_code -> s93_fvg_scalp
+
+    # --- live side: Strategy/UserStrategy + 5 losers + 1 winner (closed) ---
+    strat, us = _seed_live_strategy(db, STRAT_NAME)
+    win = datetime(2026, 6, 3, 8, tzinfo=timezone.utc)
+    for i in range(5):
+        # -0.05 units @ 0.10 lots -> -0.5 pts, -$5.00 usd each: 5 individual
+        # per-trade losses so sizing.infer_live_risk_usd's floor=5 can fire.
+        _seed_closed_position(db, us, -0.05, win + timedelta(hours=i))
+    _seed_closed_position(db, us, 0.08, win + timedelta(hours=5))   # 1 winner
+
+    # --- live side: signal audit (PLACED + REJECTED) for reconciliation ---
+    sig_at = datetime(2026, 6, 3, 9, 0)
+    _seed_signal(db, strat, "PLACED", None, sig_at)
+    _seed_signal(db, strat, "REJECTED", "entry_drift", sig_at)
+    _seed_signal(db, strat, "REJECTED", "entry_drift", sig_at)
+
+    # --- sim side: monkeypatch run_sim to return known TradeRecords ---
+    monkeypatch.setattr(bars, "ensure_frames", lambda *a, **k: tmp_path)
+    monkeypatch.setattr(engine, "load_frames", lambda *a, **k: _fake_frames())
+    t0 = datetime(2026, 6, 3, 10, 0, tzinfo=timezone.utc)
+    trades = [
+        TradeRecord(strategy=STRAT_NAME, entry_time=t0, side="BUY",
+                    entry_px=2000.0, sl=1997.0, tp=2006.0, exit_px=2006.0,
+                    exit_time=t0 + timedelta(minutes=30), outcome="TP",
+                    pnl_pts=6.0, pnl_usd=6.0 * 0.02 * 100, gate_reason=""),
+        TradeRecord(strategy=STRAT_NAME, entry_time=t0 + timedelta(hours=1),
+                    side="SELL", entry_px=2010.0, sl=2013.0, tp=2004.0,
+                    exit_px=2013.0, exit_time=t0 + timedelta(hours=1, minutes=20),
+                    outcome="SL", pnl_pts=-3.0, pnl_usd=-3.0 * 0.02 * 100,
+                    gate_reason=""),
+    ]
+    monkeypatch.setattr(engine, "run_sim", lambda *a, **k: SimResult(
+        trades=trades, regime_rows=[], kill_trips=[], paused_pct={}))
+
+    run = _mk_run(db, params={
+        "roster_snapshot": [{"name": STRAT_NAME, "policy_key": "always_on",
+                             "policy_params": {}}],
+        "include_ungated": False,
+    })
+    claimed = worker.claim_next(db)
+    worker.process_run(db, claimed, cache_dir=tmp_path)
+    db.refresh(claimed)
+
+    assert claimed.status == "DONE", claimed.error
+    result = claimed.result
+    blk = result["per_strategy"][STRAT_NAME]
+
+    # sim: the 2 known trades, points-only until risk is inferred
+    assert blk["sim"]["points"]["trades"] == 2
+    assert blk["sim"]["points"]["pnl_pts"] == pytest.approx(3.0)   # 6 - 3
+
+    # live: 6 closed positions (5 losers + 1 winner), sizing-invariant points
+    assert blk["live"]["points"]["trades"] == 6
+    assert blk["live"]["usd"]["trades"] == 6
+
+    # 5 individual -$5.00 live losses clear sizing.infer_live_risk_usd's
+    # floor=5 -> risk_usd == 5.0 -> add_matched_usd attaches a usd block.
+    assert result["live_risk_usd_inferred"] == pytest.approx(5.0)
+    assert "usd" in blk["sim"]
+    assert "matched-USD omitted" not in " ".join(result["notes"])
+
+    # delta carries both sub-blocks since sim+live both priced usd
+    assert blk["delta"] is not None
+    assert "points" in blk["delta"] and "usd" in blk["delta"]
+
+    # reconciliation attached from the StrategySignal audit
+    recon = blk["reconciliation"]
+    assert recon != "unavailable"
+    assert recon["live_generated"] == 3
+    assert recon["live_placed"] == 1
+    assert recon["rejected"] == {"entry_drift": 2}
+    assert recon["sim_trades"] == 2
 
 
 def test_no_metaapi_import_static_and_runtime():

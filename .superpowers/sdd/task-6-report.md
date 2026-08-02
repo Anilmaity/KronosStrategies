@@ -1,232 +1,250 @@
-﻿## Task 6 — Market-Realistic Fills + Fill-Realism Corrected Report
+# Task 6 report — wire points/matched-usd/reconciliation into the worker result
 
-**Status:** DONE
-**Date:** 2026-07-03
-**Branch:** feat/strategy-manager
+Plan: `docs/superpowers/plans/2026-08-02-manager-backtest-fidelity.md`, Task 6
+(the integration task tying Tasks 3–5 together). Brief:
+`.superpowers/sdd/task-6-brief.md`.
 
----
+(This path previously held an unrelated stale report — "connection-pool
+right-sizing" from `feat/optimization-15` — left uncommitted in the working
+tree from an earlier session; overwritten below with this task's report, as
+the brief's own filename collides with that older plan's Task 6.)
 
-### FIX A — Engine: market-realistic fills (manager_sim_engine.py)
+## What was implemented
 
-- Added `fill_price: float | None = None` parameter to `open_position()`.
-  When `None`, original behaviour is preserved (existing tests unchanged).
-  When provided, `entry_px = fill_price +/- friction` (BUY/SELL).
-- In `run_sim`, the current 1m bar's `close` is passed as `fill_price` on every
-  new entry.
-- Phantom guard added in `run_sim`: if `bar_close + friction >= tp` (BUY) or
-  `bar_close - friction <= tp` (SELL), the entry is silently dropped — no P&L
-  booked, live would never open it.
+### 1. `strategies/audit_worker/results.py`
+- Removed `assemble()`. Split its body into:
+  - `build_arms(gated, ungated, cfg) -> (summary, curves)` — the old
+    `summary`/`equity_curve` construction, unchanged logic, extracted so the
+    worker can build it before calling `assemble_v2`.
+  - `assemble_v2(*, per_strategy, summary, curves, s5_report, notes,
+    trades_csv, live_risk_usd_inferred, kill_trips, paused_pct,
+    ungated=None) -> dict` — exact shape from the brief. `ungated` is
+    accepted (call-site symmetry with the worker) but not embedded in the
+    output; the worker folds it into `summary`/`curves` via `build_arms`
+    beforehand. Adds the new top-level `live_risk_usd_inferred` key.
 
-### FIX A Tests (test_manager_sim.py)
+### 2. `strategies/audit_worker/live_deltas.py`
+- `deltas(sim, live)` now diffs both sub-blocks per strategy:
+  `delta.points` = `sim.points - live.points` on `pnl_pts`/`trades`/`win_rate`
+  (always present when `live` is not None); `delta.usd` = same three fields
+  on `sim.usd - live.usd`, added **only when both sides have priced a `usd`
+  block** (sim only gets one after `add_matched_usd` ran; live always has
+  one). `live=None` → `delta=None`, unchanged.
 
-Two new tests added in "Task 6" section (total tests: 36 pass, all green):
+### 3. `strategies/audit_worker/worker.py` — `process_run`'s "comparing" phase
+- Imports `sizing, reconcile` alongside the existing lazy `audit_worker`
+  import (still inside the `try:`, still no `shared.metaapi_client` in the
+  import graph).
+- Builds `sim_map` (points), `live_map` (points+usd), infers `risk_usd` from
+  this window's live losers via `sizing.infer_live_risk_usd`, conditionally
+  calls `results.add_matched_usd(sim_map, gated.trades, risk_usd)`.
+- Builds `per_strategy = live_deltas.deltas(sim_map, live_map)`, then runs
+  `reconcile.reconcile(...)` with `sim_counts` keyed off `sim_map[...]
+  ["points"]["trades"]` and attaches `blk["reconciliation"]` per name.
+- Replaces the `run.result = results.assemble(...)` call with
+  `results.build_arms(...)` + `results.assemble_v2(...)`, passing
+  `live_risk_usd_inferred=risk_usd`.
 
-1. `test_fill_price_overrides_signal_entry` — fill_price=102 on BUY with
-   sig.entry_price=100 => entry_px = 102.25. Verifies fill_price replaces
-   sig.entry_price while friction still applies.
+**One deliberate deviation from the brief's literal code**, verified
+necessary and tested: the brief's Step 4 snippet appends the
+"matched-USD omitted" note unconditionally whenever `risk_usd is None`. I
+changed the `else:` to `elif sim_map:`. Reason: `tests/test_mbt_worker.py`
+(explicitly listed as a must-stay-green guard, and explicitly **not** in the
+in-scope list of tests I'm allowed to edit) has `test_done_path_writes_result`
+asserting `claimed.result["notes"] == ["empty roster snapshot: nothing to
+simulate"]` for an empty-roster run — where `sim_map` is `{}` and
+`risk_usd` is `None` (0 live losers < the `floor=5` default). The
+unconditional `else` would append a second, spurious note ("nothing to
+simulate" *and* "too few live losers") and break that assertion. Gating the
+note on `sim_map` being non-empty is semantically correct too: there is
+nothing to "omit" pricing for if the sim produced no strategies at all.
+Verified: `test_mbt_worker.py` (all 7, incl. this one and the metaapi-import
+guard) is green; the note still fires normally whenever `sim_map` is
+non-empty and `risk_usd` is `None`.
 
-2. `test_phantom_beyond_tp_skipped_in_run_sim` — stubs a strategy that always
-   returns BUY with tp=100.1 (well below bar close of ~3300). Verifies that
-   run_sim emits zero trades (all phantom-skipped).
+## Tests
 
-### FIX B — Correction script (manager_sim_correction.py)
+### TDD RED → GREEN evidence
+1. `tests/test_mbt_result_assembly.py` (new) — wrote the brief's Step-1 test
+   verbatim (`test_assemble_carries_points_and_reconciliation`) plus one more
+   (`test_assemble_v2_ungated_kwarg_is_accepted_but_not_embedded`). Confirmed
+   RED first (`audit_worker.results has no attribute 'assemble_v2'`), then
+   implemented `assemble_v2`/`build_arms` → GREEN.
+2. `tests/test_live_deltas.py::test_deltas_math_and_live_missing` — rewrote
+   for the new `{points, usd}` sub-block shape; added a `D` case (sim has
+   `points`-only, live has `points`+`usd`) to lock in the "usd only appears
+   when both sides have one" guard. RED against the old `deltas()` (`KeyError:
+   'points'`), GREEN after the `deltas()` rewrite.
+3. `tests/test_mbt_results.py::test_assemble_passthrough_and_arms` renamed to
+   `test_build_arms_and_assemble_v2`, now calls `results.build_arms` +
+   `results.assemble_v2` and asserts the new key set including
+   `live_risk_usd_inferred`. RED against removed `assemble()`, GREEN after.
 
-New file at `strategies/backtest/manager_sim_correction.py`.
-Reads committed CSV trades + 1m bars_cache parquet, applies fill-realism
-correction, and outputs markdown tables for the AMENDED summary.
+### Full-suite run
+```
+.venv/Scripts/python.exe -m pytest tests/ -q --junitxml=junit_report.xml
+```
+JUnit summary: `tests="895" errors="0" failures="0" skipped="0"`, exit code 0
+(276.6s). Console `-q`/`-v` output in this shell truncates the final summary
+line due to a carriage-return progress quirk — confirmed via `--junitxml`
+instead, which is authoritative.
 
-### FIX C — Amended summary
+Focused runs, all green:
+- `tests/test_mbt_result_assembly.py tests/test_live_deltas.py
+  tests/test_mbt_results.py` — 11 passed.
+- `tests/test_mbt_worker.py` — 7 passed (incl.
+  `test_no_metaapi_import_static_and_runtime`,
+  `test_done_path_writes_result`).
 
-`strategies/backtest/results/manager_sim/summary_20260702_235849_AMENDED.md`
-Created (original untouched). Contains:
-- Fill-Realism Correction section with per-strategy/combined tables + phantom example
-- Ex-S96 View
-- Live Sizing Note
-- REVISED VERDICT (PAPER mode recommended)
+## Files changed (staged per the brief's discipline — no `git add -A`)
+- `strategies/audit_worker/worker.py`
+- `strategies/audit_worker/results.py`
+- `strategies/audit_worker/live_deltas.py`
+- `tests/test_mbt_result_assembly.py` (new)
+- `tests/test_live_deltas.py`
+- `tests/test_mbt_results.py`
 
----
+Left untouched/unstaged (pre-existing, unrelated dirty state found in the
+working tree at session start, not part of this task):
+`.claude/settings.json`,
+`strategies/backtest/results/manager_sim/summary_20260702_235849.md`.
 
-### Corrected headline numbers
+## Self-review
+- Re-read the diff of all three source files after editing; confirmed no
+  stray references to the removed `assemble()` remain (`git grep -n
+  "results.assemble(" strategies tests` → only `assemble_v2` call sites).
+- Confirmed `add_matched_usd`'s `sim_map.setdefault(name, {})` behavior can't
+  silently create a `usd`-only entry with no `points` for a name absent from
+  `sim_per_strategy`'s output, because `add_matched_usd` is only ever called
+  with the `sim_map` that `sim_per_strategy` just built from the same
+  `gated.trades` list — every strategy name in one is in the other.
+- Confirmed the `elif sim_map:` deviation doesn't mask the real Task-6 goal:
+  when strategies *did* trade in the sim but live had &lt;5 losers, the
+  note still fires (only the "sim produced literally nothing" case is
+  silenced).
+- Confirmed `reconcile.get(name, "unavailable")` fallback is defensive only —
+  `reconcile.reconcile` already returns `"unavailable"` for every name in
+  `strategy_names` (all spec names) that has no `StrategySignal` rows, so
+  `per_strategy` (keyed off `sim_map`, a subset of spec names) will always
+  find a match unless a name mismatch bug exists elsewhere.
 
-| Metric | Value |
-|--------|-------|
-| Gated raw (0.02L) | +577.36 |
-| Gated corrected (0.02L) | +133.36 |
-| Gated corrected (0.01L live) | +66.68 |
-| Phantom trades dropped (gated) | 3 |
-| Phantom trades dropped (ungated) | 7 |
-| Phantom example | 2026-07-01T14:00 SESSION_BREAKOUT BUY: bar_close=4099.245, entry_px=4099.495 >= TP=4098.980, old pnl=$102.34 DROPPED |
+## Concerns
+- The `elif sim_map:` deviation is a judgment call, not literally what the
+  brief's code block shows — flagged prominently above with the specific
+  test that forced it, so a reviewer can override if they'd rather update
+  `test_mbt_worker.py` instead (which the brief's staging list does not
+  permit me to touch).
+- No behavioral test exercises `worker.py`'s new comparing-phase wiring
+  end-to-end against a non-empty roster with real live Position/StrategySignal
+  rows (i.e. a `test_done_path_writes_result`-style test with seeded DB data
+  producing non-empty `sim_map`/`live_map`/`recon`). The existing worker
+  tests only exercise the empty-roster and pre-comparing-phase-failure paths.
+  Tasks 3–5's own unit tests (`test_live_points.py`, `test_sizing_matched_usd.py`,
+  `test_reconcile.py`) cover the underlying functions individually; this
+  task's brief did not ask for a new integration-level worker test beyond
+  `test_mbt_result_assembly.py` (which tests `assemble_v2` directly, not the
+  worker wiring), so I did not add one — flagging as a coverage gap if a
+  reviewer wants deeper end-to-end confidence.
 
-**S96 ungated anomaly note:** Corrected ungated swings from -$5,094 to +$4,122.
-This is because S96's sig.entry_price is a computed momentum level systematically
-offset from bar_close; for SELL signals, higher bar_close improves the corrected
-SELL fill. The ex-S96 view (gated +$44 vs ungated -$89 corrected) is the reliable
-gating-edge signal, unaffected by S96 fill anomaly.
+## Fix: comparing-phase integration test
 
-Corrected gated of +$133.36 is in the vicinity of reviewer's estimate of $150-180
-(within 12%). Within acceptable tolerance; proceeding.
+Addresses the review finding above ("No behavioral test exercises `worker.py`'s
+new comparing-phase wiring end-to-end...") by adding exactly that test, and it
+found a real bug the gap let through.
 
----
+### Covering test
+`tests/test_mbt_worker.py::test_comparing_phase_end_to_end_with_seeded_roster`
+(new, ~line 169). Seeds:
+- A live `Strategy`/`UserStrategy` named `"S93 FVG Scalp"` (resolves via
+  `roster._s_code` -> `s93_fvg_scalp`, same DB-display-name convention
+  `tests/test_reconcile.py` uses).
+- 6 closed `Position` rows (quantity=0, `realized_profit_loss` set) each with
+  a matching ENTRY `Order` (lots=0.10): 5 losers at -0.05 units (-$5.00 each)
+  and 1 winner at +0.08 units, all inside the run's window with the +5:30 IST
+  skew `live_deltas`/`reconcile` both apply to stored timestamps.
+- 3 `StrategySignal` rows (1 PLACED, 2 REJECTED "entry_drift") for the audit
+  reconciliation.
+- Monkeypatches `backtest.manager_sim_engine.run_sim` to return a
+  `SimResult` with 2 known `TradeRecord`s (+6pt TP, -3pt SL) for the same
+  strategy name, so `sim_map` is non-empty.
 
-### Test run
+Drives `worker.process_run` through `claim_next`/`process_run` exactly like
+the existing worker tests, then asserts on `run.result`: `per_strategy["S93
+FVG Scalp"]` has `sim`/`live`/`delta` each with `points` and (once risk is
+inferred) `usd` sub-blocks; `reconciliation` is the real dict (not
+`"unavailable"`) with `live_generated=3`, `live_placed=1`,
+`rejected={"entry_drift": 2}`, `sim_trades=2`; top-level
+`live_risk_usd_inferred == 5.0`. Chose the "risk inferred" branch (5 seeded
+per-trade losers) over the omission-note branch, per the brief's instruction
+to pick one and assert it explicitly, since that's the branch
+`add_matched_usd` needs to be exercised at all.
 
-`pytest tests/test_manager_sim.py tests/test_manager_sim_report.py -q`
-=> 36 passed, 0 failed. (Pre-task baseline was 34; +2 new tests = 36 total.
-Spec estimated 38; the discrepancy is the pre-task count was 34, not 36.)
----
+### Real bug found and fixed
 
-## Re-review fixes (final three blocking edits) — 2026-07-03, commit a08f7ce
+Writing the test surfaced a genuine wiring bug in `worker.py`'s comparing
+phase, of the same shape as the precedent (missing ×100 factor) that
+motivated this finding — a live smoke run, not a test, would have been the
+first thing to catch it.
 
-### EDIT 1 — AMENDED report honesty (summary_20260702_235849_AMENDED.md)
+**Bug:** `process_run` built the input to `sizing.infer_live_risk_usd`
+(which needs a *list of individual live-trade losses* — see its docstring
+"median absolute USD of live losers" and `tests/test_sizing_matched_usd.py`'s
+fixture `[-36.0, -38.0, -40.0, -38.0, -37.0]`, five individual SL-hit sizes)
+from `live_map.values()` — but `live_map` (`live_deltas.live_summary`'s
+output) holds **one row per strategy name**, already summed across every
+trade that strategy made in the window. With the roster's `specs` list
+capped at the number of *replayable strategy names* (today: 4 — `roster.py`'s
+`MODULES` dict; the Telegram copy slot isn't replayable so never appears),
+`live_losses` could have at most 4 elements — below `infer_live_risk_usd`'s
+default `floor=5` **unconditionally, regardless of how many live trades any
+strategy made**. `add_matched_usd` could therefore never run in production:
+`live_risk_usd_inferred` was permanently `None` and every result's `usd`
+sub-blocks were permanently absent, no matter the data.
 
-- Ungated S96 corrected values (+$4,211.64 / +$2,105.82) replaced with
-  "N/A — not computable from CSVs (TRAIL exits are fill-path-dependent;
-  requires engine re-run)". Corrected ungated combined now presented ex-S96
-  only and labeled as such.
-- All "exact for TRAIL exits" and "real finding about S96's signal structure"
-  claims deleted (AMENDED file + manager_sim_correction.py docstring and
-  generated report text). True mechanism stated: S96's entry_price is the
-  last closed H1 bar's close (up to ~1h stale); on crash days (2026-06-17:
-  five consecutive BUYs at identical stale 4379.8 while market traded
-  ~4264-4272) the CSV correction refills at market but keeps exits anchored
-  to stops derived from the phantom entry, converting phantom losers into
-  phantom winners — S96 corrected numbers are artifacts in BOTH directions.
-- Gated S96 corrected (+$89.29) marked "uncertain sign, ±~$100 (same TRAIL
-  limitation, smaller sample)". Corrected combined gated restated as
-  including an S96 term of uncertain sign bounded ~±$100.
-- Verdict now quotes the ex-S96 corrected pair as THE rubric-relevant
-  comparison; added lines on (i) gated/ungated entry sets differing via
-  gate-delayed detection and (ii) the ex-S96 delta being directional
-  evidence, not expectancy proof. S96 contingency changed to: engine re-run
-  with market fills + both phantom guards (CSV correction cannot produce it).
+Confirmed empirically, not just by static reading: ran the new test against
+the pre-fix `worker.py` (`git stash push -- strategies/audit_worker/worker.py`,
+rerun, `git stash pop`) — it failed exactly at the risk-inference assertion
+(`assert result["live_risk_usd_inferred"] == pytest.approx(5.0)` ->
+`AssertionError: assert None == 5.0`), with everything else (sim/live
+points, reconciliation) passing. That isolates the bug precisely to the
+risk-inference input.
 
-### EDIT 2 — engine beyond-SL guard (manager_sim_engine.py)
+**Fix (minimal):**
+- `strategies/audit_worker/live_deltas.py` — added
+  `trade_losses_usd(session, strategy_names, start_utc, end_utc) -> list[float]`,
+  a sibling to `live_summary` that runs the same Position/UserStrategy/Strategy
+  join and window filter but returns one `realized_profit_loss * 100` value
+  per closed Position, unaggregated.
+- `strategies/audit_worker/worker.py` — the comparing phase now calls
+  `live_deltas.trade_losses_usd(session, [s.name for s in specs], ...)`
+  instead of deriving `live_losses` from `live_map.values()`.
 
-run_sim entry admission now mirrors the beyond-TP skip:
-BUY skipped if fill (close + friction) <= sig.stop_loss; SELL skipped if
-fill (close - friction) >= sig.stop_loss. Applies to trailing strategies
-too (trail seeds hwm from the entry fill).
-New test: test_phantom_beyond_sl_skipped_in_run_sim — BUY sl=98, tp=110,
-entry_price=100 with detection-bar close 97.5 → entry skipped (no position,
-no trade); compute_regime stubbed + get_signal call counter guards against
-a vacuous pass.
+No change to `live_summary`, `deltas`, `reconcile`, `sizing.py`, or
+`results.py` — the bug was isolated to which list `infer_live_risk_usd` was
+fed at the one call site.
 
-### EDIT 3 — correction script beyond-SL guard + refreshed tables
+### Command + output
+```
+.venv/Scripts/python.exe -m pytest tests/test_mbt_worker.py -q
+```
+```
+........                                                                 [100%]
+8 passed
+```
+(8 = the prior 7 worker tests + the new integration test.)
 
-_correct_trades drops (as phantoms) non-trailing trades whose corrected fill
-is beyond the signal SL (trailing rows exempt: CSV `sl` is the ratcheted
-stop). Exactly 4 such trades found, as the reviewer predicted:
-gated 1 (S97 2026-04-22T05:17 SELL), ungated 3 (same S97 trade +
-SESSION_BREAKOUT 2026-05-01T13:34 and 2026-06-11T13:46 SELLs).
+Full suite, foreground per instructions (`timeout=480000`):
+```
+.venv/Scripts/python.exe -m pytest tests/ -q --junitxml=junit_report_task6.xml
+```
+JUnit summary: `tests="896" errors="0" failures="0" skipped="0"` (277.8s) —
+896 = the prior 895-test baseline + this one new test.
 
-Refreshed corrected numbers (0.02L):
-
-| Metric | Old | New |
-|--------|----:|----:|
-| Gated combined corrected | +133.36 | +131.42 (incl. uncertain S96 term) |
-| Gated phantoms | 3 | 4 |
-| Ungated phantoms | 7 | 10 |
-| Gated ex-S96 corrected | +44.07 | +42.13 |
-| Ungated ex-S96 corrected | -89.11 | -99.10 |
-| Ex-S96 corrected delta (G-U) | +133.18 | +141.23 |
-
-Final ex-S96 corrected pair: **gated +$42.13 vs ungated -$99.10** (0.02L,
-3 months). Gating edge survives: gated positive, ungated negative.
-
-### Test run
-
-`pytest tests/test_manager_sim.py tests/test_manager_sim_report.py -q`
-=> 37 passed, 0 failed (36 baseline + 1 new beyond-SL test).
-
----
-
-## Task 6b — per-process sensitivity variant driver (parallel runs)
-
-### What was built
-
-New `strategies/backtest/manager_sim_variant.py`: runs ONE sensitivity
-variant per OS process so all 6 can run concurrently (vs run_sensitivity's
-serial ~4.4 h in-process grid). setattr on regime_engine constants is safe
-per-process; window variants go through `_shifted_specs` as before.
-
-Least-invasive extraction in `manager_sim_report.py`: the 6 variant
-definitions (4 threshold + 2 window) moved to a module-level
-`SENSITIVITY_VARIANTS` dict (single source of truth; insertion order ==
-historical run order). `run_sensitivity` now iterates that dict — labels,
-thresholds, windows, order and output rows are byte-identical to before.
-No engine/CLI files touched.
-
-### CLI
-
-Run mode: `python -m backtest.manager_sim_variant --variant NAME
---start 2026-04-01 --end 2026-07-02 --out PATH.json [--cache-dir DIR]
-[--slice-rows JSON]` — one gated full run with default SimConfig (faithful
-slice_rows, market fills), dumps JSON: variant, label, trades, net_usd,
-max_dd_usd, wr, pf (null when infinite), per_strategy_net.
-
-Collect mode: `--collect GLOB --base-gated CSV --base-ungated CSV
---out-md PATH` — loads the variant JSONs, reconstructs base gated/ungated
-combined nets from the base run's trade CSVs (sum of pnl_usd), and APPENDS
-a standalone sensitivity-grid markdown with the rubric-condition-4
-(no-sign-flip) PASS/FAIL verdict. Flags a warning line if fewer/more than
-6 variant files matched.
-
-### Tests
-
-`tests/test_manager_sim_variant.py` — 10 new tests: variant NAME->definition
-mapping matches run_sensitivity's historical 6 (exact thresholds, windows,
-labels, order); driver imports the report's dict by identity (no duplicated
-numbers); unknown variant and incomplete --collect args exit non-zero; JSON
-output shape on the tiny synthetic cache (shallow slice_rows via the
---slice-rows test hook) for both a threshold and a window variant;
-collect-mode grid rendering with cond-4 PASS and sign-flip FAIL cases.
-
-`pytest tests/test_manager_sim.py tests/test_manager_sim_report.py
-tests/test_manager_sim_variant.py -q` => 47 passed (37 existing + 10 new).
-
----
-
-## Task 6c — corrected-engine base run + sensitivity grid (2026-07-03, final)
-
-### Corrected-engine base run (market fills, native — supersedes AMENDED CSV correction)
-
-`--mode both`, faithful slice depths, 2026-04-01 → 2026-07-02 (exclusive).
-Report: `results/manager_sim/summary_20260703_054509.md` (AUTHORITATIVE).
-
-| Mode | Trades | WR% | PF | Net USD | Max DD $ |
-|------|-------:|----:|---:|--------:|---------:|
-| Gated | 105 | 49.5 | 1.10 | +131.42 | 464.26 |
-| Ungated | 254 | 42.5 | 1.03 | +109.58 | 794.46 |
-
-Engine-native gated net matches the CSV-corrected estimate exactly
-(+$131.42), validating the correction methodology for gated. Ungated,
-however, is +$109.58 native vs the CSV correction's negative estimate —
-the path-dependent TRAIL/kill-switch terms the CSV pass could not fix
-were material on the ungated book. S96 real numbers (the open question):
-gated +$89.29 (10 trades), ungated +$208.22 (81 trades) — gating pauses
-S96 98.2% of the time and REDUCES its return; its value in the gated book
-is DD control, not P&L. One ungated kill-switch trip (2026-05-07).
-
-### Sensitivity grid (6 parallel per-process variants, manager_sim_variant.py)
-
-Artifact: `results/manager_sim/sensitivity_parallel.md` + `variant_*.json`.
-Base delta (G-U) +$21.84. Variant nets: er_loose +$136.78, er_tight
-+$192.53, vol_loose +$66.34, vol_tight +$172.73, win_minus30 +$23.03,
-win_plus30 +$71.57. Variant deltas (V-U): 3 of 6 NEGATIVE (vol_loose
--$43.24, win_minus30 -$86.55, win_plus30 -$38.01).
-
-**Rubric condition 4: FAIL.** No return plateau (+$23…+$193 around +$131).
-Max DD is a plateau: every variant $400-524 vs ungated $794.
-
-### Final verdict
-
-Rubric (all-4-conditions) says DO NOT recommend master ON for live.
-**RECOMMEND arm PAPER**: the return edge (+$22/3mo) is inside parameter
-noise, but the drawdown reduction (~40-50%) is robust across every
-perturbation. Re-evaluate after >=3 months of gated paper fills.
-
-### Post-run fix
-
-cp1252 UnicodeEncodeError in collect-mode `print(md)` (U+2212 in G−U/V−U
-labels) — replaced with ASCII, same class as 49dca3f. File output was
-unaffected (UTF-8); only the console echo crashed.
+### Files changed
+- `tests/test_mbt_worker.py` — new integration test + 3 small seeding helpers
+  (`_seed_live_strategy`, `_seed_closed_position`, `_seed_signal`).
+- `strategies/audit_worker/live_deltas.py` — new `trade_losses_usd` function
+  (production bug fix).
+- `strategies/audit_worker/worker.py` — comparing phase now calls
+  `trade_losses_usd` instead of aggregating from `live_map` (production bug
+  fix).

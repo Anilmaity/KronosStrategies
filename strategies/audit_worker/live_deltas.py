@@ -100,6 +100,38 @@ def live_summary(session, strategy_names: list[str], start_utc: datetime,
     return out
 
 
+def trade_losses_usd(session, strategy_names: list[str], start_utc: datetime,
+                     end_utc: datetime) -> list[float]:
+    """Individual closed-trade USD P&L for the given strategies/window, one
+    value per Position -- NOT aggregated per strategy.
+
+    `sizing.infer_live_risk_usd` derives a *per-trade* risk budget (see its
+    docstring and `tests/test_sizing_matched_usd.py`, whose fixture is a list
+    of individual SL-hit sizes like [-36, -38, -40, ...]) and only fires once
+    it sees >= `floor` losing samples. Feeding it `live_summary`'s per-
+    strategy net `usd.pnl_usd` instead collapses every trade a strategy made
+    in the window into a single sample -- with a small roster (today: 4
+    replayable strategies) the floor of 5 can then never be reached no
+    matter how many live trades exist, silently disabling matched-USD.
+    """
+    lo = (start_utc.replace(tzinfo=None) + _IST_SKEW)
+    hi = (end_utc.replace(tzinfo=None) + _IST_SKEW)
+
+    rows = (
+        session.query(Position.realized_profit_loss)
+        .join(UserStrategy, Position.user_strategy_id == UserStrategy.id)
+        .join(Strategy, UserStrategy.strategy_id == Strategy.id)
+        .filter(
+            Strategy.name.in_(strategy_names),
+            Position.quantity == 0,
+            Position.created_at >= lo,
+            Position.created_at <= hi,
+        )
+        .all()
+    )
+    return [float(r[0] or 0.0) * _USD_PER_PNL_UNIT for r in rows]
+
+
 def deltas(sim: dict[str, dict], live: dict[str, dict]) -> dict[str, dict]:
     """Per-strategy sim / live / delta blocks, each covering the sizing-
     invariant `points` sub-block and, when both sides have priced one, the
