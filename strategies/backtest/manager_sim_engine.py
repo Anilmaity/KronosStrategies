@@ -21,7 +21,7 @@ from shared.gate_rules import (
     MIN_SL_DIST_PTS, NEWS_BLACKOUT_UTC,
 )
 from backtest_strategies import s95_session_breakout, s96_h1_momentum, \
-    kronos_session_breakout
+    kronos_session_breakout, s100_m3_combo
 from backtest_strategies.base import Signal
 
 
@@ -328,7 +328,13 @@ def _closed_bar_cursor(times: pd.Series, tf: str, now_ts: pd.Timestamp) -> int:
 # Strategy window widths passed to get_signal.
 # _WIN_5M raised to 300 so SESSION_BREAKOUT (needs EMA(240) = 240 M5 bars
 # plus a 48-bar slope look-back + margin) can actually fire.
-_WIN_1M  = 60
+# _WIN_1M tracks S100 M3-combo's floor: its get_signal returns None until
+# len(w1m) >= MIN_BARS_1M (= 3*_MIN_M3 = 642, the EMA200 warm-up on ~214 M3
+# bars; auto-1560 if the ER gate is ever armed). Live runs S100 with
+# RESEARCH_WIN_1M >= MIN_BARS_1M; the sim was stuck at 60 and generated ZERO
+# S100 signals (2026-08-02 fidelity follow-up). Import the constant so the two
+# can't drift.
+_WIN_1M  = max(60, s100_m3_combo.MIN_BARS_1M)
 _WIN_5M  = 300
 _WIN_15M = 350
 

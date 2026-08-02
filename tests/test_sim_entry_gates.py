@@ -109,3 +109,13 @@ def test_entry_gates_on_reject_tight_sl_and_blackout(tmp_path):
     # rejected -- never opened as a position.
     assert rejects["sl_too_tight"] > 0
     assert not any(t.strategy == "FAKE" for t in result.trades)
+
+
+def test_win_1m_covers_s100_floor():
+    """Regression guard (2026-08-02 fidelity follow-up): the sim's 1m window MUST
+    cover S100 M3-combo's MIN_BARS_1M floor, or s100.get_signal returns None on
+    every bar and the sim generates ZERO S100 signals (live generated 101 in the
+    July run while the sim showed 0)."""
+    from backtest.manager_sim_engine import _WIN_1M
+    from backtest_strategies import s100_m3_combo
+    assert _WIN_1M >= s100_m3_combo.MIN_BARS_1M
