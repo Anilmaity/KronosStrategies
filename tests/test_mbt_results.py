@@ -59,9 +59,13 @@ def test_equity_downsample_keeps_final_point():
 def test_sim_per_strategy_shape():
     trades = [_t(2.0, "A"), _t(-1.0, "A"), _t(3.0, "B")]
     m = results.sim_per_strategy(trades, CFG)
-    assert m["A"]["trades"] == 2 and m["A"]["win_rate"] == 50.0
-    assert m["B"]["pnl_usd"] == pytest.approx(CFG.pts_to_usd(3.0), abs=0.01)
-    assert "_wins" not in m["A"]
+    assert m["A"]["points"]["trades"] == 2
+    assert m["A"]["points"]["win_rate"] == 50.0
+    assert m["A"]["points"]["pnl_pts"] == pytest.approx(1.0)
+    assert m["A"]["points"]["profit_factor"] == pytest.approx(2.0 / 1.0)
+    assert m["B"]["points"]["pnl_pts"] == pytest.approx(3.0)
+    assert m["B"]["points"]["profit_factor"] is None
+    assert "_wins" not in m["A"]["points"]
 
 
 def test_assemble_passthrough_and_arms():

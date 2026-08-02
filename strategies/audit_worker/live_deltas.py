@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from shared.models import Position, Strategy, UserStrategy
+from shared.models import Order, Position, Strategy, UserStrategy
 
 _IST_SKEW = timedelta(hours=5, minutes=30)
 
@@ -27,21 +27,34 @@ def _win_rate(wins: int, total: int) -> float:
     return round(100.0 * wins / total, 2) if total else 0.0
 
 
+def _pf(gross_win: float, gross_loss: float) -> float | None:
+    return round(gross_win / gross_loss, 4) if gross_loss > 0 else None
+
+
 def live_summary(session, strategy_names: list[str], start_utc: datetime,
                  end_utc: datetime) -> dict[str, dict]:
-    """Per-strategy realized aggregates for the window.
+    """Per-strategy realized aggregates for the window, sizing-invariant.
 
-    Returns {name: {"pnl_usd": float, "trades": int, "win_rate": float}} —
-    only names present in strategy_names appear; strategies with no realized
-    positions in the window are simply absent.
+    realized_profit_loss is stored in PnL UNITS (points x lots) — dividing by
+    the position's ENTRY-order lots recovers points, which is what makes the
+    sim/live comparison sizing-invariant. total_buy_quantity is NOT used
+    here: it is 0 for short positions.
+
+    Returns {name: {"points": {pnl_pts, trades, win_rate, profit_factor},
+                    "usd": {pnl_usd, trades, win_rate}}} — only names
+    present in strategy_names appear; strategies with no realized positions
+    (or none with a resolvable ENTRY-order lots) in the window are absent.
     """
     lo = (start_utc.replace(tzinfo=None) + _IST_SKEW)
     hi = (end_utc.replace(tzinfo=None) + _IST_SKEW)
 
     rows = (
-        session.query(Position.realized_profit_loss, Strategy.name)
+        session.query(Position.id, Position.realized_profit_loss,
+                      Strategy.name, Order.quantity)
         .join(UserStrategy, Position.user_strategy_id == UserStrategy.id)
         .join(Strategy, UserStrategy.strategy_id == Strategy.id)
+        .join(Order, (Order.position_id == Position.id) &
+                     (Order.condition == "ENTRY"))
         .filter(
             Strategy.name.in_(strategy_names),
             Position.quantity == 0,
@@ -51,17 +64,39 @@ def live_summary(session, strategy_names: list[str], start_utc: datetime,
         .all()
     )
 
-    out: dict[str, dict] = {}
-    for realized, name in rows:
+    acc: dict[str, dict] = {}
+    for _pid, realized, name, lots in rows:
         realized = float(realized or 0.0)
-        agg = out.setdefault(name, {"pnl_usd": 0.0, "trades": 0, "_wins": 0})
-        agg["pnl_usd"] += realized * _USD_PER_PNL_UNIT
-        agg["trades"] += 1
-        if realized > 0:
-            agg["_wins"] += 1
-    for name, agg in out.items():
-        agg["win_rate"] = _win_rate(agg.pop("_wins"), agg["trades"])
-        agg["pnl_usd"] = round(agg["pnl_usd"], 2)
+        lots = float(lots or 0.0)
+        if lots <= 0:
+            continue  # cannot recover points; skip (noted upstream)
+        pts = realized / lots
+        a = acc.setdefault(name, {"pts": 0.0, "usd": 0.0, "n": 0, "w": 0,
+                                  "gw": 0.0, "gl": 0.0})
+        a["pts"] += pts
+        a["usd"] += realized * _USD_PER_PNL_UNIT
+        a["n"] += 1
+        if pts > 0:
+            a["w"] += 1
+            a["gw"] += pts
+        elif pts < 0:
+            a["gl"] += -pts
+
+    out: dict[str, dict] = {}
+    for name, a in acc.items():
+        out[name] = {
+            "points": {
+                "pnl_pts": round(a["pts"], 4),
+                "trades": a["n"],
+                "win_rate": _win_rate(a["w"], a["n"]),
+                "profit_factor": _pf(a["gw"], a["gl"]),
+            },
+            "usd": {
+                "pnl_usd": round(a["usd"], 2),
+                "trades": a["n"],
+                "win_rate": _win_rate(a["w"], a["n"]),
+            },
+        }
     return out
 
 

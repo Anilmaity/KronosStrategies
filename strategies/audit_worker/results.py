@@ -36,18 +36,31 @@ def arm_summary(trades: list[TradeRecord], cfg: SimConfig) -> dict:
 
 
 def sim_per_strategy(trades: list[TradeRecord], cfg: SimConfig) -> dict[str, dict]:
-    """Same shape as live_deltas.live_summary, per strategy, from sim trades."""
-    out: dict[str, dict] = {}
+    """Sizing-invariant points block per strategy, from sim trades.
+
+    Same points shape as live_deltas.live_summary (usd block added in a
+    later task).
+    """
+    acc: dict[str, dict] = {}
     for t in trades:
-        agg = out.setdefault(t.strategy,
-                             {"pnl_usd": 0.0, "trades": 0, "_wins": 0})
-        agg["pnl_usd"] += t.pnl_usd
-        agg["trades"] += 1
+        a = acc.setdefault(t.strategy, {"pts": 0.0, "n": 0, "w": 0,
+                                        "gw": 0.0, "gl": 0.0})
+        a["pts"] += t.pnl_pts
+        a["n"] += 1
         if t.pnl_pts > 0:
-            agg["_wins"] += 1
-    for agg in out.values():
-        agg["win_rate"] = _win_rate(agg.pop("_wins"), agg["trades"])
-        agg["pnl_usd"] = round(agg["pnl_usd"], 2)
+            a["w"] += 1
+            a["gw"] += t.pnl_pts
+        elif t.pnl_pts < 0:
+            a["gl"] += -t.pnl_pts
+    out: dict[str, dict] = {}
+    for name, a in acc.items():
+        out[name] = {"points": {
+            "pnl_pts": round(a["pts"], 4),
+            "trades": a["n"],
+            "win_rate": _win_rate(a["w"], a["n"]),
+            "profit_factor": (round(a["gw"] / a["gl"], 4)
+                              if a["gl"] > 0 else None),
+        }}
     return out
 
 

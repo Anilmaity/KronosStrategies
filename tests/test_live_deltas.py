@@ -19,7 +19,7 @@ if _STRAT_DIR not in sys.path:
 
 from audit_worker.live_deltas import deltas, live_summary, _IST_SKEW  # noqa: E402
 from shared.models import (  # noqa: E402
-    CurrencyPair, Position, Strategy, User, UserBroker, UserStrategy,
+    CurrencyPair, Order, Position, Strategy, User, UserBroker, UserStrategy,
 )
 
 WIN_START = datetime(2026, 7, 1, tzinfo=timezone.utc)
@@ -49,14 +49,20 @@ def _seed(s, name):
     return us
 
 
-def _pos(s, us, realized, created_utc, qty=0):
+def _pos(s, us, realized, created_utc, qty=0, lots=0.10):
     # Stored created_at is naive IST wall clock (get_kolkata_time convention).
-    s.add(Position(
+    pos = Position(
         symbol="XAU_USD", quantity=Decimal(qty),
         realized_profit_loss=Decimal(str(realized)),
         user_strategy_id=us.id,
         created_at=created_utc.replace(tzinfo=None) + _IST_SKEW,
-    ))
+    )
+    s.add(pos)
+    s.flush()
+    # live_summary recovers sizing-invariant points via the ENTRY order's
+    # lots -- every seeded live Position needs one for the join to match.
+    s.add(Order(position_id=pos.id, condition="ENTRY",
+                quantity=Decimal(str(lots))))
     s.flush()
 
 
@@ -72,9 +78,14 @@ def test_aggregates_wins_losses_and_excludes_open(db):
 
     out = live_summary(db, ["KRONOS_S93_FVG_SCALP"], WIN_START, WIN_END)
     agg = out["KRONOS_S93_FVG_SCALP"]
-    assert agg["trades"] == 3
-    assert agg["pnl_usd"] == pytest.approx(14.0)   # 0.14 units -> $14.00
-    assert agg["win_rate"] == pytest.approx(66.67)
+    # All three seeded at the default lots=0.10 -> points = units / 0.10.
+    assert agg["usd"]["trades"] == 3
+    assert agg["usd"]["pnl_usd"] == pytest.approx(14.0)   # 0.14 units -> $14.00
+    assert agg["usd"]["win_rate"] == pytest.approx(66.67)
+    assert agg["points"]["trades"] == 3
+    assert agg["points"]["pnl_pts"] == pytest.approx(1.4)   # 1.0 - 0.4 + 0.8
+    assert agg["points"]["win_rate"] == pytest.approx(66.67)
+    assert agg["points"]["profit_factor"] == pytest.approx(1.8 / 0.4)
 
 
 def test_ist_skew_window_edges(db):
@@ -85,8 +96,11 @@ def test_ist_skew_window_edges(db):
     # exactly at the window start: included.
     _pos(db, us, 0.03, WIN_START)
     out = live_summary(db, ["KRONOS_S99_MSS_FVG"], WIN_START, WIN_END)
-    assert out["KRONOS_S99_MSS_FVG"]["trades"] == 1
-    assert out["KRONOS_S99_MSS_FVG"]["pnl_usd"] == pytest.approx(3.0)
+    blk = out["KRONOS_S99_MSS_FVG"]
+    assert blk["usd"]["trades"] == 1
+    assert blk["usd"]["pnl_usd"] == pytest.approx(3.0)
+    assert blk["points"]["trades"] == 1
+    assert blk["points"]["pnl_pts"] == pytest.approx(0.3)   # 0.03 / 0.10
 
 
 def test_name_filter(db):
