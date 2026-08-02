@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from audit_worker.sizing import matched_usd
 from backtest.manager_sim_engine import SimConfig, SimResult, TradeRecord
 
 EQUITY_MAX_POINTS = 2000
@@ -62,6 +63,34 @@ def sim_per_strategy(trades: list[TradeRecord], cfg: SimConfig) -> dict[str, dic
                               if a["gl"] > 0 else None),
         }}
     return out
+
+
+def add_matched_usd(sim_map: dict[str, dict], trades: list[TradeRecord],
+                    risk_usd: float) -> dict[str, dict]:
+    """Attach a `usd` block per strategy to `sim_map`, in place.
+
+    Re-prices each sim trade at live's inferred per-trade risk budget
+    (sizing.matched_usd, same clamp/round as entry_manager._risk_sized_qty)
+    so sim and live dollars sit on the same economic basis. `risk_usd` must
+    be a real number (None means the caller should skip calling this and
+    omit the usd blocks instead). Returns `sim_map` for convenience.
+    """
+    acc: dict[str, dict] = {}
+    for t in trades:
+        a = acc.setdefault(t.strategy, {"usd": 0.0, "n": 0, "w": 0})
+        sl_dist = abs(t.entry_px - t.sl)
+        usd = matched_usd(t.pnl_pts, sl_dist, risk_usd)
+        a["usd"] += usd
+        a["n"] += 1
+        if usd > 0:
+            a["w"] += 1
+    for name, a in acc.items():
+        sim_map.setdefault(name, {})["usd"] = {
+            "pnl_usd": round(a["usd"], 2),
+            "trades": a["n"],
+            "win_rate": _win_rate(a["w"], a["n"]),
+        }
+    return sim_map
 
 
 def equity_curve(trades: list[TradeRecord]) -> list[list]:
