@@ -16,7 +16,15 @@
 - Live points recovery uses the ENTRY `Order.quantity` (`Order.condition == "ENTRY"`, join on `position_id`) — NOT `total_buy_quantity` (0 for shorts) and NOT `quantity` (zeroes on close).
 - `StrategySignal.status` ∈ {`FIRED`, `PLACED`, `REJECTED`}; `rejection_reason` set only on REJECTED.
 - `Position.realized_profit_loss` is stored in PnL units (points × lots); USD = units × 100 (`_USD_PER_PNL_UNIT`).
-- Run from `strategies/` (the package root the worker uses). Tests live under `strategies/tests/`.
+- **Test environment (verified 2026-08-02):** tests live in repo-root `tests/` (NOT `tests/`); `pytest.ini` (`testpaths = tests`) is at repo root. Run from the repo root `E:/Projects/Kronos/KronosStrategies` with the repo-root venv: `.venv/Scripts/python.exe -m pytest tests/<file> -q`. The source packages live under `strategies/`, so every NEW test file must begin with the sys.path boilerplate (copy verbatim from `tests/test_mbt_results.py:4-13`):
+  ```python
+  import os, sys
+  _STRAT_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
+  if _STRAT_DIR not in sys.path:
+      sys.path.insert(0, _STRAT_DIR)
+  ```
+- **In-memory DB pattern:** reuse the `db` fixture + `_seed(s, name)` helper from `tests/test_live_deltas.py:29-49` (in-memory SQLite, `StaticPool`, `Position.metadata.create_all`). Where a task's illustrative test code says `sqlite_session`, use this `db`-style fixture instead. For live-points tests, EXTEND the `_pos` helper to also insert an ENTRY `Order(position_id=pos.id, condition="ENTRY", quantity=<lots>)` — live points recovery joins it.
+- **Existing tests to keep green / update in-task** (the shape changes below break them): `tests/test_live_deltas.py` (live_summary + `deltas` shape → Tasks 3 & 6), `tests/test_mbt_results.py` (`sim_per_strategy` + `assemble` → Tasks 3 & 6), `tests/test_entry_gates.py` (entry_manager gates → Task 1), `tests/test_mbt_worker.py` + `tests/test_mbt_engine_hook.py` (worker/engine → Tasks 2 & 6). Run the FULL `tests/` suite green before every commit.
 - Scope: current live roster only. No trailing-exit preview. No strategy logic changes; the `entry_manager` refactor in Task 1 must be behavior-preserving.
 
 ---
@@ -31,7 +39,7 @@
 - Modify `strategies/audit_worker/results.py` — sim points blocks; assemble new keys.
 - Create `strategies/audit_worker/reconcile.py` — StrategySignal aggregation.
 - Modify `strategies/audit_worker/worker.py` — call reconcile; pass new data to assemble.
-- Tests: `strategies/tests/test_gate_rules.py`, `test_sim_entry_gates.py`, `test_live_points.py`, `test_sizing_matched_usd.py`, `test_reconcile.py`, `test_mbt_result_assembly.py`.
+- Tests: `tests/test_gate_rules.py`, `test_sim_entry_gates.py`, `test_live_points.py`, `test_sizing_matched_usd.py`, `test_reconcile.py`, `test_mbt_result_assembly.py`.
 - Frontend: modify the Backtest-tab detail component in `kronos_frontend` (display-only).
 
 ---
@@ -41,7 +49,7 @@
 **Files:**
 - Create: `strategies/shared/gate_rules.py`
 - Modify: `strategies/strategy/entry_manager.py:122-146` (replace local `_parse_utc_windows` / `_in_news_blackout`)
-- Test: `strategies/tests/test_gate_rules.py`
+- Test: `tests/test_gate_rules.py`
 
 **Interfaces:**
 - Produces:
@@ -52,7 +60,7 @@
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# strategies/tests/test_gate_rules.py
+# tests/test_gate_rules.py
 from datetime import datetime, time
 from shared.gate_rules import parse_utc_windows, in_news_blackout, sl_too_tight
 
@@ -77,7 +85,7 @@ def test_sl_too_tight():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd strategies && python -m pytest tests/test_gate_rules.py -v`
+Run: `.venv/Scripts/python.exe -m pytest tests/test_gate_rules.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'shared.gate_rules'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -125,7 +133,7 @@ def sl_too_tight(entry_price: float, stop_loss: float | None,
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd strategies && python -m pytest tests/test_gate_rules.py -v`
+Run: `.venv/Scripts/python.exe -m pytest tests/test_gate_rules.py -v`
 Expected: PASS (3 tests)
 
 - [ ] **Step 5: Refactor entry_manager to import the shared helpers (behavior-preserving)**
@@ -146,13 +154,13 @@ Leave the `log.warning` on malformed windows out of the shared helper (it silent
 
 - [ ] **Step 6: Verify entry_manager still imports and its tests pass**
 
-Run: `cd strategies && python -c "import strategy.entry_manager" && python -m pytest tests/ -k "entry" -q`
-Expected: imports clean; existing entry tests PASS.
+Run (from repo root): `.venv/Scripts/python.exe -m pytest tests/test_entry_gates.py -q` (and any other `tests/test_entry*.py`)
+Expected: existing entry-gate tests PASS unchanged (the refactor is behavior-preserving).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add strategies/shared/gate_rules.py strategies/tests/test_gate_rules.py strategies/strategy/entry_manager.py
+git add strategies/shared/gate_rules.py tests/test_gate_rules.py strategies/strategy/entry_manager.py
 git commit -m "$(printf 'feat(mbt): shared gate_rules; entry_manager uses them\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>')"
 ```
 
@@ -162,7 +170,7 @@ git commit -m "$(printf 'feat(mbt): shared gate_rules; entry_manager uses them\n
 
 **Files:**
 - Modify: `strategies/backtest/manager_sim_engine.py` (`SimConfig` @ 24-44; entry branch @ ~546-588; `SimResult` @ ~326-332; `run_sim` return)
-- Test: `strategies/tests/test_sim_entry_gates.py`
+- Test: `tests/test_sim_entry_gates.py`
 
 **Interfaces:**
 - Consumes: `shared.gate_rules.in_news_blackout`, `sl_too_tight` (Task 1).
@@ -171,7 +179,7 @@ git commit -m "$(printf 'feat(mbt): shared gate_rules; entry_manager uses them\n
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# strategies/tests/test_sim_entry_gates.py
+# tests/test_sim_entry_gates.py
 from datetime import datetime
 from backtest.manager_sim_engine import SimConfig
 from shared.gate_rules import in_news_blackout, sl_too_tight, parse_utc_windows
@@ -193,7 +201,7 @@ def test_gate_predicates_used_by_sim_match_shared():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd strategies && python -m pytest tests/test_sim_entry_gates.py -v`
+Run: `.venv/Scripts/python.exe -m pytest tests/test_sim_entry_gates.py -v`
 Expected: FAIL — `AttributeError: 'SimConfig' object has no attribute 'model_entry_gates'`
 
 - [ ] **Step 3: Add SimConfig fields**
@@ -207,7 +215,7 @@ In `SimConfig` (after `gated: bool = True`, before `slice_rows`):
 
 - [ ] **Step 4: Run the field test to verify it passes**
 
-Run: `cd strategies && python -m pytest tests/test_sim_entry_gates.py -v`
+Run: `.venv/Scripts/python.exe -m pytest tests/test_sim_entry_gates.py -v`
 Expected: PASS (2 tests)
 
 - [ ] **Step 5: Model the gates in the entry loop**
@@ -242,13 +250,13 @@ Add `entry_gate_rejects: dict[str, dict[str, int]]` to the `SimResult` dataclass
 
 Append to `tests/test_sim_entry_gates.py` a small replay assertion using the existing fixture bars if one is available (see `tests/test_mbt_worker.py` for the fixture pattern); otherwise assert that a `run_sim` over a tiny synthetic frame set with `model_entry_gates=False` produces `entry_gate_rejects` all-zero and with `True` is a dict keyed by strategy. Then:
 
-Run: `cd strategies && python -m pytest tests/ -q`
+Run: `.venv/Scripts/python.exe -m pytest tests/ -q`
 Expected: PASS (full suite green, including the 35 existing tests).
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add strategies/backtest/manager_sim_engine.py strategies/tests/test_sim_entry_gates.py
+git add strategies/backtest/manager_sim_engine.py tests/test_sim_entry_gates.py
 git commit -m "$(printf 'feat(mbt): model sl-too-tight + news-blackout gates in sim\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>')"
 ```
 
@@ -259,7 +267,7 @@ git commit -m "$(printf 'feat(mbt): model sl-too-tight + news-blackout gates in 
 **Files:**
 - Modify: `strategies/audit_worker/live_deltas.py`
 - Modify: `strategies/audit_worker/results.py` (`sim_per_strategy`)
-- Test: `strategies/tests/test_live_points.py`
+- Test: `tests/test_live_points.py`
 
 **Interfaces:**
 - Produces:
@@ -270,7 +278,7 @@ git commit -m "$(printf 'feat(mbt): model sl-too-tight + news-blackout gates in 
 - [ ] **Step 1: Write the failing test** (uses an in-memory SQLite session like the backend tests)
 
 ```python
-# strategies/tests/test_live_points.py
+# tests/test_live_points.py
 from datetime import datetime, timedelta
 import shared.models as m
 from audit_worker.live_deltas import live_summary
@@ -306,7 +314,7 @@ Add a `sqlite_session` fixture to `tests/conftest.py` if one does not exist (mir
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd strategies && python -m pytest tests/test_live_points.py -v`
+Run: `.venv/Scripts/python.exe -m pytest tests/test_live_points.py -v`
 Expected: FAIL — `KeyError: 'points'` (current `live_summary` returns flat `pnl_usd`).
 
 - [ ] **Step 3: Rewrite `live_summary` to emit points + usd**
@@ -384,15 +392,19 @@ def sim_per_strategy(trades, cfg):
     return out
 ```
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 5: Update the existing tests broken by the shape change**
 
-Run: `cd strategies && python -m pytest tests/test_live_points.py -v`
-Expected: PASS.
+`tests/test_live_deltas.py` asserts the OLD flat `live_summary` shape (`agg["pnl_usd"]`, `agg["trades"]`) and its `_pos` helper seeds NO ENTRY Order — both now fail (new shape is `agg["usd"]["pnl_usd"]` / `agg["points"][...]`, and the ENTRY-order join drops orderless positions). Update `_pos` to also insert `Order(position_id=<pos.id>, condition="ENTRY", quantity=<lots>)` (add a `lots` param, default 0.10; import `Order` from `shared.models`), and rewrite the assertions to the new `{points, usd}` shape. Leave `test_deltas_math_and_live_missing` for Task 6 (it owns `deltas`). Also update `tests/test_mbt_results.py` where it asserts `sim_per_strategy`'s old flat shape to the new `{"points": {...}}` shape.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Run the full suite**
+
+Run: `.venv/Scripts/python.exe -m pytest tests/test_live_points.py tests/test_live_deltas.py tests/test_mbt_results.py -q` then `.venv/Scripts/python.exe -m pytest tests/ -q`
+Expected: PASS (full suite green).
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add strategies/audit_worker/live_deltas.py strategies/audit_worker/results.py strategies/tests/test_live_points.py strategies/tests/conftest.py
+git add tests/test_live_points.py tests/test_live_deltas.py tests/test_mbt_results.py strategies/audit_worker/live_deltas.py strategies/audit_worker/results.py
 git commit -m "$(printf 'feat(mbt): sizing-invariant points blocks (live via ENTRY-order lots)\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>')"
 ```
 
@@ -403,7 +415,7 @@ git commit -m "$(printf 'feat(mbt): sizing-invariant points blocks (live via ENT
 **Files:**
 - Create: `strategies/audit_worker/sizing.py`
 - Modify: `strategies/audit_worker/live_deltas.py` (add usd matching in `deltas`), `results.py`
-- Test: `strategies/tests/test_sizing_matched_usd.py`
+- Test: `tests/test_sizing_matched_usd.py`
 
 **Interfaces:**
 - Produces:
@@ -414,7 +426,7 @@ git commit -m "$(printf 'feat(mbt): sizing-invariant points blocks (live via ENT
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# strategies/tests/test_sizing_matched_usd.py
+# tests/test_sizing_matched_usd.py
 from audit_worker.sizing import infer_live_risk_usd, matched_usd
 
 
@@ -434,7 +446,7 @@ def test_matched_usd_prices_sim_trade_like_live():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd strategies && python -m pytest tests/test_sizing_matched_usd.py -v`
+Run: `.venv/Scripts/python.exe -m pytest tests/test_sizing_matched_usd.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'audit_worker.sizing'`
 
 - [ ] **Step 3: Implement `sizing.py`** (mirrors `entry_manager._risk_sized_qty` clamp/round)
@@ -472,7 +484,7 @@ def matched_usd(pnl_pts: float, sl_dist_pts: float, risk_usd: float,
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd strategies && python -m pytest tests/test_sizing_matched_usd.py -v`
+Run: `.venv/Scripts/python.exe -m pytest tests/test_sizing_matched_usd.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Add sim matched-USD into the comparison**
@@ -481,11 +493,11 @@ Extend `results.sim_per_strategy` to also carry, per strategy, the list of `(pnl
 
 - [ ] **Step 6: Run tests + commit**
 
-Run: `cd strategies && python -m pytest tests/test_sizing_matched_usd.py tests/test_live_points.py -q`
+Run: `.venv/Scripts/python.exe -m pytest tests/test_sizing_matched_usd.py tests/test_live_points.py -q`
 Expected: PASS.
 
 ```bash
-git add strategies/audit_worker/sizing.py strategies/audit_worker/results.py strategies/audit_worker/live_deltas.py strategies/tests/test_sizing_matched_usd.py
+git add strategies/audit_worker/sizing.py strategies/audit_worker/results.py strategies/audit_worker/live_deltas.py tests/test_sizing_matched_usd.py
 git commit -m "$(printf 'feat(mbt): matched-USD via inferred live risk budget\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>')"
 ```
 
@@ -495,7 +507,7 @@ git commit -m "$(printf 'feat(mbt): matched-USD via inferred live risk budget\n\
 
 **Files:**
 - Create: `strategies/audit_worker/reconcile.py`
-- Test: `strategies/tests/test_reconcile.py`
+- Test: `tests/test_reconcile.py`
 
 **Interfaces:**
 - Produces: `reconcile.reconcile(session, strategy_names, start_utc, end_utc, sim_counts: dict[str, int]) -> dict[str, dict | str]` — per name: `{"live_generated", "live_placed", "rejected": {reason: n}, "sim_trades"}`, or the string `"unavailable"` when no rows exist for the window.
@@ -504,7 +516,7 @@ git commit -m "$(printf 'feat(mbt): matched-USD via inferred live risk budget\n\
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# strategies/tests/test_reconcile.py
+# tests/test_reconcile.py
 from datetime import datetime, timedelta
 import shared.models as m
 from audit_worker.reconcile import reconcile
@@ -545,7 +557,7 @@ def test_reconcile_unavailable_when_empty(sqlite_session):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd strategies && python -m pytest tests/test_reconcile.py -v`
+Run: `.venv/Scripts/python.exe -m pytest tests/test_reconcile.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'audit_worker.reconcile'`
 
 - [ ] **Step 3: Implement `reconcile.py`**
@@ -596,13 +608,13 @@ def reconcile(session, strategy_names, start_utc, end_utc, sim_counts):
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd strategies && python -m pytest tests/test_reconcile.py -v`
+Run: `.venv/Scripts/python.exe -m pytest tests/test_reconcile.py -v`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add strategies/audit_worker/reconcile.py strategies/tests/test_reconcile.py
+git add strategies/audit_worker/reconcile.py tests/test_reconcile.py
 git commit -m "$(printf 'feat(mbt): reconcile sim trades vs StrategySignal audit\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>')"
 ```
 
@@ -613,7 +625,7 @@ git commit -m "$(printf 'feat(mbt): reconcile sim trades vs StrategySignal audit
 **Files:**
 - Modify: `strategies/audit_worker/worker.py` (`process_run` "comparing" phase @ ~167-176)
 - Modify: `strategies/audit_worker/results.py` (`assemble` signature)
-- Test: `strategies/tests/test_mbt_result_assembly.py`
+- Test: `tests/test_mbt_result_assembly.py`
 
 **Interfaces:**
 - Consumes: Tasks 3-5 (`sim_per_strategy`, `add_matched_usd`, `live_summary`, `infer_live_risk_usd`, `reconcile`).
@@ -622,7 +634,7 @@ git commit -m "$(printf 'feat(mbt): reconcile sim trades vs StrategySignal audit
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# strategies/tests/test_mbt_result_assembly.py
+# tests/test_mbt_result_assembly.py
 from audit_worker import results
 
 def test_assemble_carries_points_and_reconciliation():
@@ -649,7 +661,7 @@ def test_assemble_carries_points_and_reconciliation():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd strategies && python -m pytest tests/test_mbt_result_assembly.py -v`
+Run: `.venv/Scripts/python.exe -m pytest tests/test_mbt_result_assembly.py -v`
 Expected: FAIL — `AttributeError: module 'audit_worker.results' has no attribute 'assemble_v2'`
 
 - [ ] **Step 3: Add `assemble_v2` (keep old `assemble` callers working)**
@@ -701,17 +713,17 @@ Import `sizing, reconcile` alongside the existing `from audit_worker import ...`
 
 - [ ] **Step 5: Update `live_deltas.deltas` to diff both sub-blocks**
 
-`deltas(sim, live)` must produce, per name, `{"sim": s, "live": l, "delta": {...}}` where `delta` carries a `points` block (`sim.points - live.points`) and, when both have `usd`, a `usd` block. Guard `live=None` (sim knew a strategy live never traded) → `delta=None`.
+`deltas(sim, live)` must produce, per name, `{"sim": s, "live": l, "delta": {...}}` where `delta` carries a `points` block (`sim.points - live.points`) and, when both have `usd`, a `usd` block. Guard `live=None` (sim knew a strategy live never traded) → `delta=None`. Then update the now-broken existing tests: `tests/test_live_deltas.py::test_deltas_math_and_live_missing` (rewrite its sim/live inputs and expected `delta` to the `{points, usd}` sub-block shape) and any `assemble` assertion in `tests/test_mbt_results.py` (point it at `assemble_v2`'s output keys, or keep a thin `assemble` shim if the plan's Step 4 kept one).
 
 - [ ] **Step 6: Run the full suite + import-cleanliness guard**
 
-Run: `cd strategies && python -m pytest tests/ -q && python -m pytest tests/test_mbt_worker.py -q`
+Run: `.venv/Scripts/python.exe -m pytest tests/ -q` then `.venv/Scripts/python.exe -m pytest tests/test_mbt_worker.py -q`
 Expected: PASS — including the guard proving the worker imports no `shared.metaapi_client`.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add strategies/audit_worker/worker.py strategies/audit_worker/results.py strategies/audit_worker/live_deltas.py strategies/tests/test_mbt_result_assembly.py
+git add strategies/audit_worker/worker.py strategies/audit_worker/results.py strategies/audit_worker/live_deltas.py tests/test_mbt_result_assembly.py tests/test_live_deltas.py tests/test_mbt_results.py
 git commit -m "$(printf 'feat(mbt): wire points/matched-usd/reconciliation into worker result\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>')"
 ```
 
