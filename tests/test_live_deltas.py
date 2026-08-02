@@ -134,3 +134,46 @@ def test_deltas_math_and_live_missing():
     assert out["D"]["delta"]["points"] == {"pnl_pts": 0.5, "trades": 1,
                                            "win_rate": -50.0}
     assert "usd" not in out["D"]["delta"]
+
+
+def test_deltas_all_names_surfaces_zero_sim_trade_strategies():
+    # A roster strategy the sim produced ZERO trades for (absent from `sim`)
+    # must still appear -- these are the biggest sim/live gaps and were
+    # previously silently dropped because `deltas` only iterated sim.items().
+    sim = {
+        "A": {"points": {"pnl_pts": 10.0, "trades": 4, "win_rate": 50.0},
+              "usd": {"pnl_usd": 100.0, "trades": 4, "win_rate": 50.0}},
+    }
+    live = {
+        # C traded live but the sim never fired it in this window.
+        "C": {"points": {"pnl_pts": 2.0, "trades": 1, "win_rate": 100.0},
+              "usd": {"pnl_usd": 20.0, "trades": 1, "win_rate": 100.0}},
+    }
+    out = deltas(sim, live, all_names=["A", "C", "E"])
+
+    # C: zero sim trades but live activity -> present, zeroed sim.points,
+    # live populated, delta computed against the zeroed sim baseline.
+    assert out["C"]["sim"] == {"points": {"pnl_pts": 0.0, "trades": 0,
+                                          "win_rate": 0.0,
+                                          "profit_factor": None}}
+    assert "usd" not in out["C"]["sim"]
+    assert out["C"]["live"] == live["C"]
+    assert out["C"]["delta"]["points"] == {"pnl_pts": -2.0, "trades": -1,
+                                           "win_rate": -100.0}
+    # sim has no usd block for C (zeroed) -> delta stays points-only even
+    # though live priced one, same rule as an ordinary sim strategy.
+    assert "usd" not in out["C"]["delta"]
+
+    # E: zero sim trades AND no live activity -> still present, both sides
+    # empty/zeroed, delta is None (never both-sided).
+    assert out["E"]["sim"] == {"points": {"pnl_pts": 0.0, "trades": 0,
+                                          "win_rate": 0.0,
+                                          "profit_factor": None}}
+    assert out["E"]["live"] is None
+    assert out["E"]["delta"] is None
+
+    # A (present in sim, absent from all_names duplication) still behaves
+    # exactly as the no-all_names case.
+    assert out["A"]["live"] is None and out["A"]["delta"] is None
+
+    assert set(out.keys()) == {"A", "C", "E"}

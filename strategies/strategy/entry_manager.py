@@ -24,7 +24,10 @@ from shared.models import (
 from shared.metaapi_client import client_for_broker
 from shared.tsdb_reader import fetch_latest_ltp, fetch_latest_spread
 from shared.event_gate import event_window_open
-from shared.gate_rules import parse_utc_windows, in_news_blackout as _shared_in_blackout
+from shared.gate_rules import (
+    parse_utc_windows, in_news_blackout as _shared_in_blackout, sl_too_tight,
+    MIN_SL_DIST_PTS, NEWS_BLACKOUT_UTC,
+)
 from shared import obs
 from strategy.ict_engine import EntrySignal
 
@@ -59,10 +62,12 @@ NO_ADD_TO_LOSER = os.getenv("NO_ADD_TO_LOSER", "true").strip().lower() \
 # the signal with an auditable StrategySignal.rejection_reason.
 #
 # UTC windows "HH:MM-HH:MM[,HH:MM-HH:MM...]"; no new entries inside them.
-NEWS_BLACKOUT_UTC = os.getenv("NEWS_BLACKOUT_UTC", "12:25-12:45")
 # Stops tighter than live round-trip friction (~1.5pt spread+slippage+fees on
 # XAUUSD) are negative-EV regardless of direction.
-MIN_SL_DIST_PTS = float(os.getenv("MIN_SL_DIST_PTS", "1.5"))
+# NEWS_BLACKOUT_UTC / MIN_SL_DIST_PTS are single-sourced from shared.gate_rules
+# (same env var names/defaults, imported above) so the offline manager sim can
+# never model a different gate than live even if the box overrides the env
+# (2026-08 fidelity fix).
 # Reject when the market already ran past the signal level by more than
 # min(MAX_ENTRY_DRIFT_PTS, MAX_ENTRY_DRIFT_FRAC x stop distance): the backtest
 # fills AT the level, so chasing beyond that is unmodelled risk.
@@ -715,7 +720,7 @@ def place_entry(signal: EntrySignal, symbol: str = SYMBOL, variation: str | None
 
         sl_dist = (abs(float(signal.entry_price) - float(signal.stop_loss))
                    if signal.stop_loss is not None else None)
-        if sl_dist is not None and 0 < sl_dist < MIN_SL_DIST_PTS:
+        if sl_too_tight(signal.entry_price, signal.stop_loss, MIN_SL_DIST_PTS):
             _update_signal_status(
                 signal_log_id, "REJECTED",
                 rejection_reason=f"sl_too_tight: {sl_dist:.2f}pt < {MIN_SL_DIST_PTS}pt")

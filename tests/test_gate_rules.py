@@ -23,3 +23,12 @@ def test_sl_too_tight():
     assert sl_too_tight(2000.0, 1999.0, 1.5) is True    # 1.0 < 1.5
     assert sl_too_tight(2000.0, 1997.0, 1.5) is False   # 3.0 >= 1.5
     assert sl_too_tight(2000.0, None, 1.5) is False     # no stop -> never too tight
+
+
+def test_sl_too_tight_zero_distance_falls_through():
+    # Matches live entry_manager.place_entry's inline check EXACTLY: a
+    # sl_dist of exactly 0 (stop == entry) is NOT flagged as too-tight here
+    # -- it falls through to _risk_sized_qty's degenerate-stop path instead.
+    # Without the `0 <` lower bound this predicate would (wrongly) return
+    # True at sl_dist == 0, diverging from live.
+    assert sl_too_tight(2000.0, 2000.0, 1.5) is False

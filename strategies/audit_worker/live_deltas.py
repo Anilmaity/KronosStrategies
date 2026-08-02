@@ -132,13 +132,35 @@ def trade_losses_usd(session, strategy_names: list[str], start_utc: datetime,
     return [float(r[0] or 0.0) * _USD_PER_PNL_UNIT for r in rows]
 
 
-def deltas(sim: dict[str, dict], live: dict[str, dict]) -> dict[str, dict]:
+_ZERO_SIM_POINTS: dict = {
+    "points": {"pnl_pts": 0.0, "trades": 0, "win_rate": 0.0, "profit_factor": None},
+}
+
+
+def deltas(sim: dict[str, dict], live: dict[str, dict],
+          all_names: list[str] | None = None) -> dict[str, dict]:
     """Per-strategy sim / live / delta blocks, each covering the sizing-
     invariant `points` sub-block and, when both sides have priced one, the
     matched-`usd` sub-block. Strategies the sim knows but live never traded
-    get live=None, delta=None."""
+    get live=None, delta=None.
+
+    `all_names`, when given (the full roster, not just names the sim
+    happened to produce a trade for), guarantees every roster strategy gets
+    an entry -- a strategy absent from `sim` (zero sim trades in the window)
+    still appears, with a zeroed `sim.points` block, rather than being
+    silently dropped. These are the biggest sim/live gaps and must be
+    visible, not discarded."""
+    names = list(sim.keys())
+    if all_names is not None:
+        seen = set(names)
+        for name in all_names:
+            if name not in seen:
+                names.append(name)
+                seen.add(name)
+
     out: dict[str, dict] = {}
-    for name, s in sim.items():
+    for name in names:
+        s = sim.get(name, _ZERO_SIM_POINTS)
         l = live.get(name)
         entry: dict = {"sim": s, "live": l, "delta": None}
         if l is not None:

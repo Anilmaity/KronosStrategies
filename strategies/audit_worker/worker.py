@@ -183,7 +183,11 @@ def process_run(session, run, cache_dir: Path = CACHE_DIR):
         elif sim_map:
             # Nothing to omit when the sim itself produced no strategies.
             notes.append("matched-USD omitted: too few live losers to infer risk")
-        per_strategy = live_deltas.deltas(sim_map, live_map)   # points+usd sub-blocks
+        # all_names=roster ensures a strategy with zero sim trades in the
+        # window still appears (the biggest sim/live gaps must be visible,
+        # not silently dropped -- see live_deltas.deltas docstring).
+        per_strategy = live_deltas.deltas(
+            sim_map, live_map, all_names=[s.name for s in specs])
         recon = reconcile.reconcile(
             session, [s.name for s in specs],
             start_utc.to_pydatetime(), end_utc.to_pydatetime(),

@@ -16,7 +16,10 @@ from strategy_manager.regime.regime_engine import (
     compute_regime, FRAME_SPEC, session_for_hour,
 )
 from shared.market_timing import is_market_closed_utc
-from shared.gate_rules import in_news_blackout, sl_too_tight, parse_utc_windows
+from shared.gate_rules import (
+    in_news_blackout, sl_too_tight, parse_utc_windows,
+    MIN_SL_DIST_PTS, NEWS_BLACKOUT_UTC,
+)
 from backtest_strategies import s95_session_breakout, s96_h1_momentum, \
     kronos_session_breakout
 from backtest_strategies.base import Signal
@@ -34,8 +37,11 @@ class SimConfig:
     regime_cadence_min: int = 5
     gated: bool = True
     model_entry_gates: bool = True
-    min_sl_dist_pts: float = 1.5
-    news_blackout_utc: str = "12:25-12:45"
+    # Defaults are single-sourced from shared.gate_rules (same env var names
+    # as live entry_manager) so a box-level env override can never make the
+    # sim silently model a different gate than live (2026-08 fidelity fix).
+    min_sl_dist_pts: float = MIN_SL_DIST_PTS
+    news_blackout_utc: str = NEWS_BLACKOUT_UTC
     slice_rows: dict[str, int] = field(default_factory=lambda: {
         "1d": 130, "4h": 560, "1h": 760, "15m": 980, "5m": 60, "1m": 60,
     })
