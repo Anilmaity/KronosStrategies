@@ -16,6 +16,7 @@ from strategy_manager.regime.regime_engine import (
     compute_regime, FRAME_SPEC, session_for_hour,
 )
 from shared.market_timing import is_market_closed_utc
+from shared.gate_rules import in_news_blackout, sl_too_tight, parse_utc_windows
 from backtest_strategies import s95_session_breakout, s96_h1_momentum, \
     kronos_session_breakout
 from backtest_strategies.base import Signal
@@ -32,6 +33,9 @@ class SimConfig:
     max_concurrent: int = 3
     regime_cadence_min: int = 5
     gated: bool = True
+    model_entry_gates: bool = True
+    min_sl_dist_pts: float = 1.5
+    news_blackout_utc: str = "12:25-12:45"
     slice_rows: dict[str, int] = field(default_factory=lambda: {
         "1d": 130, "4h": 560, "1h": 760, "15m": 980, "5m": 60, "1m": 60,
     })
@@ -330,6 +334,12 @@ class SimResult:
     regime_rows: list[dict]
     kill_trips: list[str]         # ISO date strings of kill-switch trip days
     paused_pct: dict[str, float]  # strategy name -> % bars where gate was False
+    # strategy name -> {"sl_too_tight": n, "news_blackout": n} entry-quality
+    # gate rejections (Task 2, manager-backtest-fidelity). Defaulted so the
+    # many pre-existing SimResult(...) call sites across the test suite
+    # (test_mbt_results.py, test_manager_sim_report.py, test_mbt_worker.py)
+    # keep constructing without this field.
+    entry_gate_rejects: dict[str, dict[str, int]] = field(default_factory=dict)
 
 
 def load_frames(cache_dir: Path, start, end) -> dict[str, pd.DataFrame]:
@@ -408,7 +418,8 @@ def run_sim(
 
     if i_start >= i_end:
         return SimResult(trades=[], regime_rows=[], kill_trips=[],
-                         paused_pct={s.name: 0.0 for s in specs})
+                         paused_pct={s.name: 0.0 for s in specs},
+                         entry_gate_rejects={})
 
     # Per-TF time series for cursor advancement.
     tf_series = {tf: frames[tf]["time"] for tf in ["1m", "5m", "15m", "1h", "4h", "1d"]}
@@ -434,6 +445,12 @@ def run_sim(
     kill_trips: list[str] = []
     gate_total:  dict[str, int] = {s.name: 0 for s in specs}
     gate_paused: dict[str, int] = {s.name: 0 for s in specs}
+
+    # Deterministic entry-quality gates (Task 2, manager-backtest-fidelity):
+    # same shared predicates the live entry_manager applies, so the sim's
+    # trade set moves toward live's.
+    _blackout = parse_utc_windows(cfg.news_blackout_utc) if cfg.model_entry_gates else []
+    entry_gate_rejects = {s.name: {"sl_too_tight": 0, "news_blackout": 0} for s in specs}
 
     total_bars = i_end - i_start
 
@@ -556,6 +573,14 @@ def run_sim(
                     except Exception:
                         sig = None
                     if sig is not None:
+                        if cfg.model_entry_gates:
+                            if in_news_blackout(now, _blackout):
+                                entry_gate_rejects[spec.name]["news_blackout"] += 1
+                                continue
+                            if sl_too_tight(sig.entry_price, sig.stop_loss,
+                                            cfg.min_sl_dist_pts):
+                                entry_gate_rejects[spec.name]["sl_too_tight"] += 1
+                                continue
                         # Stamp on ANY accepted signal, phantom included:
                         # live places the order (instantly closed for a
                         # phantom) and stamps _last_entry_ts either way.
@@ -629,5 +654,6 @@ def run_sim(
         regime_rows=regime_rows,
         kill_trips=kill_trips,
         paused_pct=paused_pct,
+        entry_gate_rejects=entry_gate_rejects,
     )
 
