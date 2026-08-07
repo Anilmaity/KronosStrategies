@@ -56,11 +56,30 @@ LOOKS_LIKE_SIGNAL_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 SL_FIX_RE = re.compile(r"SL\s+is\s+\*{0,2}(\d+(?:\.\d+)?)", re.IGNORECASE)
+# Everything the signal grammar does not use: emoji, ✅/🎯/⛔ decoration, stray
+# punctuation. Stripped (to a space) before matching — see strip_decor().
+DECOR_RE = re.compile(r"[^\w\s.:\-]+", re.UNICODE)
 
 
 def clean(t: str) -> str:
     t = CLEAN_MD.sub("", t or "")
     return re.sub(r"\s+", " ", t).strip()
+
+
+def strip_decor(t: str) -> str:
+    """Drop emoji/decoration so the signal grammar can cross field boundaries.
+
+    From 2026-08-03 the channel decorates every field ("4059 🔥 SL: 4055 ⚠️ TP:
+    4064 ✅ ..."). SIGNAL_RE joins its fields with plain `\\s+`, so the match died
+    at the first emoji and 7 live signals were logged UNPARSEABLE and never
+    traded. Anything outside the grammar's own alphabet (word chars, whitespace,
+    `.` `:` `-`) is replaced with a SPACE — not removed — so an undelimited
+    "4059🔥SL:" still separates into two tokens.
+
+    Deliberately NOT folded into clean(): classify_outcome() reads the ✅ tick on
+    outcome replies, so the emoji must survive on that path.
+    """
+    return re.sub(r"\s+", " ", DECOR_RE.sub(" ", t or "")).strip()
 
 
 def classify_outcome(text: str) -> dict | None:
@@ -89,7 +108,7 @@ def looks_like_signal(text: str) -> bool:
 
 
 def parse_signal(text: str) -> dict | None:
-    m = SIGNAL_RE.search(text)
+    m = SIGNAL_RE.search(strip_decor(text))
     if not m:
         return None
     tps = [v for v in TP_VAL_RE.findall(m.group("tps"))]
