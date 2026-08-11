@@ -345,31 +345,32 @@ async def close_order(msg_id: int, reason: str):
     # quantity>0 guard in conclude_position makes this a no-op if broker
     # reconciliation already concluded it, and unfilled superseded signals have
     # no row.
-    apis_ids = pos.get("apis_pos_ids", {})
     for acc in ACCOUNTS:
         label, dash = acc["label"], acc.get("apis")
-        apis_id = apis_ids.get(label)
-        if dash is None or not apis_id:
+        if dash is None:
             continue
-        acct_orders = [o for o in pos.get("orders", []) if o.get("account", "primary") == label]
-        filled = [o for o in acct_orders if o.get("broker_state") == "filled"]
         client = ACCOUNTS_BY_LABEL.get(label)
-        rp = []
-        for o in filled:
+        for o in pos.get("orders", []):
+            if o.get("account", "primary") != label:
+                continue
+            # 'closed' legs are included deliberately: reconcile may already have
+            # settled some of them, and excluding those used to drop their PnL
+            # from the row entirely. conclude_position's quantity>0 guard makes
+            # an already-concluded row a no-op, so this can only add truth.
+            if o.get("broker_state") not in ("filled", "closed"):
+                continue
+            pid = o.get("apis_pos_id")
+            if not pid:
+                continue          # never mirrored (never filled) — nothing to flatten
             # Use an already-recorded realized figure (reconcile may have set it),
             # else pull the broker-true deal PnL, else the last live snapshot.
             val = o.get("realized_pnl")
             if val is None:
                 val = await _slice_realized_pnl(loop, client, o)
-            if val is not None:
-                rp.append(val)
-        realized = round(sum(rp), 2) if rp else None
-        close_price = next((o.get("last_price") for o in reversed(acct_orders)
-                            if o.get("last_price") is not None), None)
-        acct_vol = round(sum(float(o["volume"]) for o in acct_orders), 2) if acct_orders else None
-        await loop.run_in_executor(
-            None, lambda d=dash, pid=apis_id, rl=realized, cp=close_price, av=acct_vol:
-            d.conclude_position(pid, rl, cp, pos["side"], av, reason))
+            await loop.run_in_executor(
+                None, lambda d=dash, p=pid, rl=val, cp=o.get("last_price"),
+                v=float(o["volume"]):
+                d.conclude_position(p, rl, cp, pos["side"], v, reason))
     log.info(f"[{msg_id}] CLOSE ({reason})")
 
 
@@ -439,6 +440,36 @@ async def _slice_realized_pnl(loop, client, o: dict):
         return deal["realized_pnl"]
     o["pnl_source"] = "snapshot"
     return o.get("last_profit")
+
+
+def _slice_entry_px(pos: dict, o: dict) -> float:
+    """This slice's own broker fill price, falling back to the signal entry."""
+    fp = o.get("fill_price")
+    return float(fp) if fp is not None else float(pos["entry_mid"])
+
+
+def _slice_broker_ref(o: dict) -> str | None:
+    """The MetaAPI *position* id for this slice — what history-deals keys on,
+    and what fill_reconciler matches the dashboard row back to. Falls back to
+    the order ticket (they coincide for market fills, differ for limit fills).
+    """
+    return str(o.get("broker_position_id") or o.get("ticket_id") or "") or None
+
+
+async def _ensure_slice_row(loop, dash, pos: dict, o: dict) -> str | None:
+    """Create this slice's dashboard row once, remembering it on the slice.
+
+    One broker position == one dashboard row, so the Orders tab shows the real
+    trades (0.03 x 4) instead of one averaged 0.12 fiction.
+    """
+    if o.get("apis_pos_id"):
+        return o["apis_pos_id"]
+    pid = await loop.run_in_executor(
+        None, lambda d=dash, e=_slice_entry_px(pos, o), v=float(o["volume"]),
+        t=_slice_broker_ref(o): d.open_position(pos["side"], e, v, t))
+    if pid:
+        o["apis_pos_id"] = pid
+    return pid
 
 
 def _infer_close_reason(last_price, last_profit, tp, sl) -> str:
@@ -564,36 +595,32 @@ async def reconcile_broker() -> None:
         if changed:
             await r.set(key, json.dumps(pos))
 
-        # ── Dashboard mirror (apis_position) — one row PER account ────────
-        # Each account is its own platform Strategy, so its trades show under its
-        # own strategy/broker. Created lazily on first fill (genuine market entry);
-        # live PnL refreshed each poll. Best-effort — never blocks reconciliation.
-        apis_ids = pos.setdefault("apis_pos_ids", {})
+        # ── Dashboard mirror (apis_position) — one row PER BROKER SLICE ───
+        # Each TP leg is a separate position at the broker, so it gets its own
+        # dashboard row carrying its own volume, fill price, broker position id
+        # and PnL. Clubbing the legs into one averaged row hid the real trades
+        # and — because the clubbed row referenced only slice 1's ticket — let
+        # fill_reconciler restate the whole signal from that one slice.
+        # Created lazily on first fill; live PnL refreshed each poll.
+        # Best-effort — never blocks reconciliation.
+        mirrored = False
         for acc in ACCOUNTS:
             label, dash = acc["label"], acc.get("apis")
             if dash is None:
                 continue
-            acct_orders = [o for o in pos.get("orders", []) if o.get("account", "primary") == label]
-            filled_slices = [o for o in acct_orders if o.get("broker_state") == "filled"]
-            if not filled_slices:
-                continue
-            if not apis_ids.get(label):
-                total_vol = round(sum(float(o["volume"]) for o in acct_orders), 2)
-                first_ticket = str(acct_orders[0].get("ticket_id")) if acct_orders else None
-                new_id = await loop.run_in_executor(
-                    None, lambda d=dash, tv=total_vol, ft=first_ticket:
-                    d.open_position(pos["side"], pos["entry_mid"], tv, ft))
-                if new_id:
-                    apis_ids[label] = new_id
-                    await r.set(key, json.dumps(pos))
-            if apis_ids.get(label):
-                live_pnls = [o.get("last_profit") for o in filled_slices if o.get("last_profit") is not None]
-                live_pnl = round(sum(live_pnls), 2) if live_pnls else None
-                prices = [o.get("last_price") for o in filled_slices if o.get("last_price") is not None]
-                last_price = prices[-1] if prices else None
+            for o in pos.get("orders", []):
+                if o.get("account", "primary") != label or o.get("broker_state") != "filled":
+                    continue
+                had = bool(o.get("apis_pos_id"))
+                pid = await _ensure_slice_row(loop, dash, pos, o)
+                if not pid:
+                    continue
+                mirrored = mirrored or not had
                 await loop.run_in_executor(
-                    None, lambda d=dash, pid=apis_ids[label], lp=last_price, pl=live_pnl:
-                    d.update_live(pid, lp, pl))
+                    None, lambda d=dash, p=pid, lp=o.get("last_price"),
+                    pl=o.get("last_profit"): d.update_live(p, lp, pl))
+        if mirrored:
+            await r.set(key, json.dumps(pos))
 
         # Conclude the signal once EVERY slice (across all accounts) is terminal.
         states = [o.get("broker_state") for o in pos.get("orders", [])]
@@ -618,30 +645,25 @@ async def reconcile_broker() -> None:
             await r.set(key, json.dumps(pos))
             await r.srem(f"{REDIS_PREFIX}:open", str(sid_i))
             await loop.run_in_executor(None, db.conclude_signal, sid_i, reason, total)
-            # Flatten EACH account's dashboard position with its own realized PnL.
-            # If a broker filled then closed entirely between polls we may never
-            # have created the row — recover it (or create it) so it still shows.
-            apis_ids = pos.setdefault("apis_pos_ids", {})
+            # Flatten EACH slice's own dashboard row with its own realized PnL.
+            # If a broker filled then closed a leg entirely between polls we may
+            # never have created its row — create it now so the trade still shows.
+            # Cancelled legs never traded, so they get no row.
             for acc in ACCOUNTS:
                 label, dash = acc["label"], acc.get("apis")
                 if dash is None:
                     continue
-                acct_orders = [o for o in pos["orders"] if o.get("account", "primary") == label]
-                acct_closed = [o for o in acct_orders if o.get("broker_state") == "closed"]
-                acct_pnls = [o.get("realized_pnl") for o in acct_closed if o.get("realized_pnl") is not None]
-                acct_total = round(sum(acct_pnls), 2) if acct_pnls else None
-                acct_vol = round(sum(float(o["volume"]) for o in acct_orders), 2) if acct_orders else None
-                apis_id = apis_ids.get(label)
-                if not apis_id and reason != "broker_cancelled":
-                    apis_id = await loop.run_in_executor(None, dash.find_open_position_id)
-                    if not apis_id:
-                        apis_id = await loop.run_in_executor(
-                            None, lambda d=dash, tv=acct_vol: d.open_position(pos["side"], pos["entry_mid"], tv))
-                cp = next((o.get("last_price") for o in reversed(acct_orders)
-                           if o.get("last_price") is not None), None)
-                await loop.run_in_executor(
-                    None, lambda d=dash, pid=apis_id, t=acct_total, c=cp, av=acct_vol:
-                    d.conclude_position(pid, t, c, pos["side"], av, reason))
+                for o in pos["orders"]:
+                    if o.get("account", "primary") != label or o.get("broker_state") != "closed":
+                        continue
+                    pid = await _ensure_slice_row(loop, dash, pos, o)
+                    if not pid:
+                        continue
+                    await loop.run_in_executor(
+                        None, lambda d=dash, p=pid, rl=o.get("realized_pnl"),
+                        cp=o.get("last_price"), v=float(o["volume"]):
+                        d.conclude_position(p, rl, cp, pos["side"], v, reason))
+            await r.set(key, json.dumps(pos))
             log.info("[%s] CONCLUDED from broker: %s pnl=%s (all-acct %s)",
                      sid_i, reason, primary_total, total)
 

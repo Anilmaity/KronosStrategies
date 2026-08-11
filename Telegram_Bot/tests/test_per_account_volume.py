@@ -45,15 +45,15 @@ def test_close_order_records_per_account_volume(monkeypatch):
     monkeypatch.setattr(lt, "db", types.SimpleNamespace(close_signal=lambda *a, **k: None))
 
     def _slice(label, vol):
+        # Each slice carries its OWN dashboard row (one row per broker position).
         return {"tp_index": 1, "tp": 2015.0, "sl": 1990.0, "entry": 2000.0,
                 "volume": vol, "ticket_id": f"{label}-1", "kind": "market",
                 "account": label, "broker_state": "filled",
                 "broker_position_id": f"bp-{label}", "last_profit": 1.0,
-                "last_price": 2010.0}
+                "last_price": 2010.0, "apis_pos_id": f"apis-{label}"}
 
     pos = {
         "msg_id": 888, "side": "buy", "entry_mid": 2000.0, "total_volume": 0.10,
-        "apis_pos_ids": {"primary": "apis-p", "neymar2": "apis-n"},
         "orders": [_slice("primary", 0.10), _slice("neymar2", 0.05)],
     }
 

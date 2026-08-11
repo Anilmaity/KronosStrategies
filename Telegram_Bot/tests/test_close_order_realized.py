@@ -39,12 +39,11 @@ class _FakeDash:
 def _seed():
     return {
         "msg_id": 777, "side": "buy", "entry_mid": 2000.0, "total_volume": 0.02,
-        "apis_pos_ids": {"primary": "apis-1"},
         "orders": [{
             "tp_index": 1, "tp": 2015.0, "sl": 1990.0, "entry": 2000.0,
             "volume": 0.02, "ticket_id": "order-1", "kind": "market",
             "account": "primary", "broker_state": "filled",
-            "broker_position_id": "bpos-9",
+            "broker_position_id": "bpos-9", "apis_pos_id": "apis-1",
             "last_profit": -3.0,    # stale snapshot; real SL fill settled at -20
             "last_price": 1995.0,
         }],

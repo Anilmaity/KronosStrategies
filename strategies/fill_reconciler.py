@@ -53,6 +53,7 @@ LOOKBACK_H = int(os.getenv("RECON_LOOKBACK_H", "48"))
 _USD_PER_PNL_UNIT = {"XAU_USD": 100.0}
 _EPS_PX = 0.005          # ignore sub-half-cent price diffs
 _EPS_PNL = 0.006         # storage-column granularity is 2dp (= $1 steps)
+_EPS_VOL = 0.005         # lot sizes are 2dp; anything larger is a real mismatch
 
 logging.basicConfig(
     level=logging.INFO,
@@ -81,7 +82,7 @@ def fetch_deals(client, hours: int) -> list[dict]:
 
 
 def group_deals(deals: list[dict]) -> dict[str, dict]:
-    """positionId -> {entry_px, entry_side, out_volume, out_px_vwap,
+    """positionId -> {entry_px, entry_side, in_vol, out_volume, out_px_vwap,
     total_usd (profit + all commissions + swap)}."""
     out: dict[str, dict] = {}
     for d in deals:
@@ -89,6 +90,7 @@ def group_deals(deals: list[dict]) -> dict[str, dict]:
         if not pid:
             continue
         g = out.setdefault(pid, {"entry_px": None, "entry_side": None,
+                                 "in_vol": 0.0,
                                  "out_vol": 0.0, "out_pxvol": 0.0,
                                  "total_usd": 0.0})
         g["total_usd"] += float(d.get("profit") or 0)
@@ -98,6 +100,7 @@ def group_deals(deals: list[dict]) -> dict[str, dict]:
         if etype == "DEAL_ENTRY_IN":
             g["entry_px"] = float(d.get("price") or 0)
             g["entry_side"] = "BUY" if d.get("type") == "DEAL_TYPE_BUY" else "SELL"
+            g["in_vol"] += float(d.get("volume") or 0)
         elif etype == "DEAL_ENTRY_OUT":
             v = float(d.get("volume") or 0)
             g["out_vol"] += v
@@ -122,6 +125,24 @@ def apply_deals(sess, grouped: dict[str, dict]) -> int:
         pos = sess.query(Position).filter_by(id=eo.position_id).first()
         if pos is None:
             continue
+
+        # ── sliced-position guard ────────────────────────────────────────────
+        # We match Position -> broker deals through the ENTRY order's ticket,
+        # which assumes one Position == one broker position. A multi-TP copy
+        # trade breaks that: N broker positions are mirrored as ONE row whose
+        # ENTRY order holds only the first slice's ticket, so this group covers
+        # a fraction of the trade. Trusting it restates the whole position from
+        # one slice (live 2026-08-10: -$80.52 rewritten to -$19.65, which also
+        # under-fed the manager's kill-switch). Only true up when the deals
+        # account for the volume the ENTRY order booked.
+        booked_vol = float(eo.quantity or 0)
+        if booked_vol <= 0 or abs(g["in_vol"] - booked_vol) > _EPS_VOL:
+            log.warning(
+                "[RECON] skip position %s (%s): deals cover %.2f lots but the "
+                "ENTRY order booked %.2f — partial/sliced match, not trued up",
+                pos.id, eo.broker_order_id, g["in_vol"], booked_vol)
+            continue
+
         touched = []
 
         # ── entry-fill true-up (open and closed positions alike) ─────────────
