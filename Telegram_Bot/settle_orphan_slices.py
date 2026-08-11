@@ -59,7 +59,8 @@ def main():
         SELECT o.msg_id, o.tp_index, o.ticket_id, o.volume, s.close_reason
           FROM tg_orders o JOIN tg_signals s ON s.msg_id = o.msg_id
          WHERE s.status LIKE 'closed%%'
-           AND o.broker_state NOT IN ('closed', 'cancelled')
+           AND (o.broker_state IS NULL
+                OR o.broker_state NOT IN ('closed', 'cancelled'))
          ORDER BY o.msg_id, o.tp_index
     """)
     orphans = cur.fetchall()
@@ -106,6 +107,18 @@ def main():
         if missing:
             print(f"  signal {msg_id}: {missing} closed leg(s) still have NULL pnl — "
                   f"aggregate left alone")
+            continue
+        # A leg we could not verify means the aggregate is genuinely unknown.
+        # Stamping the partial sum would present a guess as broker truth.
+        cur.execute("""
+            SELECT COUNT(*) FROM tg_orders
+             WHERE msg_id = %s
+               AND (broker_state IS NULL OR broker_state NOT IN ('closed', 'cancelled'))
+               AND NOT (ticket_id = ANY(%s))
+        """, (msg_id, list(fresh[msg_id])))
+        if cur.fetchone()[0]:
+            print(f"  signal {msg_id}: still has unsettled leg(s) — aggregate left "
+                  f"alone (partial sum would be {total:+.2f} USD)")
             continue
         print(f"  signal {msg_id}: realized_pnl -> {total:+.2f} USD")
         if args.commit:
