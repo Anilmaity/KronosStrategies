@@ -55,7 +55,9 @@ def test_close_order_uses_deal_pnl(monkeypatch):
     account = {"label": "primary", "client": broker, "risk_usd": 100.0, "apis": dash}
     monkeypatch.setattr(lt, "ACCOUNTS", [account])
     monkeypatch.setattr(lt, "ACCOUNTS_BY_LABEL", {"primary": broker})
-    monkeypatch.setattr(lt, "db", types.SimpleNamespace(close_signal=lambda *a, **k: None))
+    monkeypatch.setattr(lt, "db", types.SimpleNamespace(close_signal=lambda *a, **k: None,
+                                              record_slice_close=lambda *a, **k: None,
+                                              conclude_signal=lambda *a, **k: None))
 
     async def _go():
         lt.r, _ = await make_store(None)
@@ -73,7 +75,9 @@ def test_close_order_falls_back_to_snapshot(monkeypatch):
     account = {"label": "primary", "client": broker, "risk_usd": 100.0, "apis": dash}
     monkeypatch.setattr(lt, "ACCOUNTS", [account])
     monkeypatch.setattr(lt, "ACCOUNTS_BY_LABEL", {"primary": broker})
-    monkeypatch.setattr(lt, "db", types.SimpleNamespace(close_signal=lambda *a, **k: None))
+    monkeypatch.setattr(lt, "db", types.SimpleNamespace(close_signal=lambda *a, **k: None,
+                                              record_slice_close=lambda *a, **k: None,
+                                              conclude_signal=lambda *a, **k: None))
 
     async def _go():
         lt.r, _ = await make_store(None)

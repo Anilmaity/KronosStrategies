@@ -325,53 +325,67 @@ async def close_order(msg_id: int, reason: str):
     pos = json.loads(pos_json)
 
     loop = asyncio.get_running_loop()
+
+    # Close at the broker AND settle each leg in the same pass. Ending a signal
+    # from a channel reply takes it out of the ':open' set, so reconcile_broker
+    # can never revisit it — whatever we fail to record here is lost for good.
+    # (Signal 11001, 2026-08-10: legs 2-4 sat 'filled' with NULL realized while
+    # the broker had paid +25.24/+25.36/+24.72.)
     for o in pos.get("orders", []):
         client = ACCOUNTS_BY_LABEL.get(o.get("account", "primary"))
         if client is None:
             continue
-        if o["kind"] == "limit":
+        was_filled = o.get("broker_state") == "filled" or o["kind"] != "limit"
+        if o["kind"] == "limit" and o.get("broker_state") != "filled":
             await loop.run_in_executor(None, client.cancel_order, o["ticket_id"])
         else:
             await loop.run_in_executor(None, client.close_position, o["ticket_id"])
+        if o.get("broker_state") in ("closed", "cancelled"):
+            continue                    # already settled (reconcile got there first)
+        if was_filled:
+            # We just closed it, so history-deals may not have settled yet;
+            # _slice_realized_pnl falls back to the last live snapshot.
+            val = await _slice_realized_pnl(loop, client, o)
+            o["broker_state"], o["realized_pnl"] = "closed", val
+            await loop.run_in_executor(None, db.record_slice_close,
+                                       msg_id, o["tp_index"], o["ticket_id"],
+                                       reason, val)
+        else:
+            o["broker_state"] = "cancelled"
+            await loop.run_in_executor(None, db.record_slice_close,
+                                       msg_id, o["tp_index"], o["ticket_id"],
+                                       "cancelled", None)
 
     pos["status"] = f"closed_{reason}"
     pos["closed_at"] = datetime.now(timezone.utc).isoformat()
     await r.set(key, json.dumps(pos))
     await r.srem(f"{REDIS_PREFIX}:open", str(msg_id))
-    await loop.run_in_executor(None, db.close_signal, msg_id, reason)
-    # Mirror the close into each account's dashboard position. Realized PnL is
-    # the broker's settled deal figure for each filled slice (history deals),
-    # falling back to the last live snapshot when deals aren't settled yet. The
-    # quantity>0 guard in conclude_position makes this a no-op if broker
-    # reconciliation already concluded it, and unfilled superseded signals have
-    # no row.
+
+    # conclude_signal, not close_signal: the latter stamps status only, leaving
+    # realized_pnl NULL on every reply-closed signal.
+    settled = [o.get("realized_pnl") for o in pos.get("orders", [])
+               if o.get("broker_state") == "closed" and o.get("realized_pnl") is not None]
+    total = round(sum(settled), 2) if settled else None
+    await loop.run_in_executor(None, db.conclude_signal, msg_id, reason, total)
+
+    # Mirror the close into each slice's own dashboard row. The quantity>0 guard
+    # in conclude_position makes this a no-op if broker reconciliation already
+    # concluded that row, and never-filled legs have no row.
     for acc in ACCOUNTS:
         label, dash = acc["label"], acc.get("apis")
         if dash is None:
             continue
-        client = ACCOUNTS_BY_LABEL.get(label)
         for o in pos.get("orders", []):
             if o.get("account", "primary") != label:
                 continue
-            # 'closed' legs are included deliberately: reconcile may already have
-            # settled some of them, and excluding those used to drop their PnL
-            # from the row entirely. conclude_position's quantity>0 guard makes
-            # an already-concluded row a no-op, so this can only add truth.
-            if o.get("broker_state") not in ("filled", "closed"):
-                continue
             pid = o.get("apis_pos_id")
-            if not pid:
-                continue          # never mirrored (never filled) — nothing to flatten
-            # Use an already-recorded realized figure (reconcile may have set it),
-            # else pull the broker-true deal PnL, else the last live snapshot.
-            val = o.get("realized_pnl")
-            if val is None:
-                val = await _slice_realized_pnl(loop, client, o)
+            if not pid or o.get("broker_state") != "closed":
+                continue
             await loop.run_in_executor(
-                None, lambda d=dash, p=pid, rl=val, cp=o.get("last_price"),
-                v=float(o["volume"]):
+                None, lambda d=dash, p=pid, rl=o.get("realized_pnl"),
+                cp=o.get("last_price"), v=float(o["volume"]):
                 d.conclude_position(p, rl, cp, pos["side"], v, reason))
-    log.info(f"[{msg_id}] CLOSE ({reason})")
+    log.info(f"[{msg_id}] CLOSE ({reason}) realized={total}")
 
 
 async def sweep_stale_open() -> int:

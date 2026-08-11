@@ -42,7 +42,9 @@ def test_close_order_records_per_account_volume(monkeypatch):
     ]
     monkeypatch.setattr(lt, "ACCOUNTS", accounts)
     monkeypatch.setattr(lt, "ACCOUNTS_BY_LABEL", {"primary": broker, "neymar2": broker})
-    monkeypatch.setattr(lt, "db", types.SimpleNamespace(close_signal=lambda *a, **k: None))
+    monkeypatch.setattr(lt, "db", types.SimpleNamespace(close_signal=lambda *a, **k: None,
+                                              record_slice_close=lambda *a, **k: None,
+                                              conclude_signal=lambda *a, **k: None))
 
     def _slice(label, vol):
         # Each slice carries its OWN dashboard row (one row per broker position).
