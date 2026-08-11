@@ -104,23 +104,29 @@ def existing_rows(cur, tickets):
 
 
 def settled(client, sl):
-    """Broker-true (realized_usd, close_price) for a slice, best effort."""
+    """Broker-true (realized_usd, close_price, is_closed) for a slice.
+
+    The broker outranks our recorded state: signal 11001's legs 2-4 are still
+    'filled' in tg_orders (reconcile never settled them) while MetaAPI has them
+    closed and paid. Trusting the stale state would mirror three phantom OPEN
+    positions for trades that finished hours ago.
+    """
     if client is not None:
         try:
             deal = client.get_position_realized_pnl(sl["ticket"])
             if deal and deal.get("closed"):
-                return deal["realized_pnl"], deal.get("close_price")
+                return deal["realized_pnl"], deal.get("close_price"), True
         except Exception:
             pass
-    return sl["realized"], None
+    return sl["realized"], None, sl["state"] == "closed"
 
 
-def insert_slice(cur, sig, sl, realized_usd, close_px, created_at):
+def insert_slice(cur, sig, sl, realized_usd, close_px, is_closed, created_at):
     """One apis_position + ENTRY (+ close) order for a single broker slice."""
     is_long = sig["side"] == "buy"
     entry = sl["fill_price"] if sl["fill_price"] is not None else sig["entry_mid"]
     vol, pos_id = sl["volume"], str(uuid.uuid4())
-    closed = sl["state"] == "closed" and realized_usd is not None
+    closed = is_closed and realized_usd is not None
     rpnl = round(realized_usd / CONTRACT_SIZE, 4) if closed else 0
     ltp = close_px if close_px is not None else (sl["tp"] if closed else entry)
 
@@ -194,15 +200,16 @@ def main():
 
         new_total = 0.0
         for sl in sig["slices"]:
-            realized_usd, close_px = settled(client, sl)
+            realized_usd, close_px, is_closed = settled(client, sl)
             if args.commit:
-                _, rpnl = insert_slice(cur, sig, sl, realized_usd, close_px, created_at)
+                _, rpnl = insert_slice(cur, sig, sl, realized_usd, close_px,
+                                       is_closed, created_at)
             else:
                 rpnl = (round(realized_usd / CONTRACT_SIZE, 4)
-                        if (sl["state"] == "closed" and realized_usd is not None) else 0)
+                        if (is_closed and realized_usd is not None) else 0)
             new_total += rpnl * CONTRACT_SIZE
             print(f"    TP{sl['tp_index']} vol={sl['volume']:.2f} "
-                  f"ticket={sl['ticket']} state={sl['state']} "
+                  f"ticket={sl['ticket']} state={'closed' if is_closed else sl['state']} "
                   f"realized={0.0 if realized_usd is None else realized_usd:+.2f} USD")
         print(f"  new: {len(sig['slices'])} rows, realized {new_total:+.2f} USD")
 
