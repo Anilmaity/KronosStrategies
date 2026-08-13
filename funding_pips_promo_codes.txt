@@ -1,0 +1,74 @@
+FUNDING PIPS — PROMO / DISCOUNT CODES
+Compiled: 2026-06-24
+=====================================================
+
+IMPORTANT — READ FIRST
+- I cannot issue or guarantee a Funding Pips code. Only Funding Pips can.
+- Every code below is scraped from third-party coupon/aggregator sites,
+  which are SEO-driven and frequently list expired or never-valid codes.
+- Treat all of these as "try at checkout" — the price must visibly update
+  before you pay. Codes are ONE per order and cannot be stacked.
+- The only authoritative source is the Funding Pips "Promotions" page on
+  their own site. Check there if none of these apply.
+
+-----------------------------------------------------
+YOUR PROBLEM: "Only valid for first-time purchase"
+-----------------------------------------------------
+Most of Funding Pips' headline 20% codes (e.g. HELLO) are coded as
+FIRST-TRANSACTION-ONLY, one use per user/account. That is the error you hit.
+To get a discount on a SECOND / repeat / additional account, you need a code
+that is NOT first-purchase-locked. Options below.
+
+-----------------------------------------------------
+CODES THAT MAY WORK ON REPEAT / SECOND / EXISTING-USER PURCHASES
+(try these for your situation — least likely to throw the first-time error)
+-----------------------------------------------------
+  565df195   -> ~5% off, listed specifically as for EXISTING customers /
+                second accounts. Smaller discount, but most likely to bypass
+                the first-purchase restriction.
+  A7C727DD   -> ~20% off, listed as "evaluations, works across account
+                sizes" (sitewide-style, not flagged first-time-only).
+  2C14A034   -> ~20% off challenges, listed as sitewide. Try it.
+
+  NOTE: "sitewide" codes are your best bet for a repeat purchase — they are
+  tied to the product, not to whether you are a new account. Any code that an
+  aggregator labels "sitewide" or "all account types" is worth trying second.
+
+-----------------------------------------------------
+FIRST-PURCHASE-ONLY CODES (these are what gave you the error — for reference)
+-----------------------------------------------------
+  HELLO              -> 20% off, FIRST purchase only, one per user. Skip.
+  FOREXPROPREVIEWS   -> ~5% off, smaller, may also be new-user oriented.
+
+-----------------------------------------------------
+WORKAROUNDS IF EVERY CODE STILL REJECTS YOU
+-----------------------------------------------------
+1. Contact Funding Pips support / live chat and ask directly for a current
+   code valid on an additional account. They run rotating promos (~4 codes/
+   month) and will often hand you a working one.
+2. Some users report using a DIFFERENT email address to re-qualify as a
+   "first-time" buyer. CAUTION: this re-triggers KYC under a new identity-
+   tied account and may conflict with Funding Pips' terms (one account per
+   person). Use at your own risk — it can jeopardise payouts. Not recommended.
+3. Check the official Promotions page at checkout time — a new sitewide promo
+   may be live that needs no code at all.
+
+-----------------------------------------------------
+HOW TO APPLY
+-----------------------------------------------------
+- At checkout, paste ONE code into the promo/coupon field.
+- Confirm the total drops BEFORE paying. If it errors, try the next code.
+- You cannot combine two codes.
+- The challenge fee is generally NON-REFUNDABLE, so confirm the discount
+  applied before completing payment.
+
+-----------------------------------------------------
+SOURCES (verify yourself — codes change frequently)
+-----------------------------------------------------
+- Funding Pips official site / Promotions:  https://fundingpips.com/
+- propfirmmatch:        https://propfirmmatch.com/offers/fp-match
+- SimplyCodes:          https://simplycodes.com/store/fundingpips.com
+- WorthEPenny:          https://fundingpips.worthepenny.com/coupon/
+- marketing91:          https://www.marketing91.com/funding-pips-discount-code/
+- propvator (5% / BOGO):https://propvator.com/funding-pips/
+- dealspotr (sitewide): https://dealspotr.com/promo-codes/fundingpips.com

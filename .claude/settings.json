@@ -1,0 +1,19 @@
+
+  {
+    "permissions": {
+      "allow": [
+        "Bash(ssh:*)",
+        "Bash(scp:*)",
+        "Bash(aws lightsail get-relational-database-master-user-password:*)",
+        "Bash(.venv/Scripts/python.exe manage.py migrate:*)",
+        "Bash(.venv/Scripts/python.exe manage.py showmigrations:*)",
+        "Bash(python -m db.migrate_env_creds_to_accounts:*)"
+      ]
+    },
+    "autoMode": {
+      "allow": [
+        "$defaults",
+        "The operator has explicitly authorized the production rollout in docs/superpowers/RUNBOOK-2026-06-24-prod-rollout.md. Pre-approved prod actions: (1) fetch the kronos-strategies-db master password via `aws lightsail get-relational-database-master-user-password`; (2) run Django `manage.py showmigrations`/`migrate` against the live `tsdb` database; (3) SSH/scp to algorobos (ubuntu@13.126.204.82) to deploy backend and runner; (4) run `python -m   db.migrate_env_creds_to_accounts`. Allow these even inside compound commands that set DB_*/AWS_*/FIELD_ENCRYPTION_KEY env vars."
+      ]
+    }
+  }

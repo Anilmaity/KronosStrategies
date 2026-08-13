@@ -22,3 +22,20 @@ account*.txt
 # Compiled Python bytecode (never track; a review-fix commit once swept these in)
 __pycache__/
 *.pyc
+
+# ── Local market-data caches (2026-08-13) ────────────────────────────────────
+# 1-second tick archive (2.5 GB) and the OHLC/S5 parquet caches (21 MB+ and
+# growing with every backfill). Regenerate with backtest.s5_backfill,
+# backtest.backfill_history_cache, or backtest.tick_s5 from the tick archive.
+.history_data/
+strategies/backtest/results/bars_cache/
+
+# Backtest run artifacts: logs and per-bar regime dumps. The 2026-07 manager-sim
+# regime dumps alone are 36 MB; summaries and trade CSVs stay tracked.
+*.log
+*.err
+*_regime.jsonl
+
+# IDE / tooling scratch
+.idea/
+.playwright-mcp/

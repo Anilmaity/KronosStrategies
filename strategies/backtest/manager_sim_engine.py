@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -17,7 +17,7 @@ from strategy_manager.regime.regime_engine import (
 )
 from shared.market_timing import is_market_closed_utc
 from shared.gate_rules import (
-    in_news_blackout, sl_too_tight, parse_utc_windows,
+    in_news_blackout, sl_too_tight, parse_utc_windows, entry_drift_exceeded,
     MIN_SL_DIST_PTS, NEWS_BLACKOUT_UTC,
 )
 from backtest_strategies import s95_session_breakout, s96_h1_momentum, \
@@ -37,6 +37,43 @@ class SimConfig:
     regime_cadence_min: int = 5
     gated: bool = True
     model_entry_gates: bool = True
+    # Exit-resolution granularity: "1m" (default, historical behaviour) resolves
+    # each minute against one bar's high/low with SL checked before TP; "5s"
+    # replays the minute's S5 bars in sequence so the outcome comes from the
+    # observed order (2026-08-12 fidelity spec). Default-OFF keeps every stored
+    # baseline and the Manager Backtest tab directly comparable.
+    exec_resolution: str = "1m"
+    # Entry-drift gate (live rejects when the market ran past the signal level
+    # before the order lands). Inherently sub-minute, so it is only modelable
+    # with 5s data — default-OFF per the repo's new-gate discipline.
+    model_entry_drift: bool = False
+    # Fill entries at the REAL quote (BUY at ask, SELL at bid) from the S5 bar
+    # at order time, instead of mid +/- a scalar friction. Requires 5s data
+    # carrying bid_c/ask_c (OANDA price=MBA); silently falls back to the
+    # friction model when the columns are absent (e.g. tick-derived bars).
+    sided_fills: bool = False
+    # Charge only slippage on EXITS, not spread/2 + slippage. A stop/target
+    # level is already an executable price (the broker triggers on the far side
+    # and fills there), so subtracting a half-spread again double-charges it.
+    # Measured 2026-08-12: live stops filled AT or slightly better than the
+    # level, while the sim booked level - 0.41.
+    exit_slippage_only: bool = False
+    # Stamp entry_time at the fill moment (the bar's CLOSE) rather than the
+    # bar's open. The engine fills at bar["close"], which is realized one minute
+    # after now_ts, so max_hold was measured from a minute too early and every
+    # TIME exit fired ~60s premature (measured 2026-08-12: sim 08:47:00 vs live
+    # 08:48:06). Price-triggered exits are unaffected. Default-OFF because it
+    # shifts existing TIME-exit baselines.
+    entry_time_at_bar_close: bool = False
+    # Realized P&L from sources the sim does NOT simulate (e.g. the Telegram
+    # copy-trader), as (utc_time, usd) events. Live's kill-switch sums ALL
+    # account P&L, so without these the sim's daily loss is understated and it
+    # keeps trading after live had already stopped (observed 2026-08-12: the
+    # copy trade's -$76.50 tripped live at 09:11; the sim traded on all day).
+    external_pnl: list = field(default_factory=list)
+    # Seconds between the M1 close and the order actually landing; the S5 bar at
+    # this offset supplies the "LTP at order time" the live gate compares against.
+    entry_latency_s: float = 5.0
     # Defaults are single-sourced from shared.gate_rules (same env var names
     # as live entry_manager) so a box-level env override can never make the
     # sim silently model a different gate than live (2026-08 fidelity fix).
@@ -50,6 +87,12 @@ class SimConfig:
     def entry_friction_pts(self) -> float:
         return self.spread_pts / 2 + self.slippage_pts
 
+    @property
+    def exit_friction_pts(self) -> float:
+        """Friction applied when closing. Defaults to the entry figure so the
+        historical behaviour is unchanged unless exit_slippage_only is set."""
+        return self.slippage_pts if self.exit_slippage_only             else self.entry_friction_pts
+
     def pts_to_usd(self, pts: float) -> float:
         return pts * self.lots * 100.0
 
@@ -60,6 +103,13 @@ class StratSpec:
     module: object
     policy_key: str
     policy_params: dict
+    # Per-strategy lookback depth. None = use the engine default (_WIN_*).
+    # Live sets these PER STRATEGY in compose.yml, so a single global window
+    # makes the sim generate a different signal set than live — a
+    # trade-selection divergence (2026-08-13 fidelity fix).
+    win_1m: int | None = None
+    win_5m: int | None = None
+    win_15m: int | None = None
 
 
 STRAT_SPECS: list[StratSpec] = [
@@ -140,7 +190,8 @@ class TradeRecord:
 
 
 def open_position(sig: Signal, strat_name: str, now: datetime,
-                  cfg: SimConfig, fill_price: float | None = None) -> SimPosition:
+                  cfg: SimConfig, fill_price: float | None = None,
+                  exact_fill: float | None = None) -> SimPosition:
     """Apply entry friction and initialise a SimPosition.
 
     Entry friction (spread/2 + slippage) worsens the fill:
@@ -162,7 +213,11 @@ def open_position(sig: Signal, strat_name: str, now: datetime,
     """
     friction = cfg.entry_friction_pts
     base = fill_price if fill_price is not None else sig.entry_price
-    if sig.side == "BUY":
+    if exact_fill is not None:
+        # A real quote (ask for BUY / bid for SELL) already embeds the spread —
+        # adding scalar friction on top would double-charge it.
+        entry_px = exact_fill
+    elif sig.side == "BUY":
         entry_px = base + friction
     else:  # SELL
         entry_px = base - friction
@@ -291,6 +346,67 @@ def step_position(
     return pos, None
 
 
+def ltp_at_order_time(s5_slice: pd.DataFrame | None, latency_s: float,
+                      fallback: float) -> float:
+    """The price the live gate would have seen when the order landed.
+
+    Live fetches the LTP a few seconds after the M1 close, so the drift gate
+    compares the signal level against a price that has already moved. Picks the
+    S5 bar covering `latency_s` past the minute's start; falls back to the M1
+    close when 5s data is unavailable (drift then reads as zero, i.e. the gate
+    cannot fire — fail-open, matching live's no-price behaviour).
+    """
+    if s5_slice is None or len(s5_slice) == 0:
+        return fallback
+    idx = min(int(latency_s // 5), len(s5_slice) - 1)
+    return float(s5_slice["c"].iloc[idx])
+
+
+def sided_fill_price(s5_slice: pd.DataFrame | None, latency_s: float,
+                     side: str) -> float | None:
+    """The real quote a market order would cross at: ask for BUY, bid for SELL.
+
+    Returns None when 5s data is absent or carries no quote columns, so the
+    caller can fall back to the mid-plus-friction model.
+    """
+    if s5_slice is None or len(s5_slice) == 0:
+        return None
+    if "ask_c" not in s5_slice.columns or "bid_c" not in s5_slice.columns:
+        return None
+    idx = min(int(latency_s // 5), len(s5_slice) - 1)
+    col = "ask_c" if side == "BUY" else "bid_c"
+    value = s5_slice[col].iloc[idx]
+    if pd.isna(value):
+        return None
+    return float(value)
+
+
+def step_exit(
+    pos: SimPosition,
+    bar: pd.Series,
+    now: datetime,
+    cfg: SimConfig,
+    s5_slice: pd.DataFrame | None = None,
+    ambiguity: dict | None = None,
+) -> tuple[SimPosition | None, TradeRecord | None]:
+    """Advance an open position by one minute at the configured resolution.
+
+    Dispatch point for the 5s fidelity work. In "1m" mode this is exactly
+    step_position, so the flag is inert by default; in "5s" mode the minute's
+    S5 bars are replayed in sequence.
+
+    Falls back to the M1 bar whenever the 5s slice is missing or empty — a data
+    gap must degrade to today's behaviour, never skip the exit check.
+    """
+    if (cfg.exec_resolution or "1m") == "5s" and s5_slice is not None \
+            and len(s5_slice) > 0:
+        # Lazy import: s5_exec imports SimPosition/TradeRecord from this module,
+        # so a top-level import here would be circular.
+        from backtest.s5_exec import walk_exit
+        return walk_exit(pos, s5_slice, cfg, ambiguity=ambiguity)
+    return step_position(pos, bar, now, cfg)
+
+
 # ── Event loop ─────────────────────────────────────────────────────────────────
 
 # Pandas Timedelta strings for each TF — used by the closed-bar cursor logic.
@@ -339,6 +455,35 @@ _WIN_5M  = 300
 _WIN_15M = 350
 
 
+# Live lookback depths, transcribed from compose.yml (2026-08-13). The box may
+# have drifted from the repo's compose — reconfirm against the running services
+# before leaning on these for a roster decision.
+LIVE_WINDOWS: dict[str, dict[str, int]] = {
+    "KRONOS_S93_FVG_SCALP":      {"win_5m": 160},
+    "KRONOS_S99_MSS_FVG":        {"win_5m": 160},
+    "KRONOS_S94_SWEEP_REVERSAL": {"win_5m": 1500},
+    "KRONOS_S100_M3_COMBO":      {"win_1m": 700},
+}
+
+
+def windows_for(spec: StratSpec, frames: dict, cursors: dict
+                ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """(w1m, w5m, w15m) for one strategy, honouring its per-strategy depth.
+
+    Each window is the CLOSED bars ending at that timeframe's cursor, clamped to
+    the history actually available.
+    """
+    n1 = spec.win_1m or _WIN_1M
+    n5 = spec.win_5m or _WIN_5M
+    n15 = spec.win_15m or _WIN_15M
+    c1, c5, c15 = cursors["1m"], cursors["5m"], cursors["15m"]
+    return (
+        frames["1m"].iloc[max(0, c1 - n1):c1],
+        frames["5m"].iloc[max(0, c5 - n5):c5],
+        frames["15m"].iloc[max(0, c15 - n15):c15],
+    )
+
+
 @dataclass
 class SimResult:
     """Aggregated output from run_sim."""
@@ -352,6 +497,11 @@ class SimResult:
     # (test_mbt_results.py, test_manager_sim_report.py, test_mbt_worker.py)
     # keep constructing without this field.
     entry_gate_rejects: dict[str, dict[str, int]] = field(default_factory=dict)
+    # 5s exec diagnostics (2026-08-12 fidelity spec): "ambiguous_bars" counts
+    # single S5 bars that touched BOTH levels, i.e. the residual ordering
+    # uncertainty 5s data cannot resolve. Reported, never hidden. Defaulted so
+    # existing SimResult(...) call sites keep constructing.
+    exec_ambiguity: dict[str, int] = field(default_factory=dict)
 
 
 def load_frames(cache_dir: Path, start, end) -> dict[str, pd.DataFrame]:
@@ -436,6 +586,20 @@ def run_sim(
     # Per-TF time series for cursor advancement.
     tf_series = {tf: frames[tf]["time"] for tf in ["1m", "5m", "15m", "1h", "4h", "1d"]}
 
+    # Optional S5 frame for 5s exit resolution. Hoisted out of the hot loop; when
+    # absent or in "1m" mode every minute falls back to the M1 bar, so the flag
+    # stays inert and a missing 5s cache can never change existing results.
+    df5s = frames.get("5s")
+    use_5s = (cfg.exec_resolution or "1m") == "5s" and df5s is not None \
+        and len(df5s) > 0
+    t5s = df5s["time"] if use_5s else None
+    exec_ambiguity: dict[str, int] = {}
+    minutes_missing_5s = 0
+    if use_5s:
+        # Hoisted once per run (s5_exec imports this module, so a top-level
+        # import would be circular) and only when 5s mode is actually on.
+        from backtest.s5_exec import slice_for_minute as s5_exec_slice
+
     # Mutable simulation state.
     snap = None              # RegimeSnapshot; None until first regime evaluation
     guard = GuardState()
@@ -464,6 +628,9 @@ def run_sim(
     _blackout = parse_utc_windows(cfg.news_blackout_utc) if cfg.model_entry_gates else []
     entry_gate_rejects = {s.name: {"sl_too_tight": 0, "news_blackout": 0} for s in specs}
 
+    _ext_events = sorted(cfg.external_pnl or [], key=lambda e: e[0])
+    ext_idx = 0
+
     total_bars = i_end - i_start
 
     for i in range(i_start, i_end):
@@ -483,6 +650,7 @@ def run_sim(
         if guard.day != today:
             guard.day = today
             guard.day_realized_usd = 0.0
+            ext_idx = 0 if not cfg.external_pnl else ext_idx
             # Kill-switch auto-resets next day: evaluate_gates checks
             # guard.kill_tripped_date == today, so once today advances the
             # trip no longer gates entries (no explicit clear needed).
@@ -537,10 +705,34 @@ def run_sim(
         if snap is None:
             continue
 
-        # ── Strategy windows ───────────────────────────────────────────────────
-        w1m  = df1m.iloc[max(0, cursors["1m"]  - _WIN_1M) :cursors["1m"]]
-        w5m  = frames["5m"].iloc[max(0, cursors["5m"]  - _WIN_5M) :cursors["5m"]]
-        w15m = frames["15m"].iloc[max(0, cursors["15m"] - _WIN_15M):cursors["15m"]]
+        # Strategy windows are now computed PER SPEC (see windows_for) because
+        # live configures depth per strategy; a single shared window silently
+        # changed which signals each strategy could see.
+
+        # S5 bars for this minute (shared by every strategy stepping this bar).
+        s5_slice = None
+        s5_next = None
+        if use_5s:
+            s5_slice = s5_exec_slice(df5s, t5s, now_ts)
+            if s5_slice is None and open_positions:
+                minutes_missing_5s += 1
+            if cfg.model_entry_drift:
+                # The entry fills at this bar's CLOSE, so the price live's drift
+                # gate would read sits in the NEXT minute's S5 bars, not this
+                # minute's. Reading the current slice compares the signal
+                # against a price from before the bar even finished.
+                s5_next = s5_exec_slice(df5s, t5s, now_ts + pd.Timedelta("1min"))
+
+        # Fold in realized P&L from unsimulated sources as it lands, so the
+        # kill-switch trips when live's did.
+        while (ext_idx < len(_ext_events)
+               and _ext_events[ext_idx][0] <= now):
+            guard.day_realized_usd += _ext_events[ext_idx][1]
+            ext_idx += 1
+            if (guard.kill_tripped_date != today
+                    and guard.day_realized_usd <= -cfg.kill_switch_usd):
+                guard.kill_tripped_date = today
+                kill_trips.append(today)
 
         open_count = len(open_positions)
         gates = evaluate_gates(snap, now, guard, open_count, cfg, specs=specs)
@@ -557,7 +749,9 @@ def run_sim(
 
             if pos is not None:
                 # Exits always run regardless of gate state.
-                updated, rec = step_position(pos, bar, now, cfg)
+                updated, rec = step_exit(pos, bar, now, cfg,
+                                         s5_slice=s5_slice,
+                                         ambiguity=exec_ambiguity)
                 if rec is not None:
                     # Patch gate_reason from the position (step_position leaves it "").
                     rec = replace(rec, gate_reason=pos.gate_reason)
@@ -580,6 +774,7 @@ def run_sim(
                     prev = last_entry.get(spec.name)
                     if prev is not None and (now - prev).total_seconds() < cd:
                         continue
+                    w1m, w5m, w15m = windows_for(spec, frames, cursors)
                     try:
                         sig = spec.module.get_signal(w1m, w5m, w15m, now)
                     except Exception:
@@ -593,6 +788,18 @@ def run_sim(
                                             cfg.min_sl_dist_pts):
                                 entry_gate_rejects[spec.name]["sl_too_tight"] += 1
                                 continue
+                            if cfg.model_entry_drift:
+                                ltp = ltp_at_order_time(
+                                    s5_next, cfg.entry_latency_s,
+                                    float(bar["close"]))
+                                drifted, _detail = entry_drift_exceeded(
+                                    sig.side, sig.entry_price, sig.stop_loss,
+                                    ltp)
+                                if drifted:
+                                    entry_gate_rejects[spec.name][
+                                        "entry_drift"] = entry_gate_rejects[
+                                        spec.name].get("entry_drift", 0) + 1
+                                    continue
                         # Stamp on ANY accepted signal, phantom included:
                         # live places the order (instantly closed for a
                         # phantom) and stamps _last_entry_ts either way.
@@ -609,17 +816,31 @@ def run_sim(
                         # The SL side also applies to trailing strategies: the
                         # trail seeds hwm from the entry fill, so a fill at or
                         # beyond the signal stop is phantom-stopped immediately.
-                        if sig.side == "BUY":
+                        # Real quote at order time when available (BUY crosses
+                        # the ask, SELL the bid); otherwise mid +/- friction.
+                        quote = (sided_fill_price(s5_next, cfg.entry_latency_s,
+                                                  sig.side)
+                                 if cfg.sided_fills else None)
+                        if quote is not None:
+                            fill = quote
+                        elif sig.side == "BUY":
                             fill = bar_close + friction
+                        else:
+                            fill = bar_close - friction
+
+                        if sig.side == "BUY":
                             phantom = (fill >= sig.take_profit
                                        or fill <= sig.stop_loss)
                         else:
-                            fill = bar_close - friction
                             phantom = (fill <= sig.take_profit
                                        or fill >= sig.stop_loss)
                         if not phantom:
+                            fill_moment = (now + timedelta(minutes=1)
+                                           if cfg.entry_time_at_bar_close
+                                           else now)
                             new_pos = open_position(
-                                sig, spec.name, now, cfg, fill_price=bar_close
+                                sig, spec.name, fill_moment, cfg,
+                                fill_price=bar_close, exact_fill=quote,
                             )
                             new_pos.gate_reason = reason
                             open_positions[spec.name] = new_pos
@@ -661,11 +882,17 @@ def run_sim(
     if progress_cb is not None:
         progress_cb(1.0)
 
+    if use_5s and minutes_missing_5s:
+        exec_ambiguity["minutes_fell_back_to_1m"] = minutes_missing_5s
+        log.warning("[5s] %d minute(s) with an open position had no S5 bars — "
+                    "fell back to the M1 bar", minutes_missing_5s)
+
     return SimResult(
         trades=trades,
         regime_rows=regime_rows,
         kill_trips=kill_trips,
         paused_pct=paused_pct,
         entry_gate_rejects=entry_gate_rejects,
+        exec_ambiguity=exec_ambiguity,
     )
 

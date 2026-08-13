@@ -1,0 +1,18 @@
+{
+  "n_trades": 105,
+  "kill_trips": [],
+  "paused_pct": {
+    "KRONOS_S95_SESSION_BREAKOUT": 85.98877035373386,
+    "KRONOS_S96_H1_MOMENTUM": 98.22234699606962,
+    "KRONOS_S97_SNAP_SCALPER": 87.40370578326782,
+    "SESSION_BREAKOUT": 85.98877035373386
+  },
+  "net_usd": 131.42,
+  "win_rate": 49.5,
+  "outcomes": {
+    "TP": 37,
+    "SL": 37,
+    "TIME": 22,
+    "TRAIL": 9
+  }
+}

@@ -27,6 +27,9 @@ from shared.event_gate import event_window_open
 from shared.gate_rules import (
     parse_utc_windows, in_news_blackout as _shared_in_blackout, sl_too_tight,
     MIN_SL_DIST_PTS, NEWS_BLACKOUT_UTC,
+    MAX_ENTRY_DRIFT_PTS, MAX_ENTRY_DRIFT_FRAC,
+    drift_budget_pts as _shared_drift_budget,
+    entry_drift_exceeded as _shared_entry_drift_exceeded,
 )
 from shared import obs
 from strategy.ict_engine import EntrySignal
@@ -71,8 +74,10 @@ NO_ADD_TO_LOSER = os.getenv("NO_ADD_TO_LOSER", "true").strip().lower() \
 # Reject when the market already ran past the signal level by more than
 # min(MAX_ENTRY_DRIFT_PTS, MAX_ENTRY_DRIFT_FRAC x stop distance): the backtest
 # fills AT the level, so chasing beyond that is unmodelled risk.
-MAX_ENTRY_DRIFT_PTS = float(os.getenv("MAX_ENTRY_DRIFT_PTS", "0.5"))
-MAX_ENTRY_DRIFT_FRAC = float(os.getenv("MAX_ENTRY_DRIFT_FRAC", "0.25"))
+# MAX_ENTRY_DRIFT_PTS / MAX_ENTRY_DRIFT_FRAC are single-sourced from
+# shared.gate_rules (imported above, same env var names/defaults) so the 5s
+# offline sim applies the identical drift rule — it is the one live gate the M1
+# sim could not model at all (2026-08-12 fidelity work).
 # Fail mode for the drift gate when NO live price is available to check against:
 #   "open"   (default) - allow the entry through, the current behaviour (a
 #            price-feed hiccup must never halt trading).
@@ -138,13 +143,14 @@ def _in_news_blackout(now_utc) -> bool:
 
 
 def _drift_budget_pts(entry_price: float, stop_loss: float | None) -> float:
-    """Max tolerated adverse move past the signal level before entry."""
-    budget = MAX_ENTRY_DRIFT_PTS
-    if stop_loss is not None:
-        sl_dist = abs(float(entry_price) - float(stop_loss))
-        if sl_dist > 0:
-            budget = min(budget, MAX_ENTRY_DRIFT_FRAC * sl_dist)
-    return budget
+    """Max tolerated adverse move past the signal level before entry.
+
+    Thin wrapper over shared.gate_rules.drift_budget_pts. The module-level
+    constants are read at CALL time and passed explicitly, so tests that
+    monkeypatch MAX_ENTRY_DRIFT_PTS/FRAC on this module still take effect.
+    """
+    return _shared_drift_budget(entry_price, stop_loss,
+                                MAX_ENTRY_DRIFT_PTS, MAX_ENTRY_DRIFT_FRAC)
 
 
 def _entry_drift_exceeded(side: str, entry_price: float, stop_loss: float | None,
@@ -162,11 +168,11 @@ def _entry_drift_exceeded(side: str, entry_price: float, stop_loss: float | None
             return True, "entry_drift_noprice"
         log.warning("[GATE] no live price for drift check (%s) — allowing entry", symbol)
         return False, "no_ltp"
-    drift = (float(ltp) - float(entry_price)) if side == "BUY" \
-        else (float(entry_price) - float(ltp))
-    budget = _drift_budget_pts(entry_price, stop_loss)
-    detail = f"drift {drift:+.2f}pt vs budget {budget:.2f}pt (ltp {float(ltp):.2f})"
-    return drift > budget, detail
+    # Pure comparison delegated to shared.gate_rules so the offline 5s sim runs
+    # byte-identical logic; only the fetch and fail-mode above stay here.
+    return _shared_entry_drift_exceeded(
+        side, entry_price, stop_loss, ltp,
+        MAX_ENTRY_DRIFT_PTS, MAX_ENTRY_DRIFT_FRAC)
 
 
 def _duplicate_open_same_side(user_broker_id, symbol: str, side: str,

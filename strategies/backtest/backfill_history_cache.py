@@ -57,7 +57,7 @@ def _max_market_gap_minutes(df: pd.DataFrame) -> float:
     return float(gaps[mask].max())
 
 
-def backfill(symbol: str, dry_run: bool) -> None:
+def backfill(symbol: str, dry_run: bool, target_end: datetime = TARGET_END) -> None:
     for tf in TFS:
         path = CACHE_DIR / f"is_{symbol}_{tf}.parquet"
         if not path.exists():
@@ -66,7 +66,7 @@ def backfill(symbol: str, dry_run: bool) -> None:
         df["time"] = pd.to_datetime(df["time"], utc=True)
         last = df["time"].max()
         print(f"[{tf}] cache ends {last}  rows={len(df)}")
-        if last >= TARGET_END:
+        if last >= target_end:
             print(f"[{tf}] already covers target — skip")
             continue
         days_needed = (datetime.now(timezone.utc) - last).days + 2
@@ -98,5 +98,10 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--symbol", default="XAU_USD")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--target", default=None,
+                    help="extend the cache up to this UTC date (YYYY-MM-DD); "
+                         "defaults to the historical TARGET_END")
     args = ap.parse_args()
-    backfill(args.symbol, args.dry_run)
+    target = (datetime.strptime(args.target, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+              if args.target else TARGET_END)
+    backfill(args.symbol, args.dry_run, target)

@@ -1,0 +1,20 @@
+{
+  "n_trades": 254,
+  "kill_trips": [
+    "2026-05-07"
+  ],
+  "paused_pct": {
+    "KRONOS_S95_SESSION_BREAKOUT": 0.0,
+    "KRONOS_S96_H1_MOMENTUM": 0.0,
+    "KRONOS_S97_SNAP_SCALPER": 0.0,
+    "SESSION_BREAKOUT": 0.0
+  },
+  "net_usd": 109.58,
+  "win_rate": 42.5,
+  "outcomes": {
+    "TP": 66,
+    "TIME": 33,
+    "TRAIL": 79,
+    "SL": 76
+  }
+}
