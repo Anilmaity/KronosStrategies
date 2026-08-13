@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-13
 **Spec:** `docs/superpowers/specs/2026-08-12-5s-backtest-fidelity-design.md`
-**Branch:** `feat/strategy-manager` (all work UNCOMMITTED)
+**Branch:** `feat/strategy-manager` — committed as `8a8e3b9` (not pushed)
 **Tests:** 1019 passing, 0 failures (`pytest tests/ -q`)
 
 ---
@@ -141,15 +141,17 @@ flip sign between periods. Nothing is profitable at realistic friction.
 - Docker on the box is the **snap** build: `docker cp` cannot read `/tmp`; stage
   under `/home/ubuntu`.
 
-### ⚠ Repo hygiene
+### Repo hygiene (resolved in `8a8e3b9`)
 
-`.history_data/` (**2.5 GB**) and `strategies/backtest/results/bars_cache/`
-(21 MB, includes the new `s5/` parquets) are **NOT gitignored**. A `git add -A`
-would attempt to commit gigabytes. Add ignore entries before staging anything.
+`.history_data/` (2.5 GB), `strategies/backtest/results/bars_cache/`, run logs
+(`*.log`/`*.err`) and per-bar `*_regime.jsonl` dumps (36 MB) are now gitignored,
+so `git add -A` can no longer drag in gigabytes. These are all regenerable:
+`backtest.s5_backfill`, `backtest.backfill_history_cache --target`, or
+`backtest.tick_s5` from the tick archive.
 
 ---
 
-## Files (all uncommitted, branch `feat/strategy-manager`)
+## Files (committed in `8a8e3b9` on `feat/strategy-manager`, not pushed)
 
 **New**
 ```
