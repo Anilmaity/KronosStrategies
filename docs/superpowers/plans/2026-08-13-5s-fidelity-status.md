@@ -9,6 +9,14 @@
 
 ## Where this got to
 
+> [!warning] SUPERSEDED by the out-of-sample run (2026-08-14)
+> The n=6 pass below **did not generalise**. Over the full 242-trade window the
+> parity **FAILS** 4 of 7 checks — match rate 66.9%, entry Δ median 0.205 /
+> p90 0.699, USD 51.7% off. Execution modelling holds up (outcome agreement
+> 100%, exit Δ median 0.100); **trade selection does not**. See
+> "Parity run — DONE, and it FAILS out-of-sample" below before relying on any
+> sim P&L. All six 08-12 trades still match — that day was unrepresentative.
+
 **Live parity PASSES all seven pre-registered checks** against the 6 real,
 broker-verified trades of 2026-08-12:
 
@@ -109,13 +117,15 @@ flip sign between periods. Nothing is profitable at realistic friction.
 
 ## Next steps
 
-Steps 1–4 were worked on **2026-08-13/14**; see "Session log 2026-08-14" below
-for what closed and what is still open. The live remaining work is:
+Steps 1–4 are **CLOSED** (2026-08-13/14) — see "Session log 2026-08-14".
+The out-of-sample parity ran and **FAILED**, which changes what comes next:
 
-1. **Re-run the out-of-sample parity** (command in the session log). It was
-   launched and had loaded ground truth + S5 correctly, but the session ended
-   before the walk-forward finished. Nothing is lost — the S5 cache is on disk.
-2. Then P5/P6: roster re-validation and any keep/retire action.
+1. **Do not run P5/P6 roster keep/retire off this sim yet.** The sim misses
+   predominantly *losing* trades (80 misses netting −905 USD), so its P&L is
+   biased optimistic by selection, not just noisy.
+2. **Fix trade selection, starting with S100** — it produced 112 of the 152
+   invented trades. Then the S93/S99 blindness (26 misses each).
+3. Leave the fill model alone: exit Δ and outcome agreement already pass.
 
 ---
 
@@ -214,12 +224,62 @@ profit + all commissions + swap. Segments: Funding Pips `97fab5dc` n=126
 (−408.77 USD, 07-07→07-30 01:42) and Winprofx `3eefc570` n=116 (+676.52 USD,
 07-30 07:21→08-12). Outcomes: 158 SL / 80 TP / 4 TIME.
 
-### Parity run — LAUNCHED, NOT FINISHED
+### Parity run — DONE, and it **FAILS** out-of-sample
 
-S5 backfilled locally for the window (**never on the box**): 2026-07 and 2026-08
-partitions, 458,763 bars, wall-clock coverage 72.7% / 63.8%. The run loaded
-242 trades, the S5 bars and the 63 external events, and applied the per-strategy
-live windows — then the session ended mid walk-forward. Re-run with:
+Report: `results/parity/live_parity_2026-07-06_2026-08-13.md`.
+S5 backfilled locally (**never on the box**): 2026-07 + 2026-08 partitions,
+458,763 bars, wall-clock coverage 72.7% / 63.8%.
+
+| check | measured | threshold | |
+|---|---|---|---|
+| match rate | **66.9%** (162/242) | ≥90% | **FAIL** |
+| outcome agreement | 100% | ≥90% | PASS |
+| entry Δ median / p90 | **0.205** / **0.699** pt | ≤0.15 / ≤0.40 | **FAIL** |
+| exit Δ median / p90 | 0.100 / 0.615 pt | ≤0.30 / ≤0.80 | PASS |
+| aggregate USD | **51.7%** off | ≤10% | **FAIL** |
+
+**The n=6 result did not generalise.** All six 08-12 trades still match — that day
+was simply not representative of the 5.5-week window.
+
+**Where the failure lives: trade SELECTION, not execution.** On the 162 trades
+both sides agree to take, outcome agreement is **100%** and exit Δ median is
+0.100 pt. The sim models *a trade it takes* well. It just takes a different set:
+80 live trades missed, **152 invented** (sim fired 314 vs live's 242).
+
+**The USD number is worse than it looks — read the aggregation.** `summarise()`
+sums `usd_live`/`usd_sim` over **matched pairs only**, so the tolerance compares
++1172.96 (matched live) against +1779.95 (matched sim). But the *full* 242-trade
+live book is **+267.75**. The gap is the misses:
+
+* **80 missed live trades net −905.21 USD** — 59 losses vs 21 wins.
+* 152 invented sim trades net −193.95 USD — 107 losses vs 45 wins.
+
+So the sim is **skipping predominantly losing trades**, which inflates the
+matched-subset live figure to 4.4× the real book. Any roster P&L read off this
+sim is flattered by a selection bias, not merely noisy. **This is the single most
+decision-relevant finding of the campaign** and it cuts against trusting sim P&L
+for keep/retire calls until selection is fixed.
+
+**Divergence is concentrated per strategy:**
+
+| strategy | missed | invented |
+|---|---|---|
+| S100 M3 Combo | 14 | **112** |
+| S99 MSS FVG | 26 | 20 |
+| S93 FVG Scalp | 26 | 11 |
+| S94 Sweep Reversal | 14 | 9 |
+
+S100 accounts for **74% of all inventions** — the sim massively over-fires it,
+while S93/S99 are where the sim goes blind (26 misses each). Sim gate rejects
+this window: S100 `entry_drift` 74 / `sl_too_tight` 54; S99 `entry_drift` 25 /
+`sl_too_tight` 15; S94 `sl_too_tight` 29; S93 `entry_drift` 18. Attribution on
+matched pairs: `entry_fill` 146, `exit_fill` 15.
+
+**Next investigation** (P5 blocker): the S100 over-firing is the biggest single
+lever — 112 invented trades. Start there, then the S93/S99 blindness. Do NOT
+tune the fill model; exit deltas and outcome agreement already pass.
+
+Re-run with:
 
 ```bash
 cd strategies
