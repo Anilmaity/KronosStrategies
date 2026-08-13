@@ -109,17 +109,134 @@ flip sign between periods. Nothing is profitable at realistic friction.
 
 ## Next steps
 
-1. **Start the box** (`aws lightsail start-instance --instance-name algorobos
-   --region ap-south-1`). It is STOPPED — TCP does not connect. Everything below
-   depends on it.
-2. Verify the stack: 12 containers under a single `-p kronos` project (no
-   duplicate), `dmesg` for OOM kills, manager `armed=5/7`, **and confirm the
-   fill_reconciler's dead-account 404s are gone** (that fix was never verified —
-   the watch process died with the box).
-3. Confirm the live windows + `DRY_RUN` flags the running services actually use.
-4. Export DB ground truth for 2026-07-06..08-12 (243 trades) and re-run parity
-   out-of-sample with the same flags. That is what makes this decision-grade.
-5. Then P5/P6: roster re-validation and any keep/retire action.
+Steps 1–4 were worked on **2026-08-13/14**; see "Session log 2026-08-14" below
+for what closed and what is still open. The live remaining work is:
+
+1. **Re-run the out-of-sample parity** (command in the session log). It was
+   launched and had loaded ground truth + S5 correctly, but the session ended
+   before the walk-forward finished. Nothing is lost — the S5 cache is on disk.
+2. Then P5/P6: roster re-validation and any keep/retire action.
+
+---
+
+## Session log 2026-08-14
+
+### Box outage — RESOLVED (step 1, 2)
+
+The box was **never STOPPED**; Lightsail reported `running` throughout. It was
+**wedged**: `StatusCheckFailed=1` and `NetworkOut=0` at every datapoint from
+**2026-08-12 ~19:00 UTC to 2026-08-13 18:27 UTC** — ~23 h of dark production.
+Root cause was **DNS death** (`Temporary failure in name resolution` for both
+the RDS host and OANDA) plus an OOM-kill of a python process at 08-13 01:25 UTC.
+The kernel stayed alive (sshd logged a connection at 19:03), which is exactly why
+it looked stopped from outside. Fixed with `aws lightsail reboot-instance`; SSH
+returned in ~2 min.
+
+Post-reboot verification: 12 containers up (11 under `-p kronos` + the backend,
+**no duplicate project**), manager `armed=5/7 open_pos=0/3`, kill-switch
+auto-reset (it had tripped 08-12). `open_pos=0` means the 23 h without
+`position_manager` left **no** position hanging without TIME_EXIT enforcement.
+
+**AWS creds are usable** — the earlier "41 chars, invalid" note was wrong.
+`.env_aws` is NOT `KEY=value`; it is freeform (`access id : AKIA…` / `token : …`),
+so naive parsing loads nothing and the CLI silently falls back to the `[default]`
+profile in `~/.aws/credentials`, **which is the invalid one**. Split on the first
+`:`. Verified via `sts get-caller-identity` (account 086769945463, user `anil`).
+
+**Prophylactic:** the box had **zero swap** on 2 GB RAM — that is what turns
+memory pressure into a total wedge rather than one dead process. Added a 2 GB
+swapfile (`dd`, not `fallocate`, to avoid a holey file), `chmod 600`, persisted
+in `/etc/fstab` (backed up first) and **verified by `swapoff` + `swapon -a`** so
+a reboot is guaranteed to pick it up. `vm.swappiness=10` in
+`/etc/sysctl.d/99-kronos-swap.conf`.
+
+### Live windows RECONFIRMED — the harness was right (step 3)
+
+The running containers set the windows under a **`RESEARCH_` prefix**:
+S93 `RESEARCH_WIN_5M=160`, S94 `1500`, S99 `160`, S100 `RESEARCH_WIN_1M=700` —
+**exactly `LIVE_WINDOWS`**. Also live: `RESEARCH_DAYS_5M` 5 (S93/S99) vs 11 (S94),
+`RESEARCH_DAYS_15M=5` all, S100 `RESEARCH_DAYS_1M=3`. And `DRY_RUN=false` on all
+four, so the repo `compose.yml` (which says `DRY_RUN=true`) is confirmed stale —
+the box has drifted, but **in the harness's favour**. The caveat in this doc's
+"Honest caveats" about LIVE_WINDOWS being unverified is now discharged.
+
+> **Never grep container env with a loose substring.** `grep -iE "win|days"`
+> matches `WINPROFX_META_TOKEN` and prints the live MetaAPI JWT. Anchor it:
+> `grep -E "^(DRY_RUN|RESEARCH_)"`. A token was exposed this way on 08-13 and
+> should be rotated.
+
+### Ground truth EXPORTED (step 4) — 242, not 243
+
+New `strategies/backtest/export_ground_truth.py` (the spec called for it; it did
+not exist). Runs on the box inside `backtest_worker`:
+
+```bash
+# stage (avoids snap-docker's inability to docker cp from /tmp)
+ssh ... 'sudo docker exec -i kronos-backtest_worker-1 sh -c "cat > /tmp/export_ground_truth.py"' \
+    < strategies/backtest/export_ground_truth.py
+ssh ... 'sudo docker exec -e PYTHONPATH=/app kronos-backtest_worker-1 \
+    python /tmp/export_ground_truth.py --start 2026-07-06 --end 2026-08-13 \
+    --out /tmp/live_trades_2026-07-06_2026-08-12.csv \
+    --external-out /tmp/external_pnl_2026-07-06_2026-08-12.csv'
+```
+
+Output (now in `backtest/results/parity/`): **242 roster trades** —
+S100 97, S99 55, S94 47, **S93 43** — plus 63 external-P&L rows (+595.59 USD).
+
+Three things the export settled:
+
+1. **The pre-registered 243 includes a non-trade.** Ticket `23594170` is a
+   `TEST_FILL_VALIDATION` probe (2026-07-07, 0.01 lots, 4 s, no exit order at
+   all). Not a strategy trade, unreproducible by the sim; excluded and reported.
+2. **Strategy naming would have matched ZERO trades.** `parity_harness` compares
+   names by equality; the sim uses module constants (`KRONOS_S100_M3_COMBO`) but
+   `Strategy.name` is the human label (`S100 M3 Combo Scalper`). The authoritative
+   mapping is in the DB: **`Strategy.json_data['variation']`**, stamped by the
+   deploy scripts. The exporter emits that, not a hardcoded table.
+3. **The old ground truth's exit times were our DB write time, not the fill.**
+   Cross-validating the 08-12 overlap: all 6 tickets present, identical strategy,
+   side, entry time/px, exit px, outcome, lots, and an exactly matching USD total
+   (−134.45) — but three exit times differ. Verified on ticket `110770242`:
+   hand-built used `Order.created_at` 03:43:16.69 while the broker
+   `DEAL_ENTRY_OUT` filled at 03:43:03.38, **13.3 s earlier**. The new export
+   takes broker truth throughout. This does **not** disturb the 08-12 pass (exit
+   *timing* was never a pre-registered tolerance — only exit price in points, USD,
+   match rate and outcome agreement), but the doc's descriptive "every exit lands
+   within 16 s of live" was measured against a proxy that runs late and will move
+   when recomputed.
+
+Design notes now baked into the exporter: the window is filtered on
+`broker_deals.deal_time` (real UTC) so `Position.created_at`'s IST-labelled
++5:30 never enters; linkage is the ENTRY order's ticket
+(`Order.broker_order_id` == MetaAPI `positionId`); `fill_reconciler`'s
+sliced-position volume guard is reused (0 sliced rows in this window); `usd` is
+profit + all commissions + swap. Segments: Funding Pips `97fab5dc` n=126
+(−408.77 USD, 07-07→07-30 01:42) and Winprofx `3eefc570` n=116 (+676.52 USD,
+07-30 07:21→08-12). Outcomes: 158 SL / 80 TP / 4 TIME.
+
+### Parity run — LAUNCHED, NOT FINISHED
+
+S5 backfilled locally for the window (**never on the box**): 2026-07 and 2026-08
+partitions, 458,763 bars, wall-clock coverage 72.7% / 63.8%. The run loaded
+242 trades, the S5 bars and the 63 external events, and applied the per-strategy
+live windows — then the session ended mid walk-forward. Re-run with:
+
+```bash
+cd strategies
+PYTHONPATH="<repo>;<repo>/strategies" python -m backtest.run_live_parity \
+  --start 2026-07-06 --end 2026-08-13 \
+  --live backtest/results/parity/live_trades_2026-07-06_2026-08-12.csv \
+  --spread 0.62 --model-entry-drift --sided-fills --exit-slippage-only \
+  --entry-time-at-close --latency 0 \
+  --external-pnl backtest/results/parity/external_pnl_2026-07-06_2026-08-12.csv
+```
+
+Note `--spread` barely matters in this flag set: `--sided-fills` crosses the real
+bid/ask carried in the S5 data (so each account segment's true spread is already
+in the data) and `--exit-slippage-only` charges only `slippage_pts` on exits.
+`spread_pts` survives only as the fallback when sided fills are unavailable —
+which is why a single full-window run is defensible and per-segment stats can be
+split out of the matched output afterwards.
 
 ---
 
