@@ -46,6 +46,7 @@ for _p in _candidates:
 # telethon is imported lazily inside main() so this module can be imported (and
 # unit-tested) without the Telegram client dependency installed.
 from parse_signals import parse_signal, classify_outcome, looks_like_signal, SL_FIX_RE, clean
+from manage_signals import classify_management, resolve_target
 import metaapi_orders as mx
 import db_persist as db
 import apis_persist as apis
@@ -79,6 +80,23 @@ RISK_PER_TRADE_USD = float(os.getenv("RISK_USD", "100"))
 # volume_lots = risk_usd / (risk_points * USD_PER_POINT_PER_LOT)
 USD_PER_POINT_PER_LOT = float(os.getenv("USD_PER_POINT_PER_LOT", "100"))  # XAUUSD default
 MIN_LOT = float(os.getenv("MIN_LOT", "0.01"))
+
+# The Neymar VIP channel ends 309 of its 315 signals with "TP: open" — an
+# unbounded runner. When enabled, that leg is placed with a stop and NO
+# take-profit, and is closed by a management message or the stale sweep. Default
+# OFF, so the free channel keeps placing exactly the numeric TPs it always did.
+TP_OPEN_LEG = os.getenv("TG_TP_OPEN_LEG", "false").lower() == "true"
+
+# Act on position-management messages (breakeven / move SL / close). Default OFF
+# for the same reason: the free channel's copy must not change behaviour because
+# a second source was added.
+ACT_ON_MANAGEMENT = os.getenv("TG_ACT_ON_MANAGEMENT", "false").lower() == "true"
+
+# Drop a signal identical to one already seen within this many seconds. The VIP
+# channel reposts 145 of its 315 signals (24%), often the same text twice in the
+# same minute. 0 disables it — the default, because on the free channel a
+# genuine re-entry at an identical zone is plausible and must not be swallowed.
+DEDUP_WINDOW_SEC = float(os.getenv("TG_DEDUP_WINDOW_SEC", "0"))
 
 # A signal is only removed from the :open set on a TP3 / SL reply. If the channel
 # announces TP1/TP2 then goes quiet (no TP3, no SL), it would stay "open" forever
@@ -155,6 +173,57 @@ def _signal_entry(sig: dict) -> float:
     return sig["entry_low"] if sig["side"] == "sell" else sig["entry_high"]
 
 
+def order_tps(sig: dict) -> list[float | None]:
+    """TP levels to actually place — one broker order per element.
+
+    `sig["tps"]` stays purely numeric: it is persisted to tg_signals and mirrored
+    to the dashboard, and a None in there would propagate into both. The
+    open-ended runner is appended only here, as a None, so it reaches the broker
+    as a stop-only leg without polluting the stored signal.
+    """
+    tps: list[float | None] = list(sig["tps"])
+    if TP_OPEN_LEG and sig.get("tp_open"):
+        tps.append(None)
+    return tps
+
+
+def dedup_key(sig: dict) -> str:
+    """Identity of a signal for repost detection.
+
+    Deliberately the TRADE, not the text: the channel reposts the same setup with
+    incidental wording differences, and two posts naming the same side, zone,
+    stop and targets are the same trade whatever the prose around them says.
+    """
+    return "|".join([
+        sig["instrument"], sig["side"],
+        f"{sig['entry_low']:.2f}", f"{sig['entry_high']:.2f}", f"{sig['sl']:.2f}",
+        ",".join(f"{t:.2f}" for t in sig["tps"]),
+    ])
+
+
+async def _is_repost(sig: dict, signal_ts: float) -> bool:
+    """True when this exact trade was already seen inside the dedup window.
+
+    Disabled (always False) when DEDUP_WINDOW_SEC is 0, which is the default and
+    what the free channel runs with.
+
+    The timestamp is refreshed even on a hit, so a third repost is measured from
+    the second, not the first — a channel that spams the same setup five times
+    over twenty minutes is still posting one trade.
+    """
+    if DEDUP_WINDOW_SEC <= 0:
+        return False
+    key = f"{REDIS_PREFIX}:dedup:{dedup_key(sig)}"
+    prev = await r.get(key)
+    await r.set(key, str(signal_ts))
+    if prev is None:
+        return False
+    try:
+        return (signal_ts - float(prev)) < DEDUP_WINDOW_SEC
+    except (TypeError, ValueError):
+        return False
+
+
 def _record_signals(sig: dict, *, status: str, reason: str = "",
                     rejection_reason: str = "", signal_at=None,
                     only_labels=None, pos_ids: dict | None = None) -> None:
@@ -203,10 +272,11 @@ async def place_order(msg_id: int, sig: dict) -> dict:
     min_ds = [s for s in stops if isinstance(s, (int, float))]
     min_d = max(min_ds) if min_ds else None
     ref_client = ACCOUNTS[0]["client"]
+    otps = order_tps(sig)   # numeric TPs, plus the open-ended runner as None
     try:
         plan = await loop.run_in_executor(
             None, lambda: ref_client.build_order_plan(
-                sig["side"], sig["instrument"], entry_mid, sig["sl"], sig["tps"],
+                sig["side"], sig["instrument"], entry_mid, sig["sl"], otps,
                 min_distance=min_d))
     except Exception:
         log.exception("[%s] build_order_plan raised — each account will self-plan", msg_id)
@@ -218,7 +288,7 @@ async def place_order(msg_id: int, sig: dict) -> dict:
         can never abort another whose orders may already be live at the broker."""
         client, label = acc["client"], acc["label"]
         total_vol = acc["risk_usd"] / (risk_pts * USD_PER_POINT_PER_LOT)
-        total_vol = max(total_vol, MIN_LOT * len(sig["tps"]))
+        total_vol = max(total_vol, MIN_LOT * len(otps))
         try:
             submitted = await loop.run_in_executor(
                 None,
@@ -227,7 +297,7 @@ async def place_order(msg_id: int, sig: dict) -> dict:
                     symbol=sig["instrument"],
                     entry=entry_mid,
                     sl=sig["sl"],
-                    tps=sig["tps"],
+                    tps=otps,
                     total_volume=v,
                     msg_id=msg_id,
                     plan=plan,
@@ -315,6 +385,51 @@ async def move_to_breakeven(msg_id: int):
         return
     pos = json.loads(pos_json)
     await modify_sl(msg_id, pos["entry_mid"])
+
+
+async def apply_management(msg_id: int, text: str, parent_id: int | None) -> dict | None:
+    """Act on a position-management instruction. Returns the action taken, or None.
+
+    Off unless TG_ACT_ON_MANAGEMENT is set, so the free channel's copy behaves
+    exactly as it always has.
+
+    Order matters: the stop change is applied BEFORE any close, so a close that
+    fails at the broker still leaves the position protected at its new stop
+    rather than at the original one.
+    """
+    if not ACT_ON_MANAGEMENT:
+        return None
+    action = classify_management(text)
+    if not action:
+        return None
+
+    open_ids = await r.smembers(f"{REDIS_PREFIX}:open")
+    target = resolve_target(parent_id, sorted(int(i) for i in open_ids))
+    if target is None:
+        log.warning("[%s] management %s but no unambiguous target (%d open) — ignored",
+                    msg_id, action, len(open_ids))
+        return None
+
+    if "move_sl" in action:
+        log.info("[%s] management: move SL -> %s (signal %s)", msg_id, action["move_sl"], target)
+        await modify_sl(target, action["move_sl"])
+    elif action.get("breakeven"):
+        log.info("[%s] management: breakeven (signal %s)", msg_id, target)
+        await move_to_breakeven(target)
+
+    if action.get("close") == "all":
+        log.info("[%s] management: close all (signal %s)", msg_id, target)
+        await close_order(target, "channel_close")
+    elif action.get("close") == "half":
+        # Deliberately NOT implemented. "Close half" appears twice in 13 months
+        # of channel history, and a partial close cuts straight through the
+        # slice/deal matching that caused the 2026-08-11 P&L corruption. Leaving
+        # the position running under its own TPs and (just-moved) stop is the
+        # safe failure: it under-closes rather than over-closes. Logged loudly so
+        # it is visible if the channel ever starts doing it often.
+        log.warning("[%s] management: 'close half' is not supported — position left "
+                    "running under its existing TPs/SL (signal %s)", msg_id, target)
+    return action
 
 
 async def close_order(msg_id: int, reason: str):
@@ -733,6 +848,12 @@ async def handle_new_signal(msg) -> None:
     text = clean(msg.text or "")
     sig = parse_signal(text)
     if not sig:
+        # Not a signal — but 137 of the VIP channel's 317 management messages
+        # arrive as standalone posts with no reply link ("Set breakeven now!!!"),
+        # so they land here rather than in handle_reply. Resolve them against the
+        # single open signal before writing the message off as chatter.
+        if await apply_management(msg.id, text, None):
+            return
         # A message that reads like a signal (instrument + side + SL) but the
         # grammar can't parse is an UNHANDLED FORMAT, not chatter — shout so it
         # never again vanishes in silence the way the TP1/TP2/TP3 form did.
@@ -749,6 +870,19 @@ async def handle_new_signal(msg) -> None:
     bad = is_malformed(sig)
     if bad:
         log.warning(f"[{msg.id}] malformed signal ({bad}) — skip")
+        return
+    # Repost guard. The no-pyramiding check below already stops a duplicate from
+    # opening a SECOND live position, but it cannot tell a repost from a genuine
+    # re-entry: when the first copy is still an unfilled pending limit it
+    # *supersedes* it (cancel + replace), churning orders at the broker for no
+    # reason. Catching it here also gives the dashboard an accurate reason.
+    signal_ts = msg.date.astimezone(timezone.utc).timestamp()
+    if await _is_repost(sig, signal_ts):
+        log.warning(f"[{msg.id}] duplicate repost within {DEDUP_WINDOW_SEC:.0f}s — skip")
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, lambda: _record_signals(
+            sig, status="REJECTED", rejection_reason="duplicate_repost",
+            signal_at=msg.date.astimezone(timezone.utc).isoformat()))
         return
     # Strategy-Manager gate: the primary account's UserStrategy row is this
     # bot's on/off switch, flipped by the manager loop while armed. New entries
@@ -831,6 +965,15 @@ async def handle_reply(msg) -> None:
     if sl_fix and "typo" in text.lower():
         await modify_sl(parent_id, float(sl_fix.group(1)))
         return
+
+    # Position management (breakeven / move SL / close). Runs before outcome
+    # classification because the two overlap and management is the more precise
+    # reading: "breakeven hit out of this entries now!" is classified by
+    # classify_outcome as breakeven ALONE, which would move the stop and leave
+    # the position open when the channel asked to be flat.
+    action = await apply_management(msg.id, text, parent_id)
+    if action and action.get("close") == "all":
+        return  # flattened; nothing left for the outcome path to resolve
 
     outcome = classify_outcome(text)
     if not outcome:

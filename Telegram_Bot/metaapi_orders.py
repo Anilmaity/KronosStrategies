@@ -116,25 +116,29 @@ def _action_for(side: Side, *, is_limit: bool, entry: float, current: float) -> 
     return "ORDER_TYPE_SELL_LIMIT" if entry >= current else "ORDER_TYPE_SELL_STOP"
 
 
-def _apply_stops_floor(side: Side, ref_price: float, sl: float, tp: float,
-                       min_distance: float) -> tuple[float, float, bool]:
+def _apply_stops_floor(side: Side, ref_price: float, sl: float, tp: float | None,
+                       min_distance: float) -> tuple[float, float | None, bool]:
     """Widen SL/TP *outward* so each sits at least `min_distance` from ref_price.
 
     ref_price is what the broker measures the stops level against: the current
     market price for a market order, or the open (entry) price for a pending
     limit. Only ever pushes SL/TP further away, so the signal's direction and
     is_malformed() invariants are preserved. Returns (sl, tp, was_adjusted).
+
+    `tp=None` is the open-ended runner the Neymar VIP channel posts as
+    "TP: open" — a leg carrying a stop and no target. Its stop is still floored;
+    there is simply no target to floor.
     """
     adjusted = False
     if side == "buy":
         if (ref_price - sl) < min_distance:
             sl = round(ref_price - min_distance, 2); adjusted = True
-        if (tp - ref_price) < min_distance:
+        if tp is not None and (tp - ref_price) < min_distance:
             tp = round(ref_price + min_distance, 2); adjusted = True
     else:  # sell
         if (sl - ref_price) < min_distance:
             sl = round(ref_price + min_distance, 2); adjusted = True
-        if (ref_price - tp) < min_distance:
+        if tp is not None and (ref_price - tp) < min_distance:
             tp = round(ref_price - min_distance, 2); adjusted = True
     return sl, tp, adjusted
 
@@ -260,23 +264,27 @@ class MetaApiClient:
         return spec
 
     def place_market_order_full(self, side: Side, symbol: str, volume: float,
-                                sl: float, tp: float, comment: str = "") -> str | None:
+                                sl: float, tp: float | None, comment: str = "") -> str | None:
+        """tp=None places the leg with a stop and NO take-profit — the open-ended
+        runner ("TP: open"). The key is omitted rather than sent as 0/null, which
+        some brokers read as "close immediately"."""
         broker = _SYMBOL_MAP.get(symbol, symbol)
         payload = {
             "actionType": "ORDER_TYPE_BUY" if side == "buy" else "ORDER_TYPE_SELL",
             "symbol": broker,
             "volume": round(volume, 2),
             "stopLoss": round(sl, 2),
-            "takeProfit": round(tp, 2),
             "comment": comment[:31],  # MetaAPI cap
         }
+        if tp is not None:
+            payload["takeProfit"] = round(tp, 2)
         resp = self._trade(payload)
         if not resp:
             return None
         return _extract_ticket(resp, payload, prefer_position=True)
 
     def place_limit_order(self, side: Side, symbol: str, volume: float, entry: float,
-                          sl: float, tp: float, current_price: float | None = None,
+                          sl: float, tp: float | None, current_price: float | None = None,
                           comment: str = "") -> tuple[str | None, str | None]:
         """Place a pending limit/stop order.
 
@@ -295,9 +303,10 @@ class MetaApiClient:
             "volume": round(volume, 2),
             "openPrice": round(entry, 2),
             "stopLoss": round(sl, 2),
-            "takeProfit": round(tp, 2),
             "comment": comment[:31],
         }
+        if tp is not None:  # open-ended runner: stop only, no target
+            payload["takeProfit"] = round(tp, 2)
         resp = self._trade(payload)
         if not resp:
             return None, None
@@ -430,8 +439,11 @@ class MetaApiClient:
         return self._get_symbol_spec(broker)["stops_level_price"]
 
     def build_order_plan(self, side: Side, symbol: str, entry: float, sl: float,
-                         tps: list[float], min_distance: float | None = None) -> dict:
+                         tps: list[float | None], min_distance: float | None = None) -> dict:
         """Decide ONE order plan: market-vs-limit kind + per-TP (SL, TP) levels.
+
+        A `None` entry in `tps` is the open-ended runner ("TP: open") and yields
+        a (sl, None) level — a leg with a stop and no target.
 
         Built once and shared across mirrored accounts so every account places
         IDENTICAL target levels (only the fill price differs, by broker spread —
@@ -540,7 +552,8 @@ class MetaApiClient:
             submitted.append({"tp_index": i, "tp": o_tp, "ticket_id": tid, "kind": kind,
                               "volume": vol_each, "entry": entry, "sl": o_sl})
             log.info("[%s:%s] %s order placed | TP%d=%s vol=%.2f ticket=%s",
-                     msg_id, self.label, kind, i, o_tp, vol_each, tid)
+                     msg_id, self.label, kind, i,
+                     "open" if o_tp is None else o_tp, vol_each, tid)
         return submitted
 
 
