@@ -102,8 +102,8 @@ def main(commit: bool, arm: str) -> int:
         """
         INSERT INTO apis_userstrategy
             (id, created_at, modified_at, name, is_active, multiplyer, deployed,
-             strategy_id, user_broker_id)
-        VALUES (%s, NOW(), NOW(), %s, true, 1, true, %s, %s)
+             archived, strategy_id, user_broker_id)
+        VALUES (%s, NOW(), NOW(), %s, true, 1, true, false, %s, %s)
         ON CONFLICT (id) DO NOTHING
         """,
         (USERSTRATEGY_ID, STRATEGY_NAME, STRATEGY_ID, WINPROFX_USERBROKER))
