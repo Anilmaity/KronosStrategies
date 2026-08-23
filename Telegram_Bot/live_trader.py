@@ -58,6 +58,21 @@ log = logging.getLogger("tg-trader")
 API_ID = int(os.getenv("TG_API_ID", "30334024"))
 API_HASH = os.getenv("TG_API_HASH", "f7f83460d3bae2e462c02f144dbc114f")
 CHANNEL = os.getenv("TG_CHANNEL", "Test_XAU_USD")
+
+
+def _channel_ref(raw: str):
+    """Telethon needs an INT for a numeric channel id, not the string form.
+
+    A private channel has no username, so it can only be addressed by id — the
+    VIP source is configured as -1002776523643. Passing that as a string makes
+    Telethon treat it as a username and resolve nothing, so the listener starts
+    cleanly and then silently receives no messages at all.
+    """
+    s = (raw or "").strip()
+    return int(s) if re.fullmatch(r"-?\d+", s) else s
+
+
+CHANNEL_REF = _channel_ref(CHANNEL)
 # Telethon session path. Kept under TG_SESSION_DIR so it can be persisted on a
 # docker volume: without a saved session every (re)start re-triggers an
 # interactive phone/code login, which hangs (then crash-loops) in a headless
@@ -1041,7 +1056,7 @@ async def main(args):
     await client.start()
     log.info(f"Listening to {CHANNEL} (DRY_RUN={DRY_RUN})")
 
-    @client.on(events.NewMessage(chats=CHANNEL))
+    @client.on(events.NewMessage(chats=CHANNEL_REF))
     async def _handler(event):
         try:
             if event.message.reply_to:

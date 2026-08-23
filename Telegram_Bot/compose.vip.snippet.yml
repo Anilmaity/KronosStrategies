@@ -1,0 +1,56 @@
+# Fragment to MERGE into the box's compose.yml — do not overwrite that file.
+# The repo compose.yml has no telegram service at all (the box has drifted);
+# the live telegram_trader block exists only on the box, so this is appended
+# there, next to it, and `volumes:` gains tg_session_vip.
+#
+# Same image as telegram_trader (build: ./Telegram_Bot), different source:
+# a second Telegram account, a different channel, its own state namespace and
+# its own platform Strategy. Everything VIP-specific is env — no code branches
+# on which channel is being read.
+#
+#   ONE-TIME LOGIN, required before the first `up` and interactive:
+#     sudo docker compose -p kronos run --rm -it telegram_trader_vip python live_trader.py
+#   enter the phone code, wait for "Listening to -1002776523643", Ctrl-C, then:
+#     sudo docker compose -p kronos up -d telegram_trader_vip
+#
+# The session lands on the tg_session_vip volume — a DIFFERENT volume from
+# telegram_trader's tg_session. Sharing one would have the two accounts
+# overwrite each other's login, since the session filename is fixed.
+
+  telegram_trader_vip:
+    build: ./Telegram_Bot
+    restart: always
+    env_file: .env
+    environment:
+      TIGERDATA_URL: ${TIGERDATA_URL:-}
+
+      # --- source: second Telegram account, private channel by numeric id ---
+      TG_API_ID: ${TGVIP_API_ID}
+      TG_API_HASH: ${TGVIP_API_HASH}
+      TG_CHANNEL: '-1002776523643'          # "Neymar | VIP" (private: id, not username)
+      TG_SESSION_DIR: /app/session
+      TG_REDIS_PREFIX: 'hft:tgvip'          # never share :open / :signal:* with the free copy
+
+      # --- VIP-specific behaviour (all default-OFF for the free channel) ---
+      TG_TP_OPEN_LEG: 'true'                # 309/315 signals end "TP: open"
+      TG_ACT_ON_MANAGEMENT: 'true'          # 317 breakeven / move-SL / close messages
+      TG_DEDUP_WINDOW_SEC: '900'            # 145/315 signals are reposts
+      RISK_USD: '38'                        # matches the S93/S94/S99/S100 sizing
+
+      # --- broker: the SAME Winprofx-Demo account as the rest of the book ---
+      META_ACCOUNT_ID: ${WINPROFX_META_ACCOUNT}
+      META_API_TOKEN: ${WINPROFX_META_TOKEN}
+      TG2_META_ACCOUNT_ID: ''               # no second-broker fan-out on this source
+      TG2_META_API_TOKEN: ''
+
+      # --- platform rows, seeded by deploy_neymar_vip.py ---
+      APIS_STRATEGY_ID: c708a216-5c5f-41b4-a63b-7e13d15ce090
+      APIS_USER_STRATEGY_ID: 5394830e-20b5-4966-8470-0e8b7de87484
+      APIS_USER_BROKER_ID: 43e48e58-aec5-468e-9fb7-db36a6c846a1
+    volumes:
+    - tg_session_vip:/app/session
+
+# and in the top-level volumes: block —
+# volumes:
+#   tg_session: null
+#   tg_session_vip: null

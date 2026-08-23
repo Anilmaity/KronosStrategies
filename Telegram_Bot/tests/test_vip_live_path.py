@@ -233,3 +233,20 @@ def test_close_half_is_refused_not_guessed(spy):
     action = _run(go())
     assert spy.closed == []
     assert action["close"] == "half"
+
+
+# ─────────────────────── channel reference ───────────────────────
+
+def test_numeric_channel_id_becomes_an_int():
+    """A private channel has no username and can only be addressed by id.
+    Passing '-1002776523643' as a string makes Telethon treat it as a username,
+    resolve nothing, and then silently receive no messages at all."""
+    assert lt._channel_ref("-1002776523643") == -1002776523643
+
+
+def test_username_channel_stays_a_string():
+    assert lt._channel_ref("NeymarGoldTrader") == "NeymarGoldTrader"
+
+
+def test_channel_ref_tolerates_whitespace():
+    assert lt._channel_ref("  -1002776523643  ") == -1002776523643
