@@ -34,17 +34,17 @@ CLEAN_MD = re.compile(r"\*+|__+|\[.*?\]\(.*?\)|`")
 SIGNAL_RE = re.compile(
     r"""
     (?P<instr>Gold|XAU(?:USD)?|BTC(?:USD)?|ETH(?:USD)?|GBP\w+|EUR\w+|USD\w+)
-    \s+(?P<side>buy|sell)(?:\s+now)?\s+
+    \s+(?P<side>buy|sell)(?:\s+(?P<otype>now|limit|re-?entry))?(?:\s+at)?\s+
     (?P<e1>\d+(?:\.\d+)?)\s*-\s*(?P<e2>\d+(?:\.\d+)?)
-    \s+SL[:\s]+(?P<sl>\d+(?:\.\d+)?)
-    \s+(?P<tps>(?:TP\d{0,2}[:\s]+\S+\s*)+)
+    \s+SL[:.\s]+(?P<sl>\d+(?:\.\d+)?)
+    \s+(?P<tps>(?:TP\d{0,2}[:.\s]+\S+\s*)+)
     """,
     re.IGNORECASE | re.VERBOSE,
 )
 # Accept both the bare "TP: 4729" / "TP 4729" form and the numbered
 # "TP1 3338" / "TP2: 3342" form the channel actually posts (the digit glued to
 # "TP" previously matched zero TP tokens and silently dropped the whole signal).
-TP_VAL_RE = re.compile(r"TP\d{0,2}[:\s]+(\d+(?:\.\d+)?|open)", re.IGNORECASE)
+TP_VAL_RE = re.compile(r"TP\d{0,2}[:.\s]+(\d+(?:\.\d+)?|open)", re.IGNORECASE)
 NOW_RE = re.compile(r"\b(Gold|XAU\w*|BTC\w*)\s+(buy|sell)\s+now\b", re.IGNORECASE)
 # Loose "this message is a trade signal" detector: an instrument + a side + a
 # stop-loss. Used only to tell a genuinely-unparseable SIGNAL (worth shouting
@@ -116,6 +116,11 @@ def parse_signal(text: str) -> dict | None:
     instr = m.group("instr").upper()
     if instr == "GOLD":
         instr = "XAUUSD"
+    # "now" / absent -> market; "limit" / "re-entry" -> the channel is naming a
+    # level to wait for. build_order_plan() decides market-vs-pending for real,
+    # from where price actually sits relative to the zone, so this is recorded
+    # for auditing rather than used to force an order type.
+    otype = (m.group("otype") or "now").lower().replace("-", "")
     return {
         "instrument": instr,
         "side": m.group("side").lower(),
@@ -124,6 +129,7 @@ def parse_signal(text: str) -> dict | None:
         "sl": float(m.group("sl")),
         "tps": tp_nums,
         "tp_open": any(v.lower() == "open" for v in tps),
+        "order_type": "market" if otype == "now" else otype,
     }
 
 
