@@ -82,7 +82,11 @@ def _assert_parity(legacy_mod, new_mod, calls):
 
 
 # ── S93: FVG continuation scalp ───────────────────────────────────────────────
-_S93_T0 = pd.Timestamp("2026-06-05T07:00:00Z")
+# 13:00Z: S93 was narrowed to the NY killzone hours (13,14) on 2026-09-02 while the
+# frozen legacy copy still carries the old six-hour tuple. Both modules are in-session
+# at 13/14, so anchoring here keeps this file testing what it exists to test -- parity
+# of the shared TA primitives -- rather than the deliberate hours change.
+_S93_T0 = pd.Timestamp("2026-06-05T13:00:00Z")
 
 
 def _s93_frame(gap=0.7):
@@ -107,7 +111,7 @@ def _s93_w1m(minute_offset, hi, lo):
 
 
 def _s93_now(minute_offset=0):
-    return datetime(2026, 6, 5, 8, 45, tzinfo=timezone.utc) + pd.Timedelta(
+    return datetime(2026, 6, 5, 14, 45, tzinfo=timezone.utc) + pd.Timedelta(
         minutes=minute_offset)
 
 
@@ -153,7 +157,7 @@ def test_s93_below_atr_threshold_no_signal_parity():
 
 def test_s93_session_exclusion_parity():
     f = _s93_frame()
-    off = datetime(2026, 6, 5, 10, 5, tzinfo=timezone.utc)  # 10 not a killzone
+    off = datetime(2026, 6, 5, 10, 5, tzinfo=timezone.utc)  # 10: killzone for neither module
     out = _assert_parity(legacy_s93, new_s93, [
         (None, f, None, _s93_now()),                         # arm
         (_s93_w1m(6, 2002.0, 2001.0), f, None, off),         # excluded -> clear

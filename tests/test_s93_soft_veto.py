@@ -38,7 +38,8 @@ from backtest_strategies import s93_fvg_scalp as s93  # noqa: E402
 from backtest_strategies.base import Signal  # noqa: E402
 import legacy_s93  # noqa: E402
 
-_T0 = pd.Timestamp("2026-06-05T07:00:00Z")
+# 13:00Z: see test_s93_fvg_scalp.py -- S93 trades only hours (13,14) since 2026-09-02.
+_T0 = pd.Timestamp("2026-06-05T13:00:00Z")
 
 
 @pytest.fixture(autouse=True)
@@ -86,7 +87,8 @@ def _bear_frame(gap=0.7):
 
 
 def _now(minute_offset=0):
-    return datetime(2026, 6, 5, 8, 45, tzinfo=timezone.utc) + pd.Timedelta(
+    # 14:45Z -- inside S93's NY killzone hours (13,14); see test_s93_fvg_scalp.py.
+    return datetime(2026, 6, 5, 14, 45, tzinfo=timezone.utc) + pd.Timedelta(
         minutes=minute_offset)
 
 

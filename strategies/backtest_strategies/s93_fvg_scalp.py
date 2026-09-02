@@ -49,6 +49,39 @@ Env escapes (both default to the validated shipping config):
   S93_SOFT_VETO   = on|off      (default on)
   S93_GAP_CAP_ATR = float       (default 1.5; 0 or negative disables the cap)
 
+NY-hours narrowing (2026-09-02) -- _HOURS (7,8,9,12,13,14) -> (13,14)
+---------------------------------------------------------------------
+The London-morning block was a persistent loser and the NY block a persistent winner.
+Offline replay over 19.5 months of cached OANDA bars (lab/harness.py, train
+2025-01-05..2026-02-01 / test 2026-02-01..2026-08-12, exits resolved on M1 with SL
+checked before TP):
+
+  _HOURS                     train PF   test PF   test n   test DD
+  (7,8,9,12,13,14)  baseline   1.006     0.931      361     -221.8
+  (8,9,13,14)                  1.027     1.150      248     -113.1
+  (12,13,14)                   1.147     1.215      184      -86.0
+  (13,14,15)                   1.162     1.262      185      -68.7
+  (9,13,14)                    1.092     1.323      182      -59.8
+  (13,14)           SHIPPED    1.139     1.408      132      -43.3
+
+Every restricted set beats baseline on BOTH halves and the ladder degrades smoothly as
+morning hours are added back -- a plateau, not a lone spike. At the realistic 0.80pt cost
+(measured median XAUUSD spread is 0.59pt, so 0.45 was optimistic) baseline is decisively
+negative while the NY pair holds: baseline train PF 0.869 / test 0.851 (-224.2 pts) vs
+(13,14) train 1.002 / test 1.310 (+175.6 pts, DD -45.4).
+
+Selection is train-justified, not test-fitted: ranking the six hours on the TRAIN half
+alone gives 13 (1.200) > 14 (1.133) > 12 (1.056) > 7 (0.969) > 9 (0.852) > 8 (0.656), so
+(13,14) is the train-optimal pair and the test half only confirms it.
+
+Confirmed a third time out of sample on the LIVE broker record (2026-07-06..08-12): S93 as
+traded was -$168.3 at PF 0.82; its hours 13-14 subset was +$60.6 at PF 1.22; the dropped
+hours lost -$229.0, with hour 12 alone at -$221.8.
+
+(13,14,15) scored comparably with more trades, but hour 15 is an hour S93 has never traded
+-- removing demonstrated losers is a smaller step than adding an untested hour, so the
+pure-removal pair ships. Trade count falls ~63%; S93 becomes a low-frequency NY scalp.
+
 w15m depth: the veto needs >= _MIN_M15 (_STRUCT_WINDOW + _STRUCT_LOOKBACK) M15
 bars; below that it fails OPEN (struct 0, no veto). MIN_BARS_15M exports that
 floor so research_runner asserts RESEARCH_WIN_15M >= it at startup (Task 7).
@@ -75,7 +108,8 @@ NAME = "KRONOS_S93_FVG_SCALP"
 CONFIG = StrategyConfig(
     name=NAME,
     description="FVG continuation scalp (M5): displacement FVG >=0.3xATR in "
-                "killzones {7-9,12-14} UTC, retrace entry at the proximal "
+                "the NY killzone hours {13,14} UTC (narrowed from {7-9,12-14} "
+                "on 2026-09-02), retrace entry at the proximal "
                 "edge, SL beyond distal edge, TP 1.5R, 120-min backstop. "
                 "Validated 2026-07-06 (train PF 1.30 / test PF 1.24; "
                 "survives 0.80pt stress). SOFT M15 veto + 1.5xATR gap cap "
@@ -92,7 +126,9 @@ _RETRACE_W   = 12         # bars the FVG stays tradeable (60 min)
 _TP_R        = 1.5
 _BUF_ATR     = 0.2
 _ATR_N       = 14
-_HOURS       = (7, 8, 9, 12, 13, 14)   # London + NY killzones
+# NY killzone only. Narrowed from (7, 8, 9, 12, 13, 14) on 2026-09-02 -- see the
+# "NY-hours narrowing" section of the module docstring for the full evidence.
+_HOURS       = (13, 14)
 _MAX_HOLD_MIN = 120
 _MIN_M5      = _ATR_N + 4
 

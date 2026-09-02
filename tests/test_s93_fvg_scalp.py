@@ -20,7 +20,9 @@ from backtest_strategies import s93_fvg_scalp as s93  # noqa: E402
 from backtest_strategies.base import Signal  # noqa: E402
 from strategy.entry_manager import _VARIATION_STRATEGY_NAME  # noqa: E402
 
-_T0 = pd.Timestamp("2026-06-05T07:00:00Z")
+# 13:00Z: S93 was narrowed to the NY killzone hours (13,14) on 2026-09-02, so the
+# fixture must sit inside a trading hour or every setup is gated out before it arms.
+_T0 = pd.Timestamp("2026-06-05T13:00:00Z")
 
 
 def _frame(gap=0.7):
@@ -47,7 +49,9 @@ def _w1m(minute_offset, hi, lo):
 
 
 def _now(minute_offset=0):
-    base = datetime(2026, 6, 5, 8, 45, tzinfo=timezone.utc)
+    # 14:45Z -- matches the 22-bar fixture that starts at _T0 (13:00Z) and must sit
+    # inside S93's NY killzone hours (13,14).
+    base = datetime(2026, 6, 5, 14, 45, tzinfo=timezone.utc)
     return base + pd.Timedelta(minutes=minute_offset)
 
 
@@ -99,7 +103,7 @@ def test_setup_expires():
 def test_out_of_killzone_clears_and_blocks():
     f = _frame()
     s93.get_signal(None, f, None, _now())
-    off = datetime(2026, 6, 5, 10, 5, tzinfo=timezone.utc)    # 10 not a killzone
+    off = datetime(2026, 6, 5, 10, 5, tzinfo=timezone.utc)    # 10 not a killzone hour
     assert s93.get_signal(_w1m(6, hi=2002.0, lo=2001.0), f, None, off) is None
     assert s93._pending is None
 
@@ -126,3 +130,24 @@ def test_config_contract():
     assert cfg.session_start_hour is None and cfg.session_end_hour is None
     assert cfg.max_concurrent_positions == 1
     assert cfg.cooldown_s >= 300
+
+
+def test_hours_are_ny_killzone_only():
+    """S93 was narrowed to the NY killzone hours on 2026-09-02.
+
+    Pinned deliberately: the London-morning block (7, 8, 9) and the 12:00 US-data hour
+    were persistent losers on 19.5 months of replay AND on the live broker record
+    (hour 12 alone cost -$221.8 live), while 13 and 14 were the only hours positive in
+    both backtest halves. Widening this tuple again should be a conscious, evidenced
+    decision, not an accident -- see the module docstring for the full ladder.
+    """
+    assert s93._HOURS == (13, 14)
+
+
+def test_morning_hours_are_gated_out():
+    """A setup that would arm inside the old killzone hours must now be refused."""
+    for hour in (7, 8, 9, 12):
+        s93.reset_state()
+        now = datetime(2026, 6, 5, hour, 45, tzinfo=timezone.utc)
+        assert s93.get_signal(None, _frame(), None, now) is None
+        assert s93._pending is None, f"hour {hour} must not arm a setup"
