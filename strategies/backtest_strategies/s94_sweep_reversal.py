@@ -23,11 +23,34 @@ Setup, short case (long is the mirror):
   time   : 1200-min backstop (240 M5 bars)
 
 Validation 2026-07-07 (ClaudeTradingRD/validate_oos.py; OANDA XAU_USD M1->M5,
-full year 2025-07..2026-07, $0.30 cost, STATIC SL/TP exits as deployed here):
+full year 2025-07..2026-07, $0.30 cost):
   886 trades (~73/mo) WR 29% avgR +0.70 netR +622.7R PF 1.82 maxDD -38.8R,
   12 of 13 months positive. Params chosen on Apr-Jul 2026; the 9 months
-  before are out-of-sample and score BETTER (PF ~2.1 static).
-NOTE: winners pay 3-6R by design; expect ~29% WR with static exits.
+  before are out-of-sample and score BETTER (PF ~2.1).
+NOTE: winners pay 3-6R by design; expect ~29% WR.
+
+CORRECTION 2026-09-02 -- the line above previously read "STATIC SL/TP exits as
+deployed here". That was WRONG and materially so. validate_oos.py actually calls
+
+    simulate(df, sweeps, single_pos=False, be=True, allow=c15 | w15,
+             sd_mult=2.0, legs=legs)
+
+so the PF 1.82 headline was produced with (a) `be=True`, a BREAK-EVEN STOP MOVE at
++1R, and (b) `single_pos=False`, UNLIMITED overlapping positions -- neither of which
+this module has. It emits a static stop and target, entry_manager turns those into
+static STOPLOSS/TARGET triggers, and CONFIG caps concurrency at 3. There is no
+break-even logic anywhere on the live path.
+
+That gap explains the strategy's record. Deployed as-is it has produced:
+  * live, all time            : +$22 over 66 trades -- flat
+  * offline replay, 19.5mo    : PF 0.851 (train 0.843 / test 0.858), static exits,
+                                cost 0.45, max_concurrent 3
+against a published 1.82. Three different exit/concurrency/cost models, three
+different answers, and the docstring attributed the most favourable one to the
+least favourable configuration.
+
+Do NOT cite PF 1.82 for the shipped configuration. Whether adding a real
+break-even rule recovers it is a live open question, not an established result.
 """
 from __future__ import annotations
 
