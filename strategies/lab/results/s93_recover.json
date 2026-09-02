@@ -1,0 +1,515 @@
+{
+  "NEWBASE_13_14_c0.45": {
+    "label": "NEWBASE_13_14_c0.45",
+    "cost": 0.45,
+    "min_sl": 1.5,
+    "block_hours": [],
+    "env": {},
+    "patch": {
+      "_HOURS": [
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 267,
+      "pts": 94.6,
+      "pf": 1.139,
+      "wr": 45.7,
+      "maxdd": -139.2
+    },
+    "test": {
+      "n": 132,
+      "pts": 221.8,
+      "pf": 1.408,
+      "wr": 51.5,
+      "maxdd": -43.3
+    },
+    "dt": 121.2
+  },
+  "NEWBASE_13_14_c0.80": {
+    "label": "NEWBASE_13_14_c0.80",
+    "cost": 0.8,
+    "min_sl": 1.5,
+    "block_hours": [],
+    "env": {},
+    "patch": {
+      "_HOURS": [
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 267,
+      "pts": 1.1,
+      "pf": 1.002,
+      "wr": 45.3,
+      "maxdd": -192.7
+    },
+    "test": {
+      "n": 132,
+      "pts": 175.6,
+      "pf": 1.31,
+      "wr": 51.5,
+      "maxdd": -45.4
+    },
+    "dt": 122.6
+  },
+  "D_veto_off_c0.80": {
+    "label": "D_veto_off_c0.80",
+    "cost": 0.8,
+    "min_sl": 1.5,
+    "block_hours": [],
+    "env": {
+      "S93_SOFT_VETO": "off"
+    },
+    "patch": {
+      "_HOURS": [
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 369,
+      "pts": -23.5,
+      "pf": 0.977,
+      "wr": 45.8,
+      "maxdd": -242.0
+    },
+    "test": {
+      "n": 181,
+      "pts": 135.9,
+      "pf": 1.16,
+      "wr": 46.4,
+      "maxdd": -83.0
+    },
+    "dt": 117.0
+  },
+  "D_gapcap_1.0_c0.45": {
+    "label": "D_gapcap_1.0_c0.45",
+    "cost": 0.45,
+    "min_sl": 1.5,
+    "block_hours": [],
+    "env": {
+      "S93_GAP_CAP_ATR": 1.0
+    },
+    "patch": {
+      "_HOURS": [
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 329,
+      "pts": 23.6,
+      "pf": 1.029,
+      "wr": 46.2,
+      "maxdd": -124.9
+    },
+    "test": {
+      "n": 160,
+      "pts": -136.2,
+      "pf": 0.82,
+      "wr": 40.6,
+      "maxdd": -163.0
+    },
+    "dt": 105.8
+  },
+  "D_gapcap_2.5_c0.45": {
+    "label": "D_gapcap_2.5_c0.45",
+    "cost": 0.45,
+    "min_sl": 1.5,
+    "block_hours": [],
+    "env": {
+      "S93_GAP_CAP_ATR": 2.5
+    },
+    "patch": {
+      "_HOURS": [
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 378,
+      "pts": 56.5,
+      "pf": 1.056,
+      "wr": 45.5,
+      "maxdd": -181.4
+    },
+    "test": {
+      "n": 184,
+      "pts": 162.6,
+      "pf": 1.19,
+      "wr": 45.7,
+      "maxdd": -77.8
+    },
+    "dt": 111.5
+  },
+  "D_gapcap_0_c0.80": {
+    "label": "D_gapcap_0_c0.80",
+    "cost": 0.8,
+    "min_sl": 1.5,
+    "block_hours": [],
+    "env": {
+      "S93_GAP_CAP_ATR": 0
+    },
+    "patch": {
+      "_HOURS": [
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 378,
+      "pts": -75.8,
+      "pf": 0.93,
+      "wr": 45.2,
+      "maxdd": -253.9
+    },
+    "test": {
+      "n": 185,
+      "pts": 67.9,
+      "pf": 1.074,
+      "wr": 45.4,
+      "maxdd": -83.0
+    },
+    "dt": 117.1
+  },
+  "D_gapcap_1.0_c0.80": {
+    "label": "D_gapcap_1.0_c0.80",
+    "cost": 0.8,
+    "min_sl": 1.5,
+    "block_hours": [],
+    "env": {
+      "S93_GAP_CAP_ATR": 1.0
+    },
+    "patch": {
+      "_HOURS": [
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 329,
+      "pts": -91.6,
+      "pf": 0.895,
+      "wr": 46.2,
+      "maxdd": -224.6
+    },
+    "test": {
+      "n": 160,
+      "pts": -192.2,
+      "pf": 0.757,
+      "wr": 40.6,
+      "maxdd": -216.2
+    },
+    "dt": 120.8
+  },
+  "D_gapcap_2.5_c0.80": {
+    "label": "D_gapcap_2.5_c0.80",
+    "cost": 0.8,
+    "min_sl": 1.5,
+    "block_hours": [],
+    "env": {
+      "S93_GAP_CAP_ATR": 2.5
+    },
+    "patch": {
+      "_HOURS": [
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 378,
+      "pts": -75.8,
+      "pf": 0.93,
+      "wr": 45.2,
+      "maxdd": -253.9
+    },
+    "test": {
+      "n": 184,
+      "pts": 98.2,
+      "pf": 1.11,
+      "wr": 45.7,
+      "maxdd": -83.0
+    },
+    "dt": 124.5
+  },
+  "OLDBASE_6hr_c0.80": {
+    "label": "OLDBASE_6hr_c0.80",
+    "cost": 0.8,
+    "min_sl": 1.5,
+    "block_hours": [],
+    "env": {},
+    "patch": {
+      "_HOURS": [
+        7,
+        8,
+        9,
+        12,
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 940,
+      "pts": -353.2,
+      "pf": 0.857,
+      "wr": 43.0,
+      "maxdd": -492.3
+    },
+    "test": {
+      "n": 529,
+      "pts": -472.1,
+      "pf": 0.795,
+      "wr": 40.1,
+      "maxdd": -549.0
+    },
+    "dt": 176.5
+  },
+  "A_minsl_2.0_c0.80": {
+    "label": "A_minsl_2.0_c0.80",
+    "cost": 0.8,
+    "min_sl": 2.0,
+    "block_hours": [],
+    "env": {},
+    "patch": {
+      "_HOURS": [
+        7,
+        8,
+        9,
+        12,
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 760,
+      "pts": -248.3,
+      "pf": 0.888,
+      "wr": 42.5,
+      "maxdd": -401.9
+    },
+    "test": {
+      "n": 515,
+      "pts": -457.3,
+      "pf": 0.8,
+      "wr": 40.2,
+      "maxdd": -534.2
+    },
+    "dt": 179.9
+  },
+  "A_minsl_3.0_c0.80": {
+    "label": "A_minsl_3.0_c0.80",
+    "cost": 0.8,
+    "min_sl": 3.0,
+    "block_hours": [],
+    "env": {},
+    "patch": {
+      "_HOURS": [
+        7,
+        8,
+        9,
+        12,
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 492,
+      "pts": -58.2,
+      "pf": 0.966,
+      "wr": 42.9,
+      "maxdd": -273.8
+    },
+    "test": {
+      "n": 439,
+      "pts": -422.0,
+      "pf": 0.803,
+      "wr": 39.2,
+      "maxdd": -502.2
+    },
+    "dt": 192.0
+  },
+  "A_minsl_3.5_c0.80": {
+    "label": "A_minsl_3.5_c0.80",
+    "cost": 0.8,
+    "min_sl": 3.5,
+    "block_hours": [],
+    "env": {},
+    "patch": {
+      "_HOURS": [
+        7,
+        8,
+        9,
+        12,
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 384,
+      "pts": 4.9,
+      "pf": 1.003,
+      "wr": 43.0,
+      "maxdd": -248.1
+    },
+    "test": {
+      "n": 393,
+      "pts": -373.9,
+      "pf": 0.816,
+      "wr": 39.4,
+      "maxdd": -454.1
+    },
+    "dt": 176.7
+  },
+  "A_minsl_4.0_c0.80": {
+    "label": "A_minsl_4.0_c0.80",
+    "cost": 0.8,
+    "min_sl": 4.0,
+    "block_hours": [],
+    "env": {},
+    "patch": {
+      "_HOURS": [
+        7,
+        8,
+        9,
+        12,
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 304,
+      "pts": 74.7,
+      "pf": 1.06,
+      "wr": 44.1,
+      "maxdd": -192.4
+    },
+    "test": {
+      "n": 346,
+      "pts": -354.2,
+      "pf": 0.815,
+      "wr": 38.7,
+      "maxdd": -429.9
+    },
+    "dt": 172.8
+  },
+  "C_MINFVGATR_0.2_c0.80": {
+    "label": "C_MINFVGATR_0.2_c0.80",
+    "cost": 0.8,
+    "min_sl": 1.5,
+    "block_hours": [],
+    "env": {},
+    "patch": {
+      "_HOURS": [
+        7,
+        8,
+        9,
+        12,
+        13,
+        14
+      ],
+      "_MIN_FVG_ATR": 0.2
+    },
+    "train": {
+      "n": 1037,
+      "pts": -450.9,
+      "pf": 0.829,
+      "wr": 42.9,
+      "maxdd": -561.3
+    },
+    "test": {
+      "n": 663,
+      "pts": -407.5,
+      "pf": 0.841,
+      "wr": 40.7,
+      "maxdd": -504.2
+    },
+    "dt": 164.7
+  },
+  "OVERLAP_13_14_minsl_2.0_c0.45": {
+    "label": "OVERLAP_13_14_minsl_2.0_c0.45",
+    "cost": 0.45,
+    "min_sl": 2.0,
+    "block_hours": [],
+    "env": {},
+    "patch": {
+      "_HOURS": [
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 335,
+      "pts": 48.9,
+      "pf": 1.05,
+      "wr": 44.5,
+      "maxdd": -175.2
+    },
+    "test": {
+      "n": 184,
+      "pts": 162.6,
+      "pf": 1.19,
+      "wr": 45.7,
+      "maxdd": -77.8
+    },
+    "dt": 106.0
+  },
+  "OVERLAP_13_14_minsl_2.5_c0.45": {
+    "label": "OVERLAP_13_14_minsl_2.5_c0.45",
+    "cost": 0.45,
+    "min_sl": 2.5,
+    "block_hours": [],
+    "env": {},
+    "patch": {
+      "_HOURS": [
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 302,
+      "pts": 19.3,
+      "pf": 1.021,
+      "wr": 42.4,
+      "maxdd": -196.0
+    },
+    "test": {
+      "n": 182,
+      "pts": 168.0,
+      "pf": 1.197,
+      "wr": 46.2,
+      "maxdd": -77.8
+    },
+    "dt": 111.4
+  },
+  "OVERLAP_13_14_minsl_3.0_c0.45": {
+    "label": "OVERLAP_13_14_minsl_3.0_c0.45",
+    "cost": 0.45,
+    "min_sl": 3.0,
+    "block_hours": [],
+    "env": {},
+    "patch": {
+      "_HOURS": [
+        13,
+        14
+      ]
+    },
+    "train": {
+      "n": 257,
+      "pts": 54.6,
+      "pf": 1.064,
+      "wr": 43.6,
+      "maxdd": -177.3
+    },
+    "test": {
+      "n": 177,
+      "pts": 170.5,
+      "pf": 1.202,
+      "wr": 46.3,
+      "maxdd": -74.9
+    },
+    "dt": 112.6
+  }
+}
