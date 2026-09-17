@@ -922,3 +922,8 @@ earns.
   `_SD_MULT` confirmation REPORT_s94 demanded ran in 52 s (8 arms): **DO NOT SHIP** — 2.5/3.0
   improve TEST PF 0.858 → 0.986/0.989 but never clear 1.0 and fall to 0.92 at 0.80 cost; 3.5
   overfits (TRAIN 1.057 / TEST 0.771). `lab/REPORT_s94_fullwindow_2026-09-18.md`.
+- 2026-09-18 — S94 directional arms (`Cfg.sides` added to the harness; control reproduces the
+  baseline byte-for-byte). Long-only sd2.5/3.0 is the first S94 config to clear TEST PF > 1
+  (1.116 / 1.132, stress 1.051 / 1.069) and shorts are the bleed (TEST 0.719) — but monthly
+  attribution is 0.51-correlated with gold: +525 pts in gold-up months, −266 in gold-down.
+  Beta until a regime-conditioned arm says otherwise. `lab/REPORT_s94_sides_2026-09-18.md`.

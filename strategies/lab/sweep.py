@@ -61,7 +61,7 @@ from lab.harness import Cfg, load_bars, replay   # noqa: E402
 RESULTS = _HERE / "results"
 
 # Summary columns copied from replay()'s dict into the result row / json.
-_SUMMARY_KEYS = ("strategy", "cost", "min_sl", "block_hours", "n", "pts", "pf", "wr", "r",
+_SUMMARY_KEYS = ("strategy", "cost", "min_sl", "block_hours", "sides", "n", "pts", "pf", "wr", "r",
                  "exp_r", "exp_pts", "maxdd_pts", "avg_win", "avg_loss")
 
 
@@ -89,6 +89,7 @@ def slug(label: str) -> str:
 def _cfg_json(cfg: Cfg) -> dict:
     d = dataclasses.asdict(cfg)
     d["block_hours"] = list(d["block_hours"])
+    d["sides"] = list(d["sides"])
     return d
 
 

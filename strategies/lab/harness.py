@@ -70,6 +70,7 @@ class Cfg:
     win_5m: int = 160
     win_15m: int = 100
     block_hours: tuple = ()         # extra UTC hours that refuse NEW entries
+    sides: tuple = ("BUY", "SELL")  # entry sides admitted (a modelable directional gate)
     # Break-even stop move. 0 = off (the live behaviour: entry_manager writes a STATIC
     # stop and target). When > 0, once price has travelled that many R in favour, the
     # stop moves to the entry price. This is `be=True` in ClaudeTradingRD's
@@ -150,6 +151,8 @@ def _replay_inner(module_name: str, bars: dict, start, end, cfg: "Cfg") -> dict:
         if getattr(cfg, k) == getattr(Cfg(), k):
             setattr(cfg, k, v)
     assert_windows(mod, cfg)
+    if not set(cfg.sides) <= {"BUY", "SELL"}:
+        raise ValueError(f"cfg.sides must be a subset of ('BUY', 'SELL'), got {cfg.sides!r}")
     scfg = mod.CONFIG
     cooldown = cfg.cooldown_s or scfg.cooldown_s
     maxc = cfg.max_concurrent or getattr(scfg, "max_concurrent_positions", 1)
@@ -257,6 +260,8 @@ def _replay_inner(module_name: str, bars: dict, start, end, cfg: "Cfg") -> dict:
         # ---- the modelable live entry gates ----
         if now.hour in cfg.block_hours:
             continue
+        if sig.side not in cfg.sides:
+            continue
         if in_news_blackout(now, wins):
             continue
         if sl_too_tight(sig.entry_price, sig.stop_loss, cfg.min_sl_dist_pts):
@@ -277,7 +282,7 @@ def _replay_inner(module_name: str, bars: dict, start, end, cfg: "Cfg") -> dict:
 
 def summarize(name: str, rows: list, cfg: Cfg) -> dict:
     base = dict(strategy=name, cost=cfg.cost_pts, min_sl=cfg.min_sl_dist_pts,
-                block_hours=list(cfg.block_hours))
+                block_hours=list(cfg.block_hours), sides=list(cfg.sides))
     if not rows:
         return {**base, "n": 0, "pts": 0.0, "pf": 0.0, "wr": 0.0, "r": 0.0,
                 "exp_r": 0.0, "exp_pts": 0.0, "maxdd_pts": 0.0, "trades": pd.DataFrame()}

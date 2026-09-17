@@ -1,0 +1,54 @@
+{
+ "label": "long_sd2.0_c0.80",
+ "strategy": "s94_sweep_reversal",
+ "start": "2025-01-05",
+ "end": "2026-08-12",
+ "split": "2026-02-01",
+ "cfg": {
+  "cost_pts": 0.8,
+  "min_sl_dist_pts": 1.5,
+  "news_blackout": "12:25-12:45",
+  "max_concurrent": 0,
+  "cooldown_s": 0,
+  "win_1m": 700,
+  "win_5m": 160,
+  "win_15m": 100,
+  "block_hours": [],
+  "sides": [
+   "BUY"
+  ],
+  "be_at_r": 0.0,
+  "env": {},
+  "patch": {
+   "_SD_MULT": 2.0
+  }
+ },
+ "cost": 0.8,
+ "min_sl": 1.5,
+ "block_hours": [],
+ "sides": [
+  "BUY"
+ ],
+ "n": 598,
+ "pts": -500.4,
+ "pf": 0.83,
+ "wr": 25.1,
+ "r": -70.07,
+ "exp_r": -0.1172,
+ "exp_pts": -0.837,
+ "maxdd_pts": -645.3,
+ "avg_win": 16.26,
+ "avg_loss": -6.56,
+ "train_n": 355,
+ "train_pts": -360.0,
+ "train_pf": 0.768,
+ "train_wr": 24.5,
+ "train_maxdd_pts": -451.8,
+ "test_n": 243,
+ "test_pts": -140.4,
+ "test_pf": 0.899,
+ "test_wr": 25.9,
+ "test_maxdd_pts": -368.0,
+ "elapsed_s": 50.28,
+ "status": "ok"
+}
