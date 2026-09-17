@@ -103,11 +103,37 @@ _ENTRY_TTL   = 30      # M5 bars the retest entry stays armed
 # (a one-time WARN fires in _detect when the window is shorter than this).
 _LEVEL_TTL   = int(os.getenv("S94_LEVEL_TTL_BARS", "1440"))
 _STOP_BUF    = 0.10    # stop: extreme + 10% of penetration
-_SD_MULT     = 2.0     # TP: extreme + 2 x break-bar leg (reversal direction)
+# TP: extreme + _SD_MULT x break-bar leg (reversal direction). env-tunable (2026-09-18):
+# S94_SD_MULT. 2.0 is the shipped value; the full-window lab campaigns
+# (lab/REPORT_s94_fullwindow_2026-09-18.md, REPORT_s94_regime_2026-09-18.md) put the
+# long-only optimum at 2.5-3.0. Read at import like _LEVEL_TTL, so the harness's
+# importlib.reload + Cfg.env path and a container's env both take effect at start.
+_SD_MULT     = float(os.getenv("S94_SD_MULT", "2.0"))
 _MIN_RR      = 1.0     # skip if |TP-entry| < |stop-entry|
 _MAX_HOLD_MIN = 1200   # 240 M5 bars
 _SESSIONS    = (("asia", 0, 7), ("london", 7, 12), ("ny", 12, 21))  # UTC
 _MIN_M5      = 24 * 12 + _SWING_K  # need at least ~1 day of M5 for PD levels
+
+
+def _parse_sides(raw: str) -> frozenset:
+    """S94_SIDES: comma-separated subset of BUY,SELL (case-insensitive). Anything
+    else raises at import -- a mis-set flag must fail the container at start, not
+    silently trade both sides (opt15 fail-loud discipline)."""
+    sides = frozenset(x.strip().upper() for x in raw.split(",") if x.strip())
+    if not sides or not sides <= {"BUY", "SELL"}:
+        raise ValueError(f"S94_SIDES must be a non-empty subset of BUY,SELL; got {raw!r}")
+    return sides
+
+
+# Entry sides this instance may fire. Default both (unchanged behaviour). A signal for a
+# disabled side is dropped in get_signal AFTER _touch() has consumed its pending -- the
+# exact semantics of the lab harness's Cfg.sides gate, so every lab arm run with
+# Cfg.sides transfers 1:1 to a container running with S94_SIDES set. Lab evidence for
+# S94_SIDES=BUY: lab/REPORT_s94_sides_2026-09-18.md + REPORT_s94_regime_2026-09-18.md.
+_SIDES = _parse_sides(os.getenv("S94_SIDES", "BUY,SELL"))
+if _SD_MULT != 2.0 or _SIDES != frozenset({"BUY", "SELL"}):
+    log.info("S94 config: _SD_MULT=%s sides=%s (non-default; from env)",
+             _SD_MULT, ",".join(sorted(_SIDES)))
 
 # Runner MIN_BARS contract (opt15 Task 7): smallest M5 window get_signal
 # tolerates. research_runner asserts RESEARCH_WIN_5M >= this at startup so an
@@ -486,6 +512,10 @@ def get_signal(w1m, w5m: pd.DataFrame, w15m, now_utc: datetime) -> Signal | None
     # M5 fallback for 1m-less offline replays.
     if w1m is not None and len(w1m) > 0:
         r = w1m.iloc[-1]
-        return _touch(r["time"], float(r["high"]), float(r["low"]))
-    r = w5m.iloc[-1]
-    return _touch(r["time"], float(r["high"]), float(r["low"]))
+        sig = _touch(r["time"], float(r["high"]), float(r["low"]))
+    else:
+        r = w5m.iloc[-1]
+        sig = _touch(r["time"], float(r["high"]), float(r["low"]))
+    if sig is not None and sig.side not in _SIDES:
+        return None                     # pending already consumed by _touch (see _SIDES)
+    return sig

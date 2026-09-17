@@ -276,6 +276,12 @@ services:
                                    # zero holiday margin); 2026-07-23 capture audit
       RESEARCH_DAYS_15M: "5"       # WIN_15M=100 needs >3 calendar days over a weekend
       DRY_RUN: "true"              # PAPER until live fills match the backtest
+      # 2026-09-18 knobs, shipped at their historical defaults (both unset == pre-flag
+      # behaviour). Lab evidence for SIDES=BUY + SD_MULT 2.5-3.0:
+      # strategies/lab/REPORT_s94_regime_2026-09-18.md. Operator decision; set on the
+      # box .env, never here (box compose is merged additively, never overwritten).
+      S94_SIDES: ${S94_SIDES:-BUY,SELL}
+      S94_SD_MULT: ${S94_SD_MULT:-2.0}
 
   # S96 retired from the roster 2026-07-06 (operator decision) — service removed.
 
