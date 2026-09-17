@@ -58,6 +58,37 @@ def load_bars(tfs=("1m", "5m", "15m")) -> dict:
     return out
 
 
+class RegimeGate:
+    """Daily close-vs-SMA regime, evaluated without look-ahead.
+
+    The cache's daily bars are midnight-UTC aligned (time = day open), so a bar has
+    closed once ``now >= time + 1 day``. The state at ``now`` is the newest closed
+    bar's close compared to the SMA of the last ``sma`` closes ending at that bar;
+    while the SMA is undefined (warm-up) nothing is admitted."""
+
+    MODES = ("above_sma20", "below_sma20")
+
+    def __init__(self, daily: pd.DataFrame, sma: int, mode: str):
+        if mode not in self.MODES:
+            raise ValueError(f"regime must be one of {self.MODES}, got {mode!r}")
+        d = daily.sort_values("time")
+        t = pd.to_datetime(d["time"], utc=True).dt.tz_convert(None).to_numpy("datetime64[ns]")
+        close = d["close"].to_numpy(float)
+        ma = pd.Series(close).rolling(sma).mean().to_numpy()
+        self._closes_at = t + np.timedelta64(1, "D")        # when each bar is CLOSED
+        self._above = close > ma                             # False where ma is NaN
+        self._defined = ~np.isnan(ma)
+        self._want_above = mode == "above_sma20"
+
+    def admits(self, now) -> bool:
+        ts = np.datetime64(pd.Timestamp(now).tz_convert(None) if pd.Timestamp(now).tzinfo
+                           else pd.Timestamp(now), "ns")
+        i = int(np.searchsorted(self._closes_at, ts, side="right")) - 1   # newest closed bar
+        if i < 0 or not self._defined[i]:
+            return False
+        return bool(self._above[i]) == self._want_above
+
+
 @dataclass
 class Cfg:
     """Replay knobs. Defaults reproduce PRODUCTION behaviour as configured today."""
@@ -71,6 +102,11 @@ class Cfg:
     win_15m: int = 100
     block_hours: tuple = ()         # extra UTC hours that refuse NEW entries
     sides: tuple = ("BUY", "SELL")  # entry sides admitted (a modelable directional gate)
+    # Daily-SMA regime gate for NEW entries: None (off), "above_sma20" (admit only while
+    # the newest CLOSED daily close > SMA), "below_sma20" (only while <= SMA). Needs the
+    # "1d" frame in `bars` (load_bars(tfs=(..., "1d"))). Look-ahead safe: see RegimeGate.
+    regime: str | None = None
+    regime_sma: int = 20
     # Break-even stop move. 0 = off (the live behaviour: entry_manager writes a STATIC
     # stop and target). When > 0, once price has travelled that many R in favour, the
     # stop moves to the entry price. This is `be=True` in ClaudeTradingRD's
@@ -153,6 +189,11 @@ def _replay_inner(module_name: str, bars: dict, start, end, cfg: "Cfg") -> dict:
     assert_windows(mod, cfg)
     if not set(cfg.sides) <= {"BUY", "SELL"}:
         raise ValueError(f"cfg.sides must be a subset of ('BUY', 'SELL'), got {cfg.sides!r}")
+    regime_gate = None
+    if cfg.regime is not None:
+        if "1d" not in bars:
+            raise ValueError("cfg.regime needs the daily frame: load_bars(tfs=(..., '1d'))")
+        regime_gate = RegimeGate(bars["1d"], cfg.regime_sma, cfg.regime)
     scfg = mod.CONFIG
     cooldown = cfg.cooldown_s or scfg.cooldown_s
     maxc = cfg.max_concurrent or getattr(scfg, "max_concurrent_positions", 1)
@@ -262,6 +303,8 @@ def _replay_inner(module_name: str, bars: dict, start, end, cfg: "Cfg") -> dict:
             continue
         if sig.side not in cfg.sides:
             continue
+        if regime_gate is not None and not regime_gate.admits(now):
+            continue
         if in_news_blackout(now, wins):
             continue
         if sl_too_tight(sig.entry_price, sig.stop_loss, cfg.min_sl_dist_pts):
@@ -282,7 +325,8 @@ def _replay_inner(module_name: str, bars: dict, start, end, cfg: "Cfg") -> dict:
 
 def summarize(name: str, rows: list, cfg: Cfg) -> dict:
     base = dict(strategy=name, cost=cfg.cost_pts, min_sl=cfg.min_sl_dist_pts,
-                block_hours=list(cfg.block_hours), sides=list(cfg.sides))
+                block_hours=list(cfg.block_hours), sides=list(cfg.sides),
+                regime=cfg.regime)
     if not rows:
         return {**base, "n": 0, "pts": 0.0, "pf": 0.0, "wr": 0.0, "r": 0.0,
                 "exp_r": 0.0, "exp_pts": 0.0, "maxdd_pts": 0.0, "trades": pd.DataFrame()}

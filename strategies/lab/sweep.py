@@ -61,7 +61,7 @@ from lab.harness import Cfg, load_bars, replay   # noqa: E402
 RESULTS = _HERE / "results"
 
 # Summary columns copied from replay()'s dict into the result row / json.
-_SUMMARY_KEYS = ("strategy", "cost", "min_sl", "block_hours", "sides", "n", "pts", "pf", "wr", "r",
+_SUMMARY_KEYS = ("strategy", "cost", "min_sl", "block_hours", "sides", "regime", "n", "pts", "pf", "wr", "r",
                  "exp_r", "exp_pts", "maxdd_pts", "avg_win", "avg_loss")
 
 
@@ -122,7 +122,7 @@ _BARS: dict | None = None      # per-process cache: loaded once, reused for ever
 def _bars() -> dict:
     global _BARS
     if _BARS is None:
-        _BARS = load_bars()
+        _BARS = load_bars(tfs=("1m", "5m", "15m", "1d"))
     return _BARS
 
 

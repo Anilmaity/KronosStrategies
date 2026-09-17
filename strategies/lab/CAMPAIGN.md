@@ -927,3 +927,8 @@ earns.
   (1.116 / 1.132, stress 1.051 / 1.069) and shorts are the bleed (TEST 0.719) — but monthly
   attribution is 0.51-correlated with gold: +525 pts in gold-up months, −266 in gold-down.
   Beta until a regime-conditioned arm says otherwise. `lab/REPORT_s94_sides_2026-09-18.md`.
+- 2026-09-18 — S94 regime arms (`Cfg.regime` / `RegimeGate`, look-ahead safe). TEST-half longs
+  earned +1.12 pts/trade BELOW the SMA20 while gold drifted negative in both states → the long
+  edge is not only beta (TRAIN half is). Regime gating does not beat unconditioned long-only;
+  shorts lose in every half and regime. Recommendation: shorts OFF + `_SD_MULT` 2.5–3.0, no
+  regime gate; bear market untested. `lab/REPORT_s94_regime_2026-09-18.md`.
