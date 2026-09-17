@@ -932,3 +932,8 @@ earns.
   edge is not only beta (TRAIN half is). Regime gating does not beat unconditioned long-only;
   shorts lose in every half and regime. Recommendation: shorts OFF + `_SD_MULT` 2.5–3.0, no
   regime gate; bear market untested. `lab/REPORT_s94_regime_2026-09-18.md`.
+- 2026-09-18 — 24-month ICT screen (`PROTOCOL_xau2y_2026-09-18.md`, pre-registered): 15 modules,
+  116 arms, clean 2024-08→2026-09 OANDA cache (`bars_cache_2y/QA_REPORT.md`). **c03_fvg_fill and
+  s14_ob_mit_bias** pass every bar incl. 5-second bid/ask exit resolution and are uncorrelated (0.02);
+  s95 and live s93 pass; S94/S99/S100 fail at shipped config; s97 (TEST PF 2.58) disqualified as a
+  1-minute bar-range artefact. Equal-risk book 23/25 months positive at 0.80. `REPORT_xau2y_2026-09-18.md`.

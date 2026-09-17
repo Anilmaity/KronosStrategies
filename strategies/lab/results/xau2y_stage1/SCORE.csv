@@ -1,0 +1,31 @@
+label,strategy,status,cost,n,pf,pts,train_n,train_pf,train_pts,test_n,test_pf,test_pts,test_months,test_pos_month_share,test_max_month_share,gold_corr,up_months_pts,dn_months_pts,n_up,n_dn,bar1_n,bar2_base,bar3_train,bar4_monthly,bar5_regime,test_pf_stress,bar2_stress,bars_passed,verdict
+c03_fvg_fill_c0.45,c03_fvg_fill,ok,0.45,2161,1.508,2982.3,1323,1.429,1125.7,838,1.571,1856.6,10,1.0,0.24,-0.38,1897.6,1084.6,17,8,True,True,True,True,True,1.459,True,6,PASS
+c03_fvg_fill_c0.80,c03_fvg_fill,ok,0.8,2161,1.355,2225.9,1323,1.232,662.6,838,1.459,1563.3,10,0.9,0.26,-0.37,1379.3,846.6,17,8,True,True,True,True,True,,False,5,(stress arm)
+s03_ob_mitigation_c0.45,s03_ob_mitigation,ok,0.45,6703,1.005,53.7,4083,1.017,112.6,2620,0.988,-58.9,10,0.5,,0.53,251.1,-197.4,17,8,True,False,True,False,False,0.824,False,2,FAIL
+s03_ob_mitigation_c0.80,s03_ob_mitigation,ok,0.8,6703,0.826,-2292.3,4083,0.828,-1316.5,2620,0.824,-975.9,10,0.0,,0.42,-1420.2,-872.1,17,8,True,False,False,False,False,,False,1,(stress arm)
+s04_breaker_block_c0.45,s04_breaker_block,ok,0.45,6613,0.878,-1644.8,2561,0.854,-650.3,4052,0.889,-994.5,10,0.2,,-0.1,-1078.1,-566.7,17,8,True,False,False,False,True,0.756,False,2,FAIL
+s04_breaker_block_c0.80,s04_breaker_block,ok,0.8,6613,0.735,-3959.3,2561,0.691,-1546.7,4052,0.756,-2412.7,10,0.0,,0.01,-2547.8,-1411.5,17,8,True,False,False,False,True,,False,2,(stress arm)
+s100_m3_combo_c0.45,s100_m3_combo,ok,0.45,4579,1.003,36.9,2147,0.898,-469.2,2432,1.065,506.2,10,0.6,0.63,-0.25,-237.1,274.0,17,8,True,True,False,False,True,0.959,False,3,FAIL
+s100_m3_combo_c0.80,s100_m3_combo,ok,0.8,4579,0.884,-1565.7,2147,0.761,-1220.7,2432,0.959,-345.0,10,0.3,,-0.22,-1307.0,-258.7,17,8,True,False,False,False,True,,False,2,(stress arm)
+s10_90min_fade_c0.45,s10_90min_fade,ok,0.45,9401,0.748,-3869.5,4687,0.689,-1869.4,4714,0.786,-2000.1,10,0.1,,0.32,-2448.4,-1421.1,17,8,True,False,False,False,True,0.647,False,2,FAIL
+s10_90min_fade_c0.80,s10_90min_fade,ok,0.8,9401,0.587,-7159.8,4687,0.498,-3509.9,4714,0.647,-3650.0,10,0.0,,0.34,-4628.9,-2531.0,17,8,True,False,False,False,True,,False,2,(stress arm)
+s11_m90_fade_ny_c0.45,s11_m90_fade_ny,ok,0.45,1810,0.875,-373.1,900,0.911,-92.7,910,0.855,-280.4,10,0.3,,-0.07,-212.1,-160.9,17,8,True,False,True,False,True,0.718,False,3,FAIL
+s11_m90_fade_ny_c0.80,s11_m90_fade_ny,ok,0.8,1810,0.698,-1006.6,900,0.663,-407.7,910,0.718,-598.9,10,0.1,,-0.02,-634.2,-372.3,17,8,True,False,False,False,True,,False,2,(stress arm)
+s12_m90_fade_bias_c0.45,s12_m90_fade_bias,ok,0.45,4089,1.012,56.2,1998,0.938,-115.6,2091,1.059,171.8,10,0.5,0.57,-0.27,-76.7,132.8,17,8,True,True,True,False,True,0.831,False,4,FAIL
+s12_m90_fade_bias_c0.80,s12_m90_fade_bias,ok,0.8,4089,0.752,-1375.0,1998,0.634,-814.9,2091,0.831,-560.1,10,0.2,,-0.16,-1005.9,-369.1,17,8,True,False,False,False,True,,False,2,(stress arm)
+s14_ob_mit_bias_c0.45,s14_ob_mit_bias,ok,0.45,3970,1.59,3383.1,2549,1.54,1920.8,1421,1.672,1462.2,10,1.0,0.15,0.48,2511.8,871.3,17,8,True,True,True,True,True,1.4,True,6,PASS
+s14_ob_mit_bias_c0.80,s14_ob_mit_bias,ok,0.8,3970,1.311,1993.6,2549,1.257,1028.7,1421,1.4,964.9,10,0.9,0.17,0.42,1496.1,497.5,17,8,True,True,True,True,True,,False,5,(stress arm)
+s93_fvg_scalp_c0.45,s93_fvg_scalp,ok,0.45,493,1.256,361.7,293,1.153,97.8,200,1.34,264.0,10,0.7,0.48,-0.23,143.4,218.3,17,8,True,True,True,True,True,1.238,True,6,PASS
+s93_fvg_scalp_c0.80,s93_fvg_scalp,ok,0.8,493,1.126,189.2,293,0.993,-4.8,200,1.238,194.0,10,0.7,0.62,-0.24,24.1,165.1,17,8,True,True,True,False,True,,False,4,(stress arm)
+s94_sweep_reversal_c0.45,s94_sweep_reversal,ok,0.45,1304,0.852,-767.0,607,0.827,-317.3,697,0.866,-449.7,10,0.5,,0.62,-205.7,-561.3,17,8,True,False,False,False,False,0.804,False,1,FAIL
+s94_sweep_reversal_c0.80,s94_sweep_reversal,ok,0.8,1304,0.779,-1223.4,607,0.734,-529.7,697,0.804,-693.7,10,0.2,,0.62,-502.5,-720.9,17,8,True,False,False,False,False,,False,1,(stress arm)
+s95_session_breakout_c0.45,s95_session_breakout,ok,0.45,999,1.397,1695.9,615,1.409,747.6,384,1.388,948.3,10,0.7,0.4,0.21,1155.8,540.2,17,8,True,True,True,True,True,1.327,True,6,PASS
+s95_session_breakout_c0.80,s95_session_breakout,ok,0.8,999,1.307,1346.3,615,1.281,532.4,384,1.327,813.9,10,0.6,0.45,0.21,912.2,434.1,17,8,True,True,True,True,True,,False,5,(stress arm)
+s96_h1_momentum_c0.45,s96_h1_momentum,ok,0.45,775,1.315,2432.0,500,1.257,905.5,275,1.365,1526.5,10,0.5,0.65,-0.02,1699.0,733.0,17,8,True,True,True,False,True,1.34,True,5,NEAR
+s96_h1_momentum_c0.80,s96_h1_momentum,ok,0.8,775,1.278,2160.8,500,1.205,730.5,275,1.34,1430.2,10,0.5,0.69,-0.02,1505.8,654.9,17,8,True,True,True,False,True,,False,4,(stress arm)
+s97_snap_scalper_m5_c0.45,s97_snap_scalper_m5,ok,0.45,730,2.491,805.9,498,2.394,351.2,232,2.577,454.7,10,0.9,0.24,-0.24,523.3,282.6,17,8,True,True,True,True,True,2.239,True,6,PASS
+s97_snap_scalper_m5_c0.80,s97_snap_scalper_m5,ok,0.8,730,1.942,550.4,498,1.625,176.9,232,2.239,373.5,10,0.9,0.26,-0.24,344.8,205.6,17,8,True,True,True,True,True,,False,5,(stress arm)
+s98_zscore_mr_m15_c0.45,s98_zscore_mr_m15,ok,0.45,39,0.338,-259.6,23,0.745,-25.6,16,0.197,-234.0,8,0.38,,-0.18,-170.9,-88.7,11,8,False,False,False,False,True,0.19,False,1,FAIL
+s98_zscore_mr_m15_c0.80,s98_zscore_mr_m15,ok,0.8,39,0.32,-273.2,23,0.684,-33.7,16,0.19,-239.6,8,0.12,,-0.18,-178.9,-94.3,11,8,False,False,False,False,True,,False,1,(stress arm)
+s99_mss_fvg_c0.45,s99_mss_fvg,ok,0.45,1871,0.929,-378.9,910,0.937,-123.2,961,0.925,-255.7,10,0.4,,0.32,-45.7,-333.2,17,8,True,False,True,False,True,0.835,False,3,FAIL
+s99_mss_fvg_c0.80,s99_mss_fvg,ok,0.8,1871,0.819,-1033.7,910,0.793,-441.7,961,0.835,-592.0,10,0.2,,0.33,-483.9,-549.8,17,8,True,False,False,False,True,,False,2,(stress arm)

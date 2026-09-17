@@ -44,7 +44,8 @@ def load_s5() -> pd.DataFrame:
     return d.sort_values("time").reset_index(drop=True)
 
 
-def resolve(trade, s5: pd.DataFrame, t5, mode: str, cost: float, max_hold_min: float):
+def resolve(trade, s5: pd.DataFrame, t5, mode: str, cost: float, max_hold_min: float,
+            start_offset_s: int = 0):
     """Walk S5 bars from entry to the strategy's OWN max-hold horizon and return
     (outcome, exit_px).
 
@@ -58,7 +59,11 @@ def resolve(trade, s5: pd.DataFrame, t5, mode: str, cost: float, max_hold_min: f
     """
     ent = np.datetime64(trade.entry_time.tz_convert("UTC").tz_localize(None))
     end = ent + np.timedelta64(int(max_hold_min * 60), "s")
-    i = int(np.searchsorted(t5, ent, "right"))
+    # The harness labels an entry with the signal bar's OPEN time and fills at that bar's
+    # close, so S5 bars inside the entry minute have already elapsed. start_offset_s=60
+    # begins the walk when the entry bar has closed (2026-09-18: without it a 1-minute
+    # scalper's targets resolve on price action that preceded the fill).
+    i = int(np.searchsorted(t5, ent + np.timedelta64(start_offset_s, "s"), "right"))
     j = int(np.searchsorted(t5, end, "right"))
     if j <= i:
         return None

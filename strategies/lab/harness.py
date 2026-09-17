@@ -33,23 +33,28 @@ _STRAT = _HERE.parent
 if str(_STRAT) not in sys.path:
     sys.path.insert(0, str(_STRAT))
 
-CACHE = _STRAT / "backtest" / "results" / "bars_cache"
+# Bars cache directory. LAB_BARS_CACHE overrides it (e.g. a longer-history cache built
+# beside the default one) without touching the production 19.5-month cache.
+CACHE = Path(os.environ.get("LAB_BARS_CACHE") or (_STRAT / "backtest" / "results" / "bars_cache"))
 
 from shared.gate_rules import (            # noqa: E402  -- the real live predicates
     parse_utc_windows, in_news_blackout, sl_too_tight,
 )
+from backtest_strategies.base import in_session   # noqa: E402  -- research_runner's session gate
 
 TF_FILES = {"1m": "is_XAU_USD_1m.parquet", "5m": "is_XAU_USD_5m.parquet",
             "15m": "is_XAU_USD_15m.parquet", "1h": "is_XAU_USD_1h.parquet",
             "4h": "is_XAU_USD_4h.parquet", "1d": "is_XAU_USD_1d.parquet"}
 
 
-def load_bars(tfs=("1m", "5m", "15m")) -> dict:
+def load_bars(tfs=("1m", "5m", "15m"), cache: Path | str | None = None) -> dict:
     """Load cached OHLC frames with `time` normalised to tz-naive UTC -- exactly
-    what tsdb_reader.fetch_candles hands the live runners."""
+    what tsdb_reader.fetch_candles hands the live runners. `cache` overrides the
+    directory (default: CACHE, itself overridable via LAB_BARS_CACHE)."""
     out = {}
+    cache = Path(cache) if cache else CACHE
     for tf in tfs:
-        df = pd.read_parquet(CACHE / TF_FILES[tf])
+        df = pd.read_parquet(cache / TF_FILES[tf])
         t = pd.to_datetime(df["time"], utc=True).dt.tz_convert(None)
         df = df.assign(time=t.astype("datetime64[ns]"))
         for c in ("open", "high", "low", "close"):
@@ -176,10 +181,31 @@ def replay(module_name: str, bars: dict, start=None, end=None, cfg: Cfg | None =
 def _replay_inner(module_name: str, bars: dict, start, end, cfg: "Cfg") -> dict:
     mod = _load_module(module_name)
     importlib.reload(mod)                       # pick up env-dependent module constants
+    # Patches on the replayed module itself reset on the next reload. A dotted key
+    # "package.module:ATTR" patches a DELEGATE module (e.g. the thin s95 wrapper's
+    # kronos_session_breakout) -- those are saved here and restored in the finally
+    # below, because nothing else would undo them before the next arm.
+    _delegate_saved: list = []
     for attr, val in (cfg.patch or {}).items():
+        if ":" in attr:
+            modname, name = attr.split(":", 1)
+            target = importlib.import_module(modname)
+            if not hasattr(target, name):
+                raise AttributeError(f"{modname} has no constant {name!r} to patch")
+            _delegate_saved.append((target, name, getattr(target, name)))
+            setattr(target, name, val)
+            continue
         if not hasattr(mod, attr):
             raise AttributeError(f"{module_name} has no constant {attr!r} to patch")
         setattr(mod, attr, val)
+    try:
+        return _replay_body(module_name, mod, bars, start, end, cfg)
+    finally:
+        for target, name, old in _delegate_saved:
+            setattr(target, name, old)
+
+
+def _replay_body(module_name: str, mod, bars: dict, start, end, cfg: "Cfg") -> dict:
     if hasattr(mod, "reset_state"):
         mod.reset_state()
     # apply the strategy's compose windows unless the caller overrode them
@@ -271,6 +297,10 @@ def _replay_inner(module_name: str, bars: dict, start, end, cfg: "Cfg") -> dict:
         open_trades = still
 
         if len(open_trades) >= maxc:
+            continue
+        # CONFIG.session_start_hour/end_hour, applied BEFORE get_signal exactly as
+        # research_runner does (no signal is computed out of session). None/None -> no gate.
+        if not in_session(now, scfg):
             continue
         if last_entry_ts is not None and (now - last_entry_ts).total_seconds() < cooldown:
             continue
