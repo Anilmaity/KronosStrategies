@@ -61,10 +61,22 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 
+try:
+    from numba import njit as _njit
+    _NUMBA = True
+except ImportError:                                 # pragma: no cover
+    _NUMBA = False
+
+    def _njit(*a, **k):                             # same source, interpreted
+        return a[0] if a and callable(a[0]) else (lambda f: f)
+
 from backtest_strategies._shared_ta import ensure_utc_ts
 from backtest_strategies.base import Signal, StrategyConfig
 
 log = logging.getLogger(__name__)
+if not _NUMBA:                                      # pragma: no cover
+    log.warning("S94: numba not installed -- level machine runs interpreted "
+                "(~14x slower per rebuild; results identical). pip install numba.")
 
 NAME = "KRONOS_S94_SWEEP_REVERSAL"
 CONFIG = StrategyConfig(
@@ -134,89 +146,163 @@ def reset_state() -> None:
     _ttl_warned = False
 
 
-def _new_state(origin_ts) -> dict:
-    """Fresh (empty) level/sweep machine anchored at `origin_ts`."""
+# Level kinds / sides inside the compiled machine (ints, not strings).
+_K_PD, _K_SESSION, _K_SWING = 0, 1, 2
+_SIDE_HIGH, _SIDE_LOW = 1, -1
+_SESS_START = np.array([s[1] for s in _SESSIONS], dtype=np.int64)
+_SESS_END = np.array([s[2] for s in _SESSIONS], dtype=np.int64)
+_GROW = 6          # max level births per stepped bar: 2 PD + 2 session + 2 swing
+
+
+def _new_state(origin_ts, capacity: int = 64) -> dict:
+    """Fresh (empty) level/sweep machine anchored at `origin_ts`.
+
+    Levels live in parallel numpy arrays (insertion order == the old list order,
+    removals compact in place) so the per-bar walk can be compiled; `n_lv` is
+    the live count. Day/session trackers use sentinels (-1 day, NaN price,
+    sess_on flag) in place of the old None / missing-key states."""
     return {
         "origin_ts": origin_ts,
         "last_ts": None,
         "last_idx": None,
-        "levels": [],          # {price, side, kind, born, break_i, extreme}
-        "cur_day": None,
-        "day_hi": None,
-        "day_lo": None,
-        "sess_state": {},
+        "n_lv": 0,
+        "lv_price": np.empty(capacity, np.float64),
+        "lv_side": np.empty(capacity, np.int64),
+        "lv_kind": np.empty(capacity, np.int64),
+        "lv_born": np.empty(capacity, np.int64),
+        "lv_break": np.empty(capacity, np.int64),      # -1 == not broken yet
+        "lv_extreme": np.empty(capacity, np.float64),
+        "cur_day": np.int64(-1),
+        "day_hi": np.nan,
+        "day_lo": np.nan,
+        "sess_hi": np.full(len(_SESSIONS), np.nan),
+        "sess_lo": np.full(len(_SESSIONS), np.nan),
+        "sess_on": np.zeros(len(_SESSIONS), np.bool_),
     }
 
 
-def _step_bar(a: int, h, l, c, day, hour, hmax, lmin) -> list[dict]:
-    """Advance the persistent level/sweep machine (`_state`) by ONE bar at
-    window index `a`. Returns the confirmation hits produced ON THIS bar.
+def _ensure_capacity(st: dict, n_new_bars: int) -> None:
+    need = st["n_lv"] + _GROW * n_new_bars
+    cap = len(st["lv_price"])
+    if need <= cap:
+        return
+    new_cap = max(need, 2 * cap)
+    for k in ("lv_price", "lv_side", "lv_kind", "lv_born", "lv_break", "lv_extreme"):
+        arr = np.empty(new_cap, st[k].dtype)
+        arr[:st["n_lv"]] = st[k][:st["n_lv"]]
+        st[k] = arr
 
-    This is the exact body of the old per-bar loop iteration, lifted verbatim so
-    that stepping bars one-at-a-time across ticks (incremental) is identical to
-    looping over every bar in one pass (full rebuild). `a` is an offset from the
-    machine origin == current window position while the origin is stable."""
-    st = _state
-    levels = st["levels"]
 
-    if day[a] != st["cur_day"]:
-        if st["day_hi"] is not None:
-            st["levels"] = [lv for lv in levels if lv["kind"] != "PD"]
-            levels = st["levels"]
-            levels.append({"price": st["day_hi"], "side": "high", "kind": "PD",
-                           "born": a, "break_i": None, "extreme": 0.0})
-            levels.append({"price": st["day_lo"], "side": "low", "kind": "PD",
-                           "born": a, "break_i": None, "extreme": 0.0})
-        st["cur_day"], st["day_hi"], st["day_lo"] = day[a], h[a], l[a]
-        st["sess_state"] = {}
-    else:
-        st["day_hi"], st["day_lo"] = max(st["day_hi"], h[a]), min(st["day_lo"], l[a])
+@_njit(cache=False)
+def _run_bars(start, n, h, l, c, day, hour, hmax, lmin,
+              swing_k, level_ttl, confirm_n, sess_start, sess_end,
+              lv_price, lv_side, lv_kind, lv_born, lv_break, lv_extreme, n_lv,
+              cur_day, day_hi, day_lo, sess_hi, sess_lo, sess_on,
+              hit_price, hit_side, hit_break, hit_extreme):
+    """Step the level/sweep machine over window bars [start, n).
 
-    sess_state = st["sess_state"]
-    for name, start, end in _SESSIONS:
-        if start <= hour[a] < end:
-            s = sess_state.setdefault(name, [h[a], l[a]])
-            s[0], s[1] = max(s[0], h[a]), min(s[1], l[a])
-        elif name in sess_state and hour[a] >= end:
-            s = sess_state.pop(name)
-            levels.append({"price": s[0], "side": "high", "kind": "session",
-                           "born": a, "break_i": None, "extreme": 0.0})
-            levels.append({"price": s[1], "side": "low", "kind": "session",
-                           "born": a, "break_i": None, "extreme": 0.0})
-
-    j = a - _SWING_K
-    if j >= _SWING_K:
-        if h[j] == hmax[j]:
-            levels.append({"price": h[j], "side": "high", "kind": "swing",
-                           "born": a, "break_i": None, "extreme": 0.0})
-        if l[j] == lmin[j]:
-            levels.append({"price": l[j], "side": "low", "kind": "swing",
-                           "born": a, "break_i": None, "extreme": 0.0})
-
-    hits: list[dict] = []
-    kill: list[dict] = []
-    for lv in levels:
-        if lv["kind"] != "PD" and a - lv["born"] > _LEVEL_TTL:
-            kill.append(lv)
-            continue
-        if lv["break_i"] is None:
-            if lv["side"] == "high" and h[a] > lv["price"]:
-                lv["break_i"], lv["extreme"] = a, h[a]
-            elif lv["side"] == "low" and l[a] < lv["price"]:
-                lv["break_i"], lv["extreme"] = a, l[a]
+    This is the old per-bar loop body (`_step_bar`, opt15 Task 10) written on
+    arrays so numba can compile it; the walk order, the same-bar evaluation of
+    freshly born levels, the kill rules and the confirmation harvest are
+    unchanged (tests/test_s94_kernel_golden.py pins it against a trace recorded
+    from the pure-Python version). Confirmations are harvested only on the last
+    bar (n-1) into hit_* ; returns (n_lv, cur_day, day_hi, day_lo, n_hits)."""
+    n_hits = 0
+    for a in range(start, n):
+        # -- prior-day levels roll at the UTC day boundary
+        if day[a] != cur_day:
+            if not np.isnan(day_hi):
+                w = 0
+                for i in range(n_lv):
+                    if lv_kind[i] != 0:
+                        if w != i:
+                            lv_price[w] = lv_price[i]; lv_side[w] = lv_side[i]
+                            lv_kind[w] = lv_kind[i]; lv_born[w] = lv_born[i]
+                            lv_break[w] = lv_break[i]; lv_extreme[w] = lv_extreme[i]
+                        w += 1
+                n_lv = w
+                lv_price[n_lv] = day_hi; lv_side[n_lv] = 1; lv_kind[n_lv] = 0
+                lv_born[n_lv] = a; lv_break[n_lv] = -1; lv_extreme[n_lv] = 0.0
+                n_lv += 1
+                lv_price[n_lv] = day_lo; lv_side[n_lv] = -1; lv_kind[n_lv] = 0
+                lv_born[n_lv] = a; lv_break[n_lv] = -1; lv_extreme[n_lv] = 0.0
+                n_lv += 1
+            cur_day = day[a]
+            day_hi = h[a]
+            day_lo = l[a]
+            for si in range(sess_on.shape[0]):
+                sess_on[si] = False
         else:
-            lv["extreme"] = max(lv["extreme"], h[a]) if lv["side"] == "high" \
-                else min(lv["extreme"], l[a])
-            back = c[a] < lv["price"] if lv["side"] == "high" \
-                else c[a] > lv["price"]
-            if back:
-                hits.append(lv)
-                kill.append(lv)
-            elif a - lv["break_i"] >= _CONFIRM_N:
-                kill.append(lv)
-    for lv in kill:
-        levels.remove(lv)
-    return hits
+            day_hi = max(day_hi, h[a])
+            day_lo = min(day_lo, l[a])
+
+        # -- completed-session levels
+        for si in range(sess_on.shape[0]):
+            if sess_start[si] <= hour[a] < sess_end[si]:
+                if not sess_on[si]:
+                    sess_on[si] = True
+                    sess_hi[si] = h[a]
+                    sess_lo[si] = l[a]
+                else:
+                    sess_hi[si] = max(sess_hi[si], h[a])
+                    sess_lo[si] = min(sess_lo[si], l[a])
+            elif sess_on[si] and hour[a] >= sess_end[si]:
+                sess_on[si] = False
+                lv_price[n_lv] = sess_hi[si]; lv_side[n_lv] = 1; lv_kind[n_lv] = 1
+                lv_born[n_lv] = a; lv_break[n_lv] = -1; lv_extreme[n_lv] = 0.0
+                n_lv += 1
+                lv_price[n_lv] = sess_lo[si]; lv_side[n_lv] = -1; lv_kind[n_lv] = 1
+                lv_born[n_lv] = a; lv_break[n_lv] = -1; lv_extreme[n_lv] = 0.0
+                n_lv += 1
+
+        # -- swing fractals, confirmed swing_k bars later
+        j = a - swing_k
+        if j >= swing_k:
+            if h[j] == hmax[j]:
+                lv_price[n_lv] = h[j]; lv_side[n_lv] = 1; lv_kind[n_lv] = 2
+                lv_born[n_lv] = a; lv_break[n_lv] = -1; lv_extreme[n_lv] = 0.0
+                n_lv += 1
+            if l[j] == lmin[j]:
+                lv_price[n_lv] = l[j]; lv_side[n_lv] = -1; lv_kind[n_lv] = 2
+                lv_born[n_lv] = a; lv_break[n_lv] = -1; lv_extreme[n_lv] = 0.0
+                n_lv += 1
+
+        # -- sweep / confirm walk, compacting killed levels in place
+        last = a == n - 1
+        n_hits = 0
+        w = 0
+        for i in range(n_lv):
+            keep = True
+            if lv_kind[i] != 0 and a - lv_born[i] > level_ttl:
+                keep = False
+            elif lv_break[i] < 0:
+                if lv_side[i] == 1 and h[a] > lv_price[i]:
+                    lv_break[i] = a; lv_extreme[i] = h[a]
+                elif lv_side[i] == -1 and l[a] < lv_price[i]:
+                    lv_break[i] = a; lv_extreme[i] = l[a]
+            else:
+                if lv_side[i] == 1:
+                    lv_extreme[i] = max(lv_extreme[i], h[a])
+                    back = c[a] < lv_price[i]
+                else:
+                    lv_extreme[i] = min(lv_extreme[i], l[a])
+                    back = c[a] > lv_price[i]
+                if back:
+                    if last:
+                        hit_price[n_hits] = lv_price[i]; hit_side[n_hits] = lv_side[i]
+                        hit_break[n_hits] = lv_break[i]; hit_extreme[n_hits] = lv_extreme[i]
+                        n_hits += 1
+                    keep = False
+                elif a - lv_break[i] >= confirm_n:
+                    keep = False
+            if keep:
+                if w != i:
+                    lv_price[w] = lv_price[i]; lv_side[w] = lv_side[i]
+                    lv_kind[w] = lv_kind[i]; lv_born[w] = lv_born[i]
+                    lv_break[w] = lv_break[i]; lv_extreme[w] = lv_extreme[i]
+                w += 1
+        n_lv = w
+    return n_lv, cur_day, day_hi, day_lo, n_hits
 
 
 def _detect(w5m: pd.DataFrame, now_utc: datetime) -> None:
@@ -290,11 +376,24 @@ def _detect(w5m: pd.DataFrame, now_utc: datetime) -> None:
         _state = _new_state(origin_ts)
         start_idx = 0
 
-    confirmed: list[dict] = []
-    for a in range(start_idx, n):
-        hits = _step_bar(a, h, l, c, day, hour, hmax, lmin)
-        if a == last:
-            confirmed = hits
+    st = _state
+    _ensure_capacity(st, n - start_idx)
+    cap = len(st["lv_price"])
+    hit_price = np.empty(cap, np.float64)
+    hit_side = np.empty(cap, np.int64)
+    hit_break = np.empty(cap, np.int64)
+    hit_extreme = np.empty(cap, np.float64)
+    (st["n_lv"], st["cur_day"], st["day_hi"], st["day_lo"], n_hits) = _run_bars(
+        start_idx, n, h, l, c, day, hour, hmax, lmin,
+        _SWING_K, _LEVEL_TTL, _CONFIRM_N, _SESS_START, _SESS_END,
+        st["lv_price"], st["lv_side"], st["lv_kind"], st["lv_born"], st["lv_break"],
+        st["lv_extreme"], st["n_lv"], st["cur_day"], st["day_hi"], st["day_lo"],
+        st["sess_hi"], st["sess_lo"], st["sess_on"],
+        hit_price, hit_side, hit_break, hit_extreme)
+    confirmed = [dict(price=float(hit_price[i]),
+                      side="high" if hit_side[i] == _SIDE_HIGH else "low",
+                      break_i=int(hit_break[i]), extreme=float(hit_extreme[i]))
+                 for i in range(n_hits)]
     _state["last_ts"] = bar_time
     _state["last_idx"] = last
 
