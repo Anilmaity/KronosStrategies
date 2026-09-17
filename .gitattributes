@@ -1,0 +1,30 @@
+# Normalize line endings: LF in the repo and in every checkout (Windows + macOS).
+* text=auto eol=lf
+
+# Windows-only files keep CRLF
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binary — never touch line endings
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.svg  text
+*.pdf  binary
+*.xlsx binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+*.parquet binary
+*.npz  binary
+*.npy  binary
+*.pkl  binary
+*.db   binary
+*.sqlite binary
+*.sqlite3 binary
+*.session binary
+*.pyc  binary
