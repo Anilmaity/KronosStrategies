@@ -165,17 +165,7 @@ def _resample_m3(w1m: pd.DataFrame) -> pd.DataFrame:
     only when that bar is the bucket's last minute ((minute + 1) % 3 == 0).
     Incomplete tail buckets are dropped so detection never sees a forming bar.
     """
-    df = (w1m.set_index("time")
-          .resample("3min")
-          .agg({"open": "first", "high": "max", "low": "min", "close": "last"})
-          .dropna())
-    if len(df) == 0:
-        return df.reset_index()
-    last_m1 = w1m["time"].iloc[-1]
-    last_bucket = df.index[-1]
-    if (pd.Timestamp(last_m1) - pd.Timestamp(last_bucket)) < pd.Timedelta(minutes=2):
-        df = df.iloc[:-1]
-    return df.reset_index()
+    return _resample_closed(w1m, "3min", 3)
 
 
 def _rsi(c: np.ndarray, n: int) -> np.ndarray:
@@ -324,19 +314,68 @@ def _classify_trend(er_h1: float, er_m15: float) -> str:
 
 
 def _resample_closed(w1m: pd.DataFrame, rule: str, bucket_min: int) -> pd.DataFrame:
-    """M1 -> ``rule`` OHLC, CLOSED buckets only.
+    """M1 -> ``bucket_min``-minute OHLC, CLOSED buckets only.
 
-    Same left-labelled default resample + incomplete-tail drop as _resample_m3
-    (a bucket is complete only once w1m reaches its last minute). Used only by
-    the ER gate so the ratio sees the SAME closed higher-TF bars the regime
-    engine would fetch from OANDA.
+    A numpy re-implementation of ``w1m.set_index("time").resample(rule).agg(
+    first/max/min/last).dropna()`` plus the incomplete-tail drop, kept exactly
+    equal to it (tests/test_s100_resample_parity.py pins every edge: tail
+    completeness, missing minutes, empty buckets, weekend gaps, tz-aware and
+    tz-naive ``time``, non-ns units). It exists because the pandas resample was
+    ~60% of an S100 replay tick (2026-09-18 profile) and this runs ~10x faster;
+    the live runner benefits identically. Also used by the ER gate (15min /
+    1h) so the ratio sees the SAME closed higher-TF bars the regime engine
+    would fetch from OANDA. ``rule`` is kept for call-site readability;
+    ``bucket_min`` is what the maths uses.
+
+    Semantics reproduced from pandas: buckets are left-labelled and epoch
+    aligned; a bucket with no bars does not appear; open/close are the first/
+    last bar BY TIME (a stable sort is applied if ``time`` is unsorted); the
+    tail bucket is dropped while the newest bar is more than 1 minute short of
+    the bucket's last minute. NaN prices are not expected (OANDA candles are
+    complete) and are not special-cased.
     """
-    df = (w1m.set_index("time")
-          .resample(rule)
-          .agg({"open": "first", "high": "max", "low": "min", "close": "last"})
-          .dropna())
-    if len(df) == 0:
-        return df.reset_index()
+    t = w1m["time"]
+    tz = getattr(t.dt, "tz", None)
+    unit = t.dt.unit
+    naive = t.dt.tz_convert(None) if tz is not None else t
+    ns = naive.to_numpy().astype("datetime64[ns]").astype("int64")
+    o = w1m["open"].to_numpy()
+    h = w1m["high"].to_numpy()
+    l = w1m["low"].to_numpy()
+    c = w1m["close"].to_numpy()
+    if len(ns) and not np.all(ns[1:] >= ns[:-1]):
+        order = np.argsort(ns, kind="stable")
+        ns, o, h, l, c = ns[order], o[order], h[order], l[order], c[order]
+
+    width = bucket_min * 60 * 1_000_000_000
+    bucket = ns // width
+    starts = np.flatnonzero(np.r_[True, bucket[1:] != bucket[:-1]]) if len(ns) else np.array([], int)
+    bucket_start = bucket[starts] * width if len(starts) else np.array([], "int64")
+
+    # tail drop: newest bar more than 1 minute short of the bucket's last minute
+    if len(starts) and (ns[-1] - bucket_start[-1]) < (bucket_min - 1) * 60 * 1_000_000_000:
+        cut = starts[-1]                       # everything from the dropped bucket on
+        starts, bucket_start = starts[:-1], bucket_start[:-1]
+        ns, o, h, l, c = ns[:cut], o[:cut], h[:cut], l[:cut], c[:cut]
+
+    if not len(starts):
+        idx = pd.DatetimeIndex([], dtype=f"datetime64[{unit}]", name="time")
+        if tz is not None:
+            idx = idx.tz_localize("UTC").tz_convert(tz)
+        return pd.DataFrame({"time": idx, "open": o[:0], "high": h[:0],
+                             "low": l[:0], "close": c[:0]})
+
+    ends = np.r_[starts[1:], len(ns)]
+    times = pd.DatetimeIndex(bucket_start.astype("datetime64[ns]")).as_unit(unit)
+    if tz is not None:
+        times = times.tz_localize("UTC").tz_convert(tz)
+    return pd.DataFrame({"time": pd.Series(times, name="time"),
+                         "open": o[starts],
+                         "high": np.maximum.reduceat(h, starts),
+                         "low": np.minimum.reduceat(l, starts),
+                         "close": c[ends - 1]})
+
+
     last_m1 = w1m["time"].iloc[-1]
     last_bucket = df.index[-1]
     if (pd.Timestamp(last_m1) - pd.Timestamp(last_bucket)) < pd.Timedelta(
