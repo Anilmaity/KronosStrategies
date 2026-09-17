@@ -917,3 +917,8 @@ earns.
   (1500-bar M5 window needs ~26 days of warm-up); minor elsewhere. All four sub-agents
   notified to re-baseline rather than compare arms across the fix.
 - 2026-09-02 — production read-out; two dead containers stopped.
+- 2026-09-18 — harness speed-up landed (parallel `lab.sweep` runner; S100 numpy resample 2.5×; S94
+  numba level kernel 11.5×; all parity-gated, trade lists identical). The full-window S94
+  `_SD_MULT` confirmation REPORT_s94 demanded ran in 52 s (8 arms): **DO NOT SHIP** — 2.5/3.0
+  improve TEST PF 0.858 → 0.986/0.989 but never clear 1.0 and fall to 0.92 at 0.80 cost; 3.5
+  overfits (TRAIN 1.057 / TEST 0.771). `lab/REPORT_s94_fullwindow_2026-09-18.md`.
