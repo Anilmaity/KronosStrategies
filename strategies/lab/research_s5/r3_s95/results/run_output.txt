@@ -1,0 +1,40 @@
+=== H1: s95 honest trades under the 02c fill model (market fill @+66 s on the quote, live drift gate, quote exits, +0.26 on SL) ===
+harness trades 1014 | drift-gate rejects 476 (46.9%) | unresolvable 0
+ALL   n= 538  02c PF 1.052 pts   +139.5 pts/trade +0.259 | mid-M1@0.75 PF 0.863 pts   -400.5 | quote-S5 nominal @0.45 PF 0.852 @0.70 PF 0.810 pts   -572.2
+      outcomes 02c: {'TP': 281, 'TIME': 176, 'SL': 81}
+TRAIN n= 339  02c PF 1.042 pts    +52.2 pts/trade +0.154 | mid-M1@0.75 PF 0.863 pts   -183.5 | quote-S5 nominal @0.45 PF 0.851 @0.70 PF 0.794 pts   -286.2
+      outcomes 02c: {'TP': 178, 'TIME': 108, 'SL': 53}
+TEST  n= 199  02c PF 1.060 pts    +87.3 pts/trade +0.439 | mid-M1@0.75 PF 0.863 pts   -217.0 | quote-S5 nominal @0.45 PF 0.853 @0.70 PF 0.824 pts   -285.9
+      outcomes 02c: {'TP': 103, 'TIME': 68, 'SL': 28}
+TEST months positive (02c): 0.40  max month share 1.68
+monthly 02c pts (TEST): 2025-12:-40, 2026-01:+146, 2026-02:+72, 2026-03:-39, 2026-04:-58, 2026-05:-34, 2026-06:+89, 2026-07:-91, 2026-08:+51, 2026-09:-9
+regime: up-months pts +263 (n 17), down-months pts -124 (n 8), corr +0.45
+BARS (02c): {'n': True, 'test_pf_02c': True, 'test_pf_q070': False, 'train_pf': True, 'monthly': False, 'regime': False}  -> FAIL
+
+=== H2: the nominal-entry term ===
+mean adverse (fill - nominal, in trade direction): +1.007 pt  median +0.425  share fill BETTER than nominal: 0.34  (execution study nominal_gap_mean -1.07: the harness books entries worse than the market)
+by side: BUY +0.763  SELL +1.335
+
+=== H3: live window 2026-07-01 -> 07-17 (consistency check only, n=13 live) ===
+02c sim in window: n=18 pts -112.2 PF 0.42 outcomes {'TIME': 13, 'TP': 3, 'SL': 2}
+live: 'Session Breakout M5 ORB' 8 trades 07-01..07-06 -$86 (stale-fill bug period: entries one M5 bar late); 'S95 Session Breakout' 5 trades 07-08..07-17 +$28 PF 1.93; 2 entry_drift rejects (+11.76, +1.14 pt), 1 no_add_to_loser
+02c by day: 2026-07-01:+29, 2026-07-02:-31, 2026-07-03:-10, 2026-07-06:-48, 2026-07-07:-36, 2026-07-08:-47, 2026-07-09:+25, 2026-07-13:+6, 2026-07-14:+12, 2026-07-15:-13
+
+=== H4: book fit with S93 (honest Stage-1 lists, equal risk 1 R per trade) ===
+daily-R corr s95/s93: -0.046  (days 474)
+S93 alone  total     -3.3 R | months positive 0.44 (11/25) | worst month -11.0 R | max DD -27.5 R
+S93 + s95  total     +0.3 R | months positive 0.40 (10/25) | worst month -8.6 R | max DD -28.7 R
+s95 alone  total     +3.6 R | months positive 0.48 (12/25) | worst month -4.0 R | max DD -10.0 R
+
+=== addendum: the FULL honest list (all 1,014 trades, nominal entry) and the drift-rejected set ===
+ALL   n=1014 mid-M1@0.75 PF 1.300 pts  +1354.9 | quote-S5 nominal @0.45 PF 1.285 pts  +1315.0 | @0.70 PF 1.226 pts  +1061.5
+TRAIN n= 623 mid-M1@0.75 PF 1.279 pts   +541.4 | quote-S5 nominal @0.45 PF 1.266 pts   +527.2 | @0.70 PF 1.182 pts   +371.4
+TEST  n= 391 mid-M1@0.75 PF 1.315 pts   +813.6 | quote-S5 nominal @0.45 PF 1.300 pts   +787.8 | @0.70 PF 1.259 pts   +690.1
+drift-REJECTED set n=476: mid-M1 PF 2.099 pts +1755.4 | quote nominal @0.70 PF 1.968 pts +1633.6 | mean adverse at +66 s +2.89 pt
+drift-ACCEPTED set n=538: mid-M1 PF 0.863 pts -400.5 | quote nominal @0.70 PF 0.810 pts -572.2
+=> the gate keeps the slow breakouts and rejects the ones that ran: the edge in the honest screen lives in the trades live cannot fill at market
+
+=== addendum 2: stop-entry model (resting stop order at the level: fill = level + 0.26 slip, quote exits, spread 0.70) = q0.70 - 0.26 per trade; NOT pre-registered, reported as a lead ===
+ALL   n=1014 PF 1.167 pts   +797.9 pts/trade +0.787 | months positive 0.52 max-month share 0.41
+TRAIN n= 623 PF 1.100 pts   +209.5 pts/trade +0.336 | months positive 0.47 max-month share 1.08
+TEST  n= 391 PF 1.218 pts   +588.4 pts/trade +1.505 | months positive 0.60 max-month share 0.56
