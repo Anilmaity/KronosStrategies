@@ -908,6 +908,46 @@ Also open, unstarted, and larger than a sweep: **R4 limit-order entries** (see a
 the **standing question** of why ungated harness baselines lose while the live gated book
 earns.
 
+### Outcome — both ran to completion 2026-09-03, both CLOSED
+
+Full write-up in `REPORT_followup_2026-09-03.md`; raw arms in `results/s100_ob.log`,
+`results/s100_ob_control.log`, `results/s94_decisive.log`. Ten arms, no code changed under
+test, both processes exited cleanly. **Neither produced a shippable change and no live
+config was touched.**
+
+**1. S100 disable-OB — REJECT, and it inverts the CSV's answer.** OB-off is worse in all
+four cells: TRAIN PF 1.002 → 0.948 and TEST 1.027 → 0.989 at cost 0.45; 0.867 → 0.824 and
+0.928 → 0.904 at 0.80. The static filter on the saved trade list had predicted the opposite
+(TRAIN 1.005 / TEST 1.058). Cause: TRAIN n rises 2276 → 2473 instead of falling to the 1569
+that subtracting OB's 707 rows implies — `_arm()` overwrites a single global `_pending`, FVG
+is tested first and returns early, so OB only arms where FVG did not; removing OB frees that
+slot for later FVG/RSI setups whose trades are worse than the OB trades they displace.
+**Filtered-CSV attribution can invert the sign of an effect on a strategy with shared
+state** — the S100 sub-agent flagged exactly this and was right to refuse to ship on it.
+
+A control arm was added (`lab/_s100_ob_control.py`, OB-on @0.45 under the current harness)
+because the stored baseline was written at 03:32 and `harness.py` was modified at 05:18.
+The control reproduced the stored baseline **exactly** — every figure identical — so the
+warm-up fix was immaterial to S100 and the stored baseline was safe to cite. `obON_c0.80`
+also reproduced the coordinator's cost-recompute figures (0.867 / 0.928) to three decimals,
+independently validating that shortcut.
+
+**2. S94 `_SD_MULT` on a wider window — DO NOT SHIP.** On the 6.5-month test half the
+direction replicates but the profitability does not: TEST PF 0.858 (shipped 2.0) → 0.986
+(2.5) → 0.989 (3.0), TRAIN monotone 0.947 → 1.006 → 1.076, n identical at 197/469 across
+every arm, WR falling as PF rises. Bars 3, 4 and 5 pass; **bars 1 and 2 fail** — TEST PF
+never clears 1.0 (the 5-month window gave 1.151) and the 0.80 stress lands at 0.920 (was
+1.089). The 5-month result did not generalise, which is precisely why `REPORT_s94.md` made
+this confirmation a precondition. Break-even stop at 1R also **REJECT**: TEST PF 1.011 at
+0.45, but TRAIN degrades 0.947 → 0.849 and 0.80 stress gives 0.904 — helps only the half
+being judged, and only at optimistic cost.
+
+**What both reinforce.** The single largest mover across all ten arms is the cost assumption,
+not any parameter: 0.45 → 0.80 costs S100 0.135 PF on TRAIN and 0.099 on TEST, dwarfing every
+parameter effect measured. **R4 limit-order entries** is now unambiguously the highest-value
+open work, ahead of any further sweep. The standing question (ungated harness baselines lose
+while the live gated book earns) also remains open.
+
 ## Log
 
 - 2026-09-02 — campaign opened; harness built and smoke-tested; baselines launched.
@@ -917,6 +957,11 @@ earns.
   (1500-bar M5 window needs ~26 days of warm-up); minor elsewhere. All four sub-agents
   notified to re-baseline rather than compare arms across the fix.
 - 2026-09-02 — production read-out; two dead containers stopped.
+- 2026-09-03 — the two queued experiments ran to completion (10 arms). S100 disable-OB
+  REJECTED and shown to invert the filtered-CSV prediction via the shared `_pending` slot;
+  S94 `_SD_MULT` confirmed directional but NOT shippable on the widened window (TEST PF
+  0.986, stress 0.920); break-even@1R rejected. Same-harness control proved the warm-up fix
+  immaterial to S100. Queue now empty; R4 limit entries is next.
 - 2026-09-18 — harness speed-up landed (parallel `lab.sweep` runner; S100 numpy resample 2.5×; S94
   numba level kernel 11.5×; all parity-gated, trade lists identical). The full-window S94
   `_SD_MULT` confirmation REPORT_s94 demanded ran in 52 s (8 arms): **DO NOT SHIP** — 2.5/3.0
