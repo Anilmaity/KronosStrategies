@@ -13,6 +13,10 @@ class _Cur:
         self.sql, self.params = [], []
 
     def execute(self, sql, params=None):
+        # psycopg2 %-formats the statement whenever params is not None, so a
+        # bare LIKE wildcard raises exactly as it did live (10:04:56 UTC).
+        if params is not None:
+            sql = sql % tuple("'%s'" % v for v in params)
         self.sql.append(" ".join(sql.split()))
         self.params.append(params)
 
@@ -36,7 +40,8 @@ def _patch_connect(monkeypatch, cur):
 def test_load_open_signals_is_scoped_to_the_bots_channel(monkeypatch):
     cur = _Cur(); _patch_connect(monkeypatch, cur)
     dbp.load_open_signals(channel="-1002776523643")
-    assert "channel = %s" in cur.sql[0], cur.sql[0]
+    assert "channel = '-1002776523643'" in cur.sql[0], cur.sql[0]
+    assert "NOT LIKE 'closed_%'" in cur.sql[0], cur.sql[0]
     assert cur.params[0] == ("-1002776523643",)
 
 
@@ -44,3 +49,4 @@ def test_load_open_signals_without_channel_keeps_old_behaviour(monkeypatch):
     cur = _Cur(); _patch_connect(monkeypatch, cur)
     dbp.load_open_signals()
     assert "channel" not in cur.sql[0]
+    assert "NOT LIKE 'closed_%'" in cur.sql[0], cur.sql[0]

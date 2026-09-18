@@ -256,7 +256,9 @@ def load_open_signals(channel: str | None = None) -> list[dict]:
     these tables on the box, and without it a restarting bot hydrates -- and
     then mirrors and reconciles -- the OTHER channel's open signals.
     """
-    where = "status NOT LIKE 'closed_%'"
+    # params is always passed, so psycopg2 formats the statement: the LIKE
+    # wildcard must be escaped as %% or it is read as a placeholder.
+    where = "status NOT LIKE 'closed_%%'"
     params: tuple = ()
     if channel:
         where += " AND channel = %s"
