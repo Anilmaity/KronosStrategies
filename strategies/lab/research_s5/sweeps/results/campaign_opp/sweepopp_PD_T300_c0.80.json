@@ -1,0 +1,12 @@
+{
+ "label": "sweepopp_PD_T300_c0.80",
+ "strategy": "sweepopp_PD_T300",
+ "status": "ok",
+ "cost": 0.8,
+ "n": 2542,
+ "pts": -4079.8,
+ "pf": 0.455,
+ "level_type": "PD",
+ "T": 300,
+ "kind": "REAL-opp"
+}

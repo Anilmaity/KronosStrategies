@@ -1,0 +1,21 @@
+=== share of the day's range delivered by the single largest 60 s / 300 s window (median, IQR) ===
+X60 TRAIN: median 16.2%  IQR 12.2-22.6%   abs pts median 7.1
+X60 TEST: median 18.0%  IQR 13.8-23.8%   abs pts median 17.6
+X300 TRAIN: median 26.1%  IQR 20.6-32.9%   abs pts median 11.6
+X300 TEST: median 28.2%  IQR 22.4-36.9%   abs pts median 28.4
+
+=== bursts (relative threshold 0.04% of price): per-day counts, clock share, gross/net vs day range ===
+TRAIN: bursts/day median 284  clock share median 17.4%  gross/range median 7.97  net/range median 0.39
+TEST: bursts/day median 651  clock share median 47.1%  gross/range median 11.51  net/range median 0.48
+
+=== hour-of-day (NY) share of X60 events vs clock, top 8 hours ===
+      ratio  share%
+hour               
+8      4.14    18.0
+9      3.61    15.7
+10     3.31    14.4
+20     1.63     7.1
+21     1.36     5.9
+11     1.20     5.2
+18     1.01     4.4
+14     0.83     3.6

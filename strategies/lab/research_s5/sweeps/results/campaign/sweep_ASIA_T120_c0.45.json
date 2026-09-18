@@ -1,0 +1,12 @@
+{
+ "label": "sweep_ASIA_T120_c0.45",
+ "strategy": "sweep_ASIA_T120",
+ "status": "ok",
+ "cost": 0.45,
+ "n": 3861,
+ "pts": -3646.5,
+ "pf": 0.47,
+ "level_type": "ASIA",
+ "T": 120,
+ "kind": "REAL"
+}

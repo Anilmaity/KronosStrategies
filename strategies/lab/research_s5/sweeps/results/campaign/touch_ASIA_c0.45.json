@@ -1,0 +1,11 @@
+{
+ "label": "touch_ASIA_c0.45",
+ "strategy": "touch_ASIA",
+ "status": "ok",
+ "cost": 0.45,
+ "n": 5898,
+ "pts": -5077.5,
+ "pf": 0.26,
+ "level_type": "ASIA",
+ "kind": "C-TOUCH"
+}

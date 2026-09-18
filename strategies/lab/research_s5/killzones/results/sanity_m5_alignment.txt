@@ -1,0 +1,3 @@
+[grid] loaded cache /private/tmp/claude-501/-Users-anil-Projects-Kronos/979109dc-9856-4311-91b0-14d2dda5b135/scratchpad/kz_grid.npz (13,209,492 slots)
+M5 bars checked 20000: high(S5 in [T,T+5m)) == M5 high: 99.93%   S5 close at T+4:55 == M5 close: 100.00%   |dh| max 2.280
+control (M5 time treated as bar END): high match 0.70%  -> label='left' confirmed if far lower than above

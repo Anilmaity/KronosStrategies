@@ -1,0 +1,12 @@
+{
+ "label": "sweepopp_H1_T300_c0.80",
+ "strategy": "sweepopp_H1_T300",
+ "status": "ok",
+ "cost": 0.8,
+ "n": 16426,
+ "pts": -21585.2,
+ "pf": 0.467,
+ "level_type": "H1",
+ "T": 300,
+ "kind": "REAL-opp"
+}

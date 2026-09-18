@@ -1,0 +1,25 @@
+label,strategy,status,cost,n,pf,pts,train_n,train_pf,train_pts,test_n,test_pf,test_pts,test_months,test_pos_month_share,test_max_month_share,gold_corr,up_months_pts,dn_months_pts,n_up,n_dn,bar1_n,bar2_base,bar3_train,bar4_monthly,bar5_regime,test_pf_stress,bar2_stress,bars_passed,verdict
+sweepopp_ASIA_T120_c0.45,sweepopp_ASIA_T120,ok,0.45,3448,0.555,-3283.1,1838,0.458,-1740.4,1610,0.63,-1542.8,10,0.1,,-0.18,-2262.1,-1021.1,17,8,True,False,False,False,True,0.551,False,2,FAIL
+sweepopp_ASIA_T120_c0.80,sweepopp_ASIA_T120,ok,0.8,3448,0.472,-4489.9,1838,0.374,-2383.7,1610,0.551,-2106.3,10,0.1,,-0.15,-3056.6,-1433.4,17,8,True,False,False,False,True,,False,2,(stress arm)
+sweepopp_ASIA_T300_c0.45,sweepopp_ASIA_T300,ok,0.45,3247,0.575,-3271.0,1780,0.499,-1695.8,1467,0.634,-1575.2,10,0.1,,-0.3,-2381.3,-889.7,17,8,True,False,False,False,True,0.563,False,2,FAIL
+sweepopp_ASIA_T300_c0.80,sweepopp_ASIA_T300,ok,0.8,3247,0.496,-4407.5,1780,0.414,-2318.8,1467,0.563,-2088.7,10,0.1,,-0.27,-3138.7,-1268.8,17,8,True,False,False,False,True,,False,2,(stress arm)
+sweepopp_ASIA_T30_c0.45,sweepopp_ASIA_T30,ok,0.45,3365,0.486,-3285.3,1725,0.401,-1640.0,1640,0.55,-1645.3,10,0.0,,-0.01,-2151.0,-1134.3,17,8,True,False,False,False,True,0.472,False,2,FAIL
+sweepopp_ASIA_T30_c0.80,sweepopp_ASIA_T30,ok,0.8,3365,0.406,-4463.1,1725,0.322,-2243.8,1640,0.472,-2219.3,10,0.0,,0.03,-2924.5,-1538.6,17,8,True,False,False,False,True,,False,2,(stress arm)
+sweepopp_H1_T120_c0.45,sweepopp_H1_T120,ok,0.45,16886,0.532,-15578.7,9066,0.409,-8571.4,7820,0.627,-7007.3,10,0.0,,-0.05,-10662.9,-4915.8,17,8,True,False,False,False,True,0.542,False,2,FAIL
+sweepopp_H1_T120_c0.80,sweepopp_H1_T120,ok,0.8,16886,0.444,-21488.8,9066,0.324,-11744.5,7820,0.542,-9744.3,10,0.0,,-0.02,-14692.4,-6796.4,17,8,True,False,False,False,True,,False,2,(stress arm)
+sweepopp_H1_T300_c0.45,sweepopp_H1_T300,ok,0.45,16426,0.552,-15836.1,9057,0.457,-8352.0,7369,0.626,-7484.1,10,0.0,,-0.01,-10748.6,-5087.5,17,8,True,False,False,False,True,0.549,False,2,FAIL
+sweepopp_H1_T300_c0.80,sweepopp_H1_T300,ok,0.8,16426,0.467,-21585.2,9057,0.367,-11522.0,7369,0.549,-10063.2,10,0.0,,0.01,-14682.6,-6902.6,17,8,True,False,False,False,True,,False,2,(stress arm)
+sweepopp_H1_T30_c0.45,sweepopp_H1_T30,ok,0.45,15953,0.499,-14128.0,8074,0.362,-7609.8,7879,0.599,-6518.2,10,0.0,,-0.02,-9752.5,-4375.5,17,8,True,False,False,False,True,0.507,False,2,FAIL
+sweepopp_H1_T30_c0.80,sweepopp_H1_T30,ok,0.8,15953,0.409,-19711.5,8074,0.283,-10435.7,7879,0.507,-9275.8,10,0.0,,0.01,-13540.5,-6171.0,17,8,True,False,False,False,True,,False,2,(stress arm)
+sweepopp_LON_T120_c0.45,sweepopp_LON_T120,ok,0.45,2987,0.602,-2662.5,1566,0.455,-1566.8,1421,0.712,-1095.7,10,0.1,,0.56,-1530.3,-1132.1,17,8,True,False,False,False,False,0.627,False,1,FAIL
+sweepopp_LON_T120_c0.80,sweepopp_LON_T120,ok,0.8,2987,0.516,-3707.9,1566,0.376,-2114.9,1421,0.627,-1593.0,10,0.1,,0.54,-2261.8,-1446.1,17,8,True,False,False,False,False,,False,1,(stress arm)
+sweepopp_LON_T300_c0.45,sweepopp_LON_T300,ok,0.45,2847,0.641,-2556.5,1521,0.503,-1499.3,1326,0.743,-1057.1,10,0.1,,0.55,-1529.8,-1026.7,17,8,True,False,False,False,False,0.664,False,1,FAIL
+sweepopp_LON_T300_c0.80,sweepopp_LON_T300,ok,0.8,2847,0.558,-3552.9,1521,0.421,-2031.7,1326,0.664,-1521.2,10,0.1,,0.51,-2230.5,-1322.5,17,8,True,False,False,False,False,,False,1,(stress arm)
+sweepopp_LON_T30_c0.45,sweepopp_LON_T30,ok,0.45,2913,0.575,-2450.6,1479,0.435,-1397.0,1434,0.68,-1053.6,10,0.1,,0.55,-1446.0,-1004.6,17,8,True,False,False,False,False,0.586,False,1,FAIL
+sweepopp_LON_T30_c0.80,sweepopp_LON_T30,ok,0.8,2913,0.484,-3470.1,1479,0.353,-1914.6,1434,0.586,-1555.5,10,0.1,,0.51,-2158.9,-1311.2,17,8,True,False,False,False,False,,False,1,(stress arm)
+sweepopp_PD_T120_c0.45,sweepopp_PD_T120,ok,0.45,2694,0.493,-3221.8,1460,0.418,-1537.3,1234,0.547,-1684.5,10,0.1,,-0.17,-2678.1,-543.7,17,8,True,False,False,False,True,0.487,False,2,FAIL
+sweepopp_PD_T120_c0.80,sweepopp_PD_T120,ok,0.8,2694,0.425,-4164.7,1460,0.344,-2048.3,1234,0.487,-2116.4,10,0.1,,-0.16,-3364.4,-800.3,17,8,True,False,False,False,True,,False,2,(stress arm)
+sweepopp_PD_T300_c0.45,sweepopp_PD_T300,ok,0.45,2542,0.52,-3190.1,1421,0.462,-1501.3,1121,0.562,-1688.7,10,0.2,,-0.18,-2654.4,-535.6,17,8,True,False,False,False,True,0.508,False,2,FAIL
+sweepopp_PD_T300_c0.80,sweepopp_PD_T300,ok,0.8,2542,0.455,-4079.8,1421,0.386,-1998.7,1121,0.508,-2081.1,10,0.1,,-0.19,-3308.6,-771.2,17,8,True,False,False,False,True,,False,2,(stress arm)
+sweepopp_PD_T30_c0.45,sweepopp_PD_T30,ok,0.45,2686,0.443,-3090.1,1352,0.366,-1426.5,1334,0.495,-1663.6,10,0.1,,-0.08,-2475.5,-614.6,17,8,True,False,False,False,True,0.431,False,2,FAIL
+sweepopp_PD_T30_c0.80,sweepopp_PD_T30,ok,0.8,2686,0.375,-4030.2,1352,0.297,-1899.7,1334,0.431,-2130.5,10,0.1,,-0.08,-3134.2,-896.0,17,8,True,False,False,False,True,,False,2,(stress arm)

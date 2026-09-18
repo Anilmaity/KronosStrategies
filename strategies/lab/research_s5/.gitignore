@@ -1,0 +1,4 @@
+# per-arm campaign trade lists (177 files, ~90 MB) are reproducible from the study scripts;
+# the .json summaries, CSVs, logs and per-study event/trade parquets are tracked.
+sweeps/results/campaign*/*.trades.parquet
+__pycache__/

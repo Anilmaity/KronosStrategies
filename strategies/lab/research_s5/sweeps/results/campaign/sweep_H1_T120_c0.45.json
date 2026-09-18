@@ -1,0 +1,12 @@
+{
+ "label": "sweep_H1_T120_c0.45",
+ "strategy": "sweep_H1_T120",
+ "status": "ok",
+ "cost": 0.45,
+ "n": 20241,
+ "pts": -20120.0,
+ "pf": 0.425,
+ "level_type": "H1",
+ "T": 120,
+ "kind": "REAL"
+}

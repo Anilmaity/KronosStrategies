@@ -1,0 +1,12 @@
+{
+ "label": "sweep_LON_T30_c0.80",
+ "strategy": "sweep_LON_T30",
+ "status": "ok",
+ "cost": 0.8,
+ "n": 3202,
+ "pts": -4187.3,
+ "pf": 0.331,
+ "level_type": "LON",
+ "T": 30,
+ "kind": "REAL"
+}

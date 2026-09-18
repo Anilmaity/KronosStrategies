@@ -1,0 +1,11 @@
+{
+ "label": "touch_LON_c0.45",
+ "strategy": "touch_LON",
+ "status": "ok",
+ "cost": 0.45,
+ "n": 5090,
+ "pts": -4139.8,
+ "pf": 0.32,
+ "level_type": "LON",
+ "kind": "C-TOUCH"
+}

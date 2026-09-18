@@ -1,0 +1,11 @@
+{
+ "label": "touch_H1_c0.80",
+ "strategy": "touch_H1",
+ "status": "ok",
+ "cost": 0.8,
+ "n": 30581,
+ "pts": -38375.7,
+ "pf": 0.145,
+ "level_type": "H1",
+ "kind": "C-TOUCH"
+}

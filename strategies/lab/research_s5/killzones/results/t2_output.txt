@@ -1,0 +1,63 @@
+[grid] loaded cache /private/tmp/claude-501/-Users-anil-Projects-Kronos/979109dc-9856-4311-91b0-14d2dda5b135/scratchpad/kz_grid.npz (13,209,492 slots)
+=== window outcomes (why a window did or did not trade) ===
+reason        disp_lt_atr  no_fill  no_fvg  outside_day  trade  zero_disp
+armgrp split                                                             
+CTRL_A TEST             0      293     654            4    261          0
+       TRAIN            0      250    1460            9    201          0
+CTRL_B TEST             0     1258    3640            0   1159          3
+       TRAIN            0     1119    7782            0    691          8
+SB     TEST             0      137     323            4    142          0
+       TRAIN            0      148     710            9     93          0
+SB_atr TEST           524       25      32            4     21          0
+       TRAIN          820       30      83            9     18          0
+
+=== Test 2: xau2y bars, SB vs controls (net = raw - cost; R-multiples on net) ===
+                     arm  TRAIN_n  TRAIN_WR  TRAIN_PF_0.45  TRAIN_PF_0.8  TRAIN_meanR_0.8  TEST_n  TEST_WR  TEST_PF_0.45  TEST_PF_0.8  TEST_pts_0.45  TEST_pts_0.8  TEST_meanR_0.8  TEST_months_pos  TEST_maxmonth_share  pts_goldup  pts_golddown  corr_gold  bars_pass
+            SB (primary)       93      12.9          0.242         0.185           -1.168     142     16.9         0.439        0.362         -168.5        -218.2          -0.951              0.0                  NaN      -250.4        -127.1       0.24      False
+SB |disp|>=ATR (variant)       18       5.6          0.108         0.085           -1.359      21      9.5         0.236        0.203          -47.1         -54.5          -1.128             12.0                  NaN       -58.6         -35.0       0.32      False
+   CTRL_A adjacent hours      201      12.9          0.216         0.160           -1.191     261     21.1         0.606        0.503         -211.1        -302.5          -0.835              0.0                  NaN      -465.6        -176.6      -0.09      False
+        CTRL_B0 shuffled       62      12.9          0.152         0.107           -1.190     116     21.6         0.559        0.451          -93.7        -134.3          -0.845             10.0                  NaN      -182.6         -65.9      -0.14      False
+        CTRL_B1 shuffled       69      10.1          0.132         0.095           -1.297     104     17.3         0.412        0.330         -116.9        -153.3          -0.999              0.0                  NaN      -191.7         -89.9       0.13      False
+        CTRL_B2 shuffled       77      23.4          0.388         0.283           -0.876     105     16.2         0.416        0.333         -113.9        -150.7          -1.054              0.0                  NaN      -170.6         -77.8      -0.01      False
+        CTRL_B3 shuffled       77      10.4          0.105         0.073           -1.272     123     15.4         0.347        0.282         -168.0        -211.0          -1.005              0.0                  NaN      -271.5         -96.6      -0.01      False
+        CTRL_B4 shuffled       64      20.3          0.326         0.244           -0.941     111     13.5         0.368        0.306         -156.5        -195.3          -1.076              0.0                  NaN      -191.9         -99.6      -0.04      False
+        CTRL_B5 shuffled       71      15.5          0.322         0.242           -1.132     110     17.3         0.307        0.248         -169.5        -208.0          -0.947              0.0                  NaN      -222.0         -86.6       0.00      False
+        CTRL_B6 shuffled       65      18.5          0.348         0.256           -1.058     123     15.4         0.391        0.323         -164.1        -207.1          -1.028              0.0                  NaN      -174.4        -118.6       0.34      False
+        CTRL_B7 shuffled       66      19.7          0.291         0.212           -0.993     111     16.2         0.348        0.278         -141.7        -180.5          -1.022              0.0                  NaN      -169.7        -110.2       0.34      False
+        CTRL_B8 shuffled       69      21.7          0.451         0.336           -0.943     125     19.2         0.447        0.362         -137.5        -181.3          -0.938              0.0                  NaN      -167.4         -93.3      -0.01      False
+        CTRL_B9 shuffled       71      23.9          0.460         0.341           -0.885     131     10.7         0.174        0.140         -256.4        -302.3          -1.165              0.0                  NaN      -228.6        -154.4       0.06      False
+
+CTRL_B (10 shuffles) TEST PF@0.8: mean 0.305  p95 0.411   TEST meanR@0.8: mean -1.008  p95 -0.887
+CTRL_B (10 shuffles) TRAIN PF@0.8: mean 0.219  p95 0.339   TRAIN meanR@0.8: mean -1.059  p95 -0.880
+
+=== SB per window (primary arm) ===
+                 n    WR  PF045  PF080  meanR080  medR  medgap  TIME
+window split                                                        
+SB_03  TEST   49.0  12.2  0.197  0.154    -1.129  1.61    2.81   0.0
+       TRAIN  24.0  12.5  0.281  0.215    -1.238  1.19    1.99   0.0
+SB_10  TEST   52.0  19.2  0.749  0.642    -0.809  2.28    4.16   0.0
+       TRAIN  49.0  16.3  0.297  0.231    -1.007  1.62    2.84   0.0
+SB_14  TEST   41.0  19.5  0.274  0.206    -0.920  1.60    2.81   0.0
+       TRAIN  20.0   5.0  0.046  0.030    -1.479  1.23    2.06   0.0
+
+=== outcome mix (SB primary) ===
+outcome   SL  TP
+split           
+TEST     118  24
+TRAIN     81  12
+median hold (min): SB 1   median R 1.62 pt   median gap 2.85
+
+=== SB primary by side ===
+               n    WR  PF080  meanR080
+split side                             
+TEST  -1    73.0  21.9  0.427    -0.806
+       1    69.0  11.6  0.302    -1.105
+TRAIN -1    51.0   7.8  0.153    -1.309
+       1    42.0  19.0  0.230    -0.997
+
+=== monthly net @0.80, SB primary ===
+fill_utc  2024-09  2024-10  2024-11  2025-01  2025-02  2025-03  2025-04  2025-05  2025-06  2025-07  2025-08  2025-09  2025-10  2025-11  2025-12  2026-01  2026-02  2026-03  2026-04  2026-05  2026-06  2026-07  2026-08  2026-09
+size          3.0      4.0      7.0      3.0      4.0      4.0     10.0      6.0     10.0      5.0      4.0      6.0     19.0      8.0      9.0     17.0     18.0     14.0     16.0     18.0     15.0     15.0     14.0      6.0
+sum          -0.5     -7.8    -10.3     -0.8     -6.2     -6.7    -27.8    -13.8    -16.2    -10.5     -8.3    -12.8    -26.5    -10.9    -22.6    -34.4    -20.4    -28.5    -12.4    -25.5    -32.4    -21.4    -13.0     -7.6
+TRAIN: SB meanR -1.168 (n=93, se 0.109) vs CTRL_A -1.191 (n=201)  Welch t=0.17 p=0.863
+TEST: SB meanR -0.951 (n=142, se 0.098) vs CTRL_A -0.835 (n=261)  Welch t=-0.92 p=0.357

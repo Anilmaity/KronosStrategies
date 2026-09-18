@@ -1,0 +1,19 @@
+[grid] S5 loaded 8,682,738 bars in 1s
+[grid] UTC offset changes at: ['2024-11-03 06:00:00+00:00', '2025-03-09 07:00:00+00:00', '2025-11-02 06:00:00+00:00', '2026-03-08 07:00:00+00:00']
+[grid] built 13,209,492 slots in 2s -> /private/tmp/claude-501/-Users-anil-Projects-Kronos/979109dc-9856-4311-91b0-14d2dda5b135/scratchpad/kz_grid.npz
+valid  in_window  split
+False  True       TEST       5
+                  TRAIN      2
+True   False      TRAIN     12
+       True       TEST     202
+                  TRAIN    320
+Name: count, dtype: int64
+[events] 487,459 events over 522 days in 2s -> /Users/anil/Projects/Kronos/KronosStrategies/strategies/lab/research_s5/killzones/results/events.parquet
+kind
+BURSTREL    248829
+BURST       236542
+H              522
+L              522
+X60            522
+X300           522
+Name: count, dtype: int64

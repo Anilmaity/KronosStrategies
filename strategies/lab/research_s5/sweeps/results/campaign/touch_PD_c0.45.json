@@ -1,0 +1,11 @@
+{
+ "label": "touch_PD_c0.45",
+ "strategy": "touch_PD",
+ "status": "ok",
+ "cost": 0.45,
+ "n": 4729,
+ "pts": -4257.8,
+ "pf": 0.282,
+ "level_type": "PD",
+ "kind": "C-TOUCH"
+}

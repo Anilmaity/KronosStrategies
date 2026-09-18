@@ -1,0 +1,12 @@
+{
+ "label": "sweep_PD_T120_c0.45",
+ "strategy": "sweep_PD_T120",
+ "status": "ok",
+ "cost": 0.45,
+ "n": 3052,
+ "pts": -2931.1,
+ "pf": 0.499,
+ "level_type": "PD",
+ "T": 120,
+ "kind": "REAL"
+}

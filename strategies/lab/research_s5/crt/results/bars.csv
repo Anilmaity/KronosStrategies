@@ -1,0 +1,13 @@
+label,strategy,status,cost,n,pf,pts,train_n,train_pf,train_pts,test_n,test_pf,test_pts,test_months,test_pos_month_share,test_max_month_share,gold_corr,up_months_pts,dn_months_pts,n_up,n_dn,bar1_n,bar2_base,bar3_train,bar4_monthly,bar5_regime,test_pf_stress,bar2_stress,bars_passed,verdict
+crt_H1_UTC_bias_c0.45,crt,ok,0.45,1591,0.732419842816049,-1445.933086590896,968,0.673,-746.7,623,0.776,-699.2,10,0.1,,0.07,-827.8,-618.2,17,8,True,False,False,False,True,0.716,False,2,FAIL
+crt_H1_UTC_bias_c0.80,crt,ok,0.8,1591,0.6493418966045172,-2002.7830865908954,968,0.562,-1085.5,623,0.716,-917.3,10,0.1,,0.07,-1209.3,-793.5,17,8,True,False,False,False,True,,False,2,(stress arm)
+crt_H1_UTC_nofilt_c0.45,crt,ok,0.45,3150,0.7238604918379452,-2955.9984488828654,1911,0.612,-1837.2,1239,0.813,-1118.8,10,0.1,,0.32,-1720.3,-1235.7,17,8,True,False,False,False,True,0.749,False,2,FAIL
+crt_H1_UTC_nofilt_c0.80,crt,ok,0.8,3150,0.6415722424109469,-4058.498448882866,1911,0.511,-2506.1,1239,0.749,-1552.4,10,0.0,,0.32,-2479.8,-1578.7,17,8,True,False,False,False,True,,False,2,(stress arm)
+crt_H4_NY_bias_c0.45,crt,ok,0.45,344,0.9046530583236135,-216.9200145141607,215,0.857,-144.0,129,0.942,-73.0,10,0.3,,0.39,-32.2,-184.8,17,8,True,False,False,False,True,0.908,False,2,FAIL
+crt_H4_NY_bias_c0.80,crt,ok,0.8,344,0.8556950600330709,-337.32001451416056,215,0.791,-219.2,129,0.908,-118.1,10,0.2,,0.39,-115.5,-221.9,17,8,True,False,False,False,True,,False,2,(stress arm)
+crt_H4_NY_nofilt_c0.45,crt,ok,0.45,694,0.84457274276783,-726.4121592300487,415,0.771,-463.2,279,0.901,-263.2,10,0.3,,0.51,-257.4,-469.0,17,8,True,False,False,False,False,0.866,False,1,FAIL
+crt_H4_NY_nofilt_c0.80,crt,ok,0.8,694,0.7982164398564193,-969.3121592300488,415,0.711,-608.5,279,0.866,-360.8,10,0.2,,0.51,-428.5,-540.8,17,8,True,False,False,False,False,,False,1,(stress arm)
+crt_H4_UTC_bias_c0.45,crt,ok,0.45,371,0.933018993544483,-159.06731928893373,232,0.888,-111.6,139,0.966,-47.5,10,0.3,,0.27,229.9,-389.0,17,8,True,False,False,False,True,0.931,False,2,FAIL
+crt_H4_UTC_bias_c0.80,crt,ok,0.8,371,0.8816701807821046,-288.91731928893364,232,0.815,-192.8,139,0.931,-96.2,10,0.3,,0.27,141.7,-430.6,17,8,True,False,False,False,True,,False,2,(stress arm)
+crt_H4_UTC_nofilt_c0.45,crt,ok,0.45,758,0.8030372142012503,-983.0452530110327,481,0.828,-368.2,277,0.784,-614.8,10,0.2,,0.36,-321.2,-661.8,17,8,True,False,False,False,True,0.754,False,2,FAIL
+crt_H4_UTC_nofilt_c0.80,crt,ok,0.8,758,0.7569414257412099,-1248.345253011033,481,0.76,-536.6,277,0.754,-711.8,10,0.2,,0.36,-505.0,-743.4,17,8,True,False,False,False,True,,False,2,(stress arm)

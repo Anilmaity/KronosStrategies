@@ -1,0 +1,91 @@
+top feature: pullback_frac (direction -1); gap_atr TRAIN median 0.4754
+threshold grid (keep sgn*feature >= thr, i.e. the best q share of TRAIN): {0.33: 0.3898, 0.5: 0.4167, 0.67: 0.4333}
+filled trades: 17457 of 20229 events  (TRAIN 9492, TEST 7965)
+outcome mix: outcome    SL  TIME    TP
+split                    
+TEST     6945     3  1017
+TRAIN    8535     4   953
+
+== threshold grid on TRAIN, arm A4 (feature only), cost 0.80 ==
+ q_keep    thr  TRAIN_n  TRAIN_pf  TRAIN_net
+ 0.3300 0.3898     3248    0.1635 -4372.7705
+ 0.5000 0.4167     5373    0.1570 -7231.6510
+ 0.6700 0.4333     6501    0.1506 -8806.1470
+T* = keep best 0.33 share -> pullback_frac <= 0.3898
+
+== arms (TRAIN/TEST x cost) ==
+arm  cost  TRAIN_n  TRAIN_pf  TRAIN_net  TRAIN_wr  TEST_n  TEST_pf   TEST_net  TEST_wr  TEST_months_pos  TEST_max_month_share  up_months_net  down_months_net  gold_corr
+ A0 0.450     9492     0.193  -9706.250     0.101    7965    0.358  -8816.372    0.128            0.000                   NaN     -12541.577        -5981.045      0.095
+ A0 0.800     9492     0.132 -13028.450     0.101    7965    0.282 -11604.122    0.128            0.000                   NaN     -16645.677        -7986.895      0.110
+ A1 0.450     3678     0.238  -3596.792     0.120    2830    0.384  -3093.677    0.141            0.000                   NaN      -4522.911        -2167.558      0.088
+ A1 0.800     3678     0.165  -4884.092     0.120    2830    0.304  -4084.177    0.141            0.000                   NaN      -6066.411        -2901.858      0.091
+ A2 0.450     4664     0.292  -4797.281     0.152    2875    0.541  -3220.477    0.208            0.000                   NaN      -5497.853        -2519.905     -0.034
+ A2 0.800     4664     0.212  -6429.681     0.152    2875    0.459  -4226.727    0.208            0.000                   NaN      -7293.003        -3363.405     -0.033
+ A3 0.450     1639     0.380  -1544.199     0.190     988    0.569  -1099.820    0.222            0.000                   NaN      -1793.743         -850.276     -0.039
+ A3 0.800     1639     0.284  -2117.849     0.190     988    0.487  -1445.620    0.222            0.000                   NaN      -2427.243        -1136.226     -0.062
+ A4 0.450     3248     0.234  -3235.970     0.118    1692    0.396  -2081.630    0.151            0.000                   NaN      -3688.569        -1629.031     -0.127
+ A4 0.800     3248     0.164  -4372.770     0.118    1692    0.323  -2673.830    0.151            0.000                   NaN      -4887.669        -2158.931     -0.135
+ A5 0.450     1225     0.299  -1142.708     0.138     593    0.455   -686.510    0.157            0.000                   NaN      -1265.188         -564.030      0.044
+ A5 0.800     1225     0.214  -1571.458     0.138     593    0.377   -894.060    0.157            0.000                   NaN      -1710.038         -755.480      0.010
+ A6 0.450      709     0.411   -632.168     0.188     297    0.601   -335.160    0.226            0.100                   NaN       -670.605         -296.722      0.010
+ A6 0.800      709     0.310   -880.318     0.188     297    0.522   -439.110    0.226            0.000                   NaN       -921.555         -397.872     -0.026
+
+bars:
+arm  cost  bar_n  bar_pf_both  bar_train  bar_months  bar_regime  PASS
+ A0  0.45   True        False      False       False        True False
+ A0  0.80   True        False      False       False        True False
+ A1  0.45   True        False      False       False        True False
+ A1  0.80   True        False      False       False        True False
+ A2  0.45   True        False      False       False        True False
+ A2  0.80   True        False      False       False        True False
+ A3  0.45   True        False      False       False        True False
+ A3  0.80   True        False      False       False        True False
+ A4  0.45   True        False      False       False        True False
+ A4  0.80   True        False      False       False        True False
+ A5  0.45   True        False      False       False        True False
+ A5  0.80   True        False      False       False        True False
+ A6  0.45   True        False      False       False        True False
+ A6  0.80   True        False      False       False        True False
+
+== permutation control (200 shuffles of pullback_frac across the parent population; TEST) ==
+arm parent  cost  n_real  real_TEST_pf  real_TEST_net  ctrl_pf_med  ctrl_pf_p95  ctrl_net_med  ctrl_net_p95  pct_rank_pf  pct_rank_net
+ A4     A0 0.450    1692         0.396      -2081.630        0.360        0.402     -2489.514     -2285.961        0.895         1.000
+ A4     A0 0.800    1692         0.323      -2673.830        0.284        0.318     -3280.559     -3076.584        0.955         1.000
+ A5     A1 0.450     593         0.455       -686.510        0.374        0.449      -888.117      -749.991        0.960         0.995
+ A5     A1 0.800     593         0.377       -894.060        0.296        0.357     -1162.827     -1019.298        0.980         1.000
+ A6     A3 0.450     297         0.601       -335.160        0.575        0.709      -417.151      -269.991        0.590         0.785
+ A6     A3 0.800     297         0.522       -439.110        0.492        0.609      -549.312      -400.121        0.615         0.880
+
+== feature increment on TEST PF @0.80 ==
+  A4 vs A0: PF 0.323 vs 0.282  (delta +0.040); net -2673.8 vs -11604.1
+  A5 vs A1: PF 0.377 vs 0.304  (delta +0.073); net -894.1 vs -4084.2
+  A6 vs A3: PF 0.522 vs 0.487  (delta +0.035); net -439.1 vs -1445.6
+
+== A0 anatomy by risk (R = |CE - SL|) bucket, cost 0.45 ==
+              n   TP%  SL_on_fill_bar%  net@0.45  PF@0.45
+Rb                                                       
+<0.6    3939.00  2.08            81.49  -3687.58     0.01
+0.6-0.8 3467.00  5.91            60.74  -3532.11     0.05
+0.8-1   2387.00  9.55            43.15  -2588.56     0.11
+1-1.5   3420.00 14.18            24.27  -3924.32     0.20
+1.5-2.5 2591.00 20.57            11.19  -3012.50     0.38
+2.5+    1653.00 26.44             4.96  -1777.55     0.69
+
+== sensitivity: one resting/open order per direction (greedy in t0 order) ==
+arm  cost  TRAIN_n  TRAIN_pf  TRAIN_net  TEST_n  TEST_pf  TEST_net  TEST_months_pos
+ A0 0.450     3549     0.190  -3494.563    2715    0.298 -3178.617            0.000
+ A0 0.800     3549     0.127  -4736.713    2715    0.231 -4128.867            0.000
+ A1 0.450     1709     0.217  -1648.389    1321    0.329 -1514.780            0.000
+ A1 0.800     1709     0.147  -2246.539    1321    0.257 -1977.130            0.000
+ A2 0.450     2456     0.287  -2506.330    1577    0.528 -1809.570            0.000
+ A2 0.800     2456     0.207  -3365.930    1577    0.448 -2361.520            0.000
+ A3 0.450     1041     0.347   -998.980     669    0.566  -730.347            0.100
+ A3 0.800     1041     0.255  -1363.330     669    0.483  -964.497            0.100
+ A4 0.450     2111     0.249  -2008.498    1172    0.460 -1220.665            0.000
+ A4 0.800     2111     0.172  -2747.348    1172    0.374 -1630.865            0.000
+ A5 0.450      908     0.306   -812.603     483    0.483  -514.032            0.100
+ A5 0.800      908     0.216  -1130.403     483    0.399  -683.082            0.000
+ A6 0.450      581     0.444   -470.673     260    0.612  -274.190            0.100
+ A6 0.800      581     0.333   -674.023     260    0.531  -365.190            0.100
+
+comparisons: TRAIN grid 3; TEST arms 7 x 2 costs = 14; Q.A 9 TRAIN + 4 TEST reads; controls 3 x 2.

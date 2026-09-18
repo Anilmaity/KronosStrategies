@@ -1,0 +1,13 @@
+{'train_n': 184, 'train_pf_0.8': 0.32, 'test_n': 103, 'test_pf_0.45': 1.174, 'test_pf_0.8': 1.053, 'test_pts_0.8': 18.4, 'test_pos_share': 0.3, 'test_max_share': 3.06, 'gold_corr': 0.17, 'bars_passed': 4, 'verdict': 'FAIL'}
+entry_time  2025-12  2026-01  2026-02  2026-03  2026-04  2026-05  2026-06  2026-07  2026-08  2026-09
+size            7.0      5.0      8.0     12.0     14.0     13.0     11.0     12.0     13.0      8.0
+sum            12.8    -14.7    163.9    -40.4    -13.6    -37.0     63.1    -47.9    -39.3    -28.5
+TEST wins:             date  side   risk  raw_pts outcome
+1114  2025-12-17   BUY  2.915   33.350      TP
+1168  2026-02-04  SELL  1.220  144.750      TP
+1200  2026-02-23   BUY  3.550   51.380      TP
+1272  2026-03-26   BUY  7.330   16.970    TIME
+1338  2026-04-22  SELL  1.385   35.325      TP
+1458  2026-06-12   BUY  1.280   59.160      TP
+1470  2026-06-17   BUY  2.180   30.435      TP
+share of TEST net from the largest single trade: 7.86

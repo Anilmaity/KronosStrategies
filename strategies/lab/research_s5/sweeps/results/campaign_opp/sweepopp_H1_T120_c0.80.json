@@ -1,0 +1,12 @@
+{
+ "label": "sweepopp_H1_T120_c0.80",
+ "strategy": "sweepopp_H1_T120",
+ "status": "ok",
+ "cost": 0.8,
+ "n": 16886,
+ "pts": -21488.8,
+ "pf": 0.444,
+ "level_type": "H1",
+ "T": 120,
+ "kind": "REAL-opp"
+}

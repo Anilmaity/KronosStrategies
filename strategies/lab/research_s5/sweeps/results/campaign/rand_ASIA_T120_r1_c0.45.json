@@ -1,0 +1,13 @@
+{
+ "label": "rand_ASIA_T120_r1_c0.45",
+ "strategy": "rand_ASIA_T120_r1",
+ "status": "ok",
+ "cost": 0.45,
+ "n": 3861,
+ "pts": -3880.8,
+ "pf": 0.433,
+ "level_type": "ASIA",
+ "T": 120,
+ "kind": "C-RAND",
+ "seed": 1
+}

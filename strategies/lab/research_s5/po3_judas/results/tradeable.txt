@@ -1,0 +1,83 @@
+S5 bars 8,682,738; trading days 527 (2024-09-02 .. 2026-09-17); TRAIN < 2025-12-01 <= TEST; costs (0.45, 0.8)
+events: A1 348 (reclaimed 343), C1 422 (reclaimed 415), A3 338 (reclaimed 333), A1q 348 (reclaimed 341)
+build 1s
+
+A1 trade geometry (T=900, T1): risk median 1.36, reward median 26.09, rr median 17.76, depth median 0.43, duration median 10.00, r_range median 26.60
+outcomes T=900/T1: {'SL': 302, 'TP': 8, 'TIME': 2};  sides {'SELL': 171, 'BUY': 141}
+
+== A1 primary: London sweep of the Asian range, reclaim within T, fade (all cells; bars at base cost 0.45 unless stated)
+   T tgt | TRAIN n  PF.45  PF.80   pts.80 | TEST n  PF.45  PF.80   pts.80 |  mo+ maxmo  corr | bars verdict
+  60  T1 |     169  0.176  0.139   -270.0 |     95  0.555  0.488   -145.4 |  0.1  None -0.39 | 2/6 FAIL
+  60  2R |     169  0.344  0.229   -192.1 |     95  0.849  0.697    -59.5 |  0.5  None -0.21 | 2/6 FAIL
+ 300  T1 |     193  0.187  0.149   -320.8 |    105  0.417  0.374   -232.3 |  0.1  None -0.27 | 2/6 FAIL
+ 300  2R |     193    0.4  0.276   -213.3 |    105  0.811  0.687    -80.7 |  0.5  None  0.19 | 2/6 FAIL
+ 900  T1 |     201  0.171  0.137   -354.0 |    111  0.305  0.279   -357.7 |  0.1  None -0.36 | 2/6 FAIL
+ 900  2R |     201  0.396   0.28   -232.0 |    111  0.584   0.51   -183.7 |  0.3  None -0.06 | 2/6 FAIL
+
+== C1 control: same rule, range 00-04 UTC swept in 04-07 UTC (no London)
+   T tgt | TRAIN n  PF.45  PF.80   pts.80 | TEST n  PF.45  PF.80   pts.80 |  mo+ maxmo  corr | bars verdict
+  60  T1 |     205  0.335  0.267   -274.5 |    123  0.455  0.396   -205.8 |  0.2  None -0.01 | 2/6 FAIL
+  60  2R |     205  0.225  0.154   -281.5 |    123  0.451  0.358   -171.6 |  0.1  None -0.44 | 1/6 FAIL
+ 300  T1 |     239  0.341  0.276   -337.5 |    137  0.536   0.47   -213.6 |  0.3  None  0.11 | 2/6 FAIL
+ 300  2R |     239   0.25  0.178   -338.8 |    137  0.613  0.501   -151.6 |  0.3  None -0.39 | 2/6 FAIL
+ 900  T1 |     242  0.329  0.268   -352.4 |    144  0.603  0.533   -207.1 |  0.3  None -0.02 | 2/6 FAIL
+ 900  2R |     242  0.287  0.208   -331.2 |    144  0.628   0.52   -161.8 |  0.2  None -0.41 | 1/6 FAIL
+
+== TRAIN selection (T1 target, PF at 0.80): {60: 0.139, 300: 0.149, 900: 0.137} -> declared arm T=300
+power: TRAIN sd(pts) 2.21, TEST n 105 -> MDE (2 sd/sqrt n) = 0.43 pts/trade;  TEST mean pts at 0.80 = -2.213
+declared arm bars: train_n=193, test_n=105, train_pf_0.45=0.187, train_pts_0.45=-253.3, train_pf_0.8=0.149, train_pts_0.8=-320.8, test_pf_0.45=0.417, test_pts_0.45=-195.6, test_pf_0.8=0.374, test_pts_0.8=-232.3, test_months=10, test_pos_share=0.1, test_max_share=None, gold_corr=-0.27, up_pts=-343.7, dn_pts=-105.1, bar1_n=True, bar2_base=False, bar2_stress=False, bar3_train=False, bar4_monthly=False, bar5_regime=True, bars_passed=2, verdict=FAIL
+
+== splits, declared arm T=300, T1 (PF at 0.45 / 0.80; pts and WR at 0.80)
+all                                | TRAIN n  193 PF  0.187 /  0.149  pts   -320.8 WR   3.1 | TEST n  105 PF  0.417 /  0.374  pts   -232.3 WR   3.8
+year 2024                          | TRAIN n   55 PF  0.256 /  0.195  pts    -75.7 WR   5.5 | TEST n    0 PF    nan /    nan  pts      0.0 WR   nan
+year 2025                          | TRAIN n  138 PF  0.165 /  0.134  pts   -245.1 WR   2.2 | TEST n    9 PF    0.0 /    0.0  pts    -24.8 WR   0.0
+year 2026                          | TRAIN n    0 PF    nan /    nan  pts      0.0 WR   nan | TEST n   96 PF  0.446 /  0.401  pts   -207.6 WR   4.2
+side BUY                           | TRAIN n   81 PF  0.212 /  0.172  pts   -141.1 WR   3.7 | TEST n   52 PF  0.553 /  0.502  pts   -103.2 WR   5.8
+side SELL                          | TRAIN n  112 PF  0.166 /   0.13  pts   -179.7 WR   2.7 | TEST n   53 PF   0.24 /  0.211  pts   -129.1 WR   1.9
+real sweep (depth > median spread) | TRAIN n   62 PF  0.194 /  0.163  pts   -136.8 WR   4.8 | TEST n   54 PF  0.313 /  0.288  pts   -184.4 WR   3.7
+flicker sweep (depth <= spread)    | TRAIN n  131 PF  0.181 /  0.138  pts   -184.1 WR   2.3 | TEST n   51 PF  0.683 /  0.572  pts    -47.9 WR   3.9
+D1 bias join: 98.7% of trades have a bias value
+D1 bias filter (with bias)         | TRAIN n   96 PF  0.207 /  0.167  pts   -160.4 WR   3.1 | TEST n   45 PF    0.0 /    0.0  pts   -136.7 WR   0.0
+D1 bias (against, for contrast)    | TRAIN n   93 PF  0.173 /  0.136  pts   -153.3 WR   3.2 | TEST n   60 PF  0.652 /  0.592  pts    -95.6 WR   6.7
+anchor A3 (DST-aware London)       | TRAIN n  184 PF  0.396 /   0.32  pts   -241.8 WR   3.8 | TEST n  103 PF  1.174 /  1.053  pts     18.4 WR   6.8
+reclaim on the quote               | TRAIN n  177 PF  0.299 /  0.245  pts   -295.9 WR   5.6 | TEST n  100 PF  0.402 /  0.363  pts   -242.8 WR   4.0
+C1 control at the same T           | TRAIN n  239 PF  0.341 /  0.276  pts   -337.5 WR   3.3 | TEST n  137 PF  0.536 /   0.47  pts   -213.6 WR   2.9
+2R target (secondary)              | TRAIN n  193 PF    0.4 /  0.276  pts   -213.3 WR  23.3 | TEST n  105 PF  0.811 /  0.687  pts    -80.7 WR  31.4
+
+by year x side, declared arm (n / PF at 0.80 / pts at 0.80):
+  2024 BUY: 24 / 0.116 / -41.5
+  2024 SELL: 31 / 0.274 / -34.2
+  2025 BUY: 61 / 0.175 / -112.8
+  2025 SELL: 86 / 0.082 / -157.0
+  2026 BUY: 48 / 0.537 / -90.0
+  2026 SELL: 48 / 0.227 / -117.6
+
+monthly pts at 0.80, declared arm:
+entry_time  2024-09  2024-10  2024-11  2024-12  2025-01  2025-02  2025-03  2025-04  2025-05  2025-06  2025-07  2025-08  2025-09  2025-10  2025-11  2025-12  2026-01  2026-02  2026-03  2026-04  2026-05  2026-06  2026-07  2026-08  2026-09
+size           14.0     12.0     14.0     15.0     15.0     14.0     20.0      7.0     11.0      9.0     15.0     14.0     13.0      9.0     11.0      9.0      6.0      8.0     11.0     14.0     13.0     11.0     12.0     13.0      8.0
+sum            -9.3    -20.7    -20.3    -25.4    -21.8    -27.3    -24.7    -15.4    -32.4    -17.7    -28.6      3.7    -30.7    -21.3    -28.9    -24.8    -19.4    -34.8    -50.2    -13.6    -37.0     63.1    -47.9    -39.3    -28.5
+
+== C2 control: time-shuffled, geometry-matched random entries, 200 draws of the whole book (+-30 days)
+T= 60 ALL   cost 0.45: real pts   -323.1 PF  0.364 | null pts mean   -237.7 p5   -392.6 p95    -66.4  null PF mean 0.527 | real at null percentile 18%  (null resolves 100.0% of draws)
+T= 60 ALL   cost 0.8: real pts   -415.5 PF  0.305 | null pts mean   -330.1 p5   -485.0 p95   -158.8  null PF mean 0.441 | real at null percentile 18%  (null resolves 100.0% of draws)
+T= 60 TRAIN cost 0.45: real pts   -210.9 PF  0.176 | null pts mean   -135.3 p5   -219.9 p95    -39.4  null PF mean 0.459 | real at null percentile 6%  (null resolves 100.0% of draws)
+T= 60 TRAIN cost 0.8: real pts   -270.0 PF  0.139 | null pts mean   -194.5 p5   -279.1 p95    -98.6  null PF mean 0.366 | real at null percentile 6%  (null resolves 100.0% of draws)
+T= 60 TEST  cost 0.45: real pts   -112.2 PF  0.555 | null pts mean   -102.4 p5   -229.6 p95     57.8  null PF mean 0.601 | real at null percentile 50%  (null resolves 100.0% of draws)
+T= 60 TEST  cost 0.8: real pts   -145.4 PF  0.488 | null pts mean   -135.7 p5   -262.9 p95     24.6  null PF mean 0.528 | real at null percentile 50%  (null resolves 100.0% of draws)
+  (C2 T=60 0s)
+T=300 ALL   cost 0.45: real pts   -448.9 PF  0.307 | null pts mean   -285.0 p5   -448.9 p95    -96.7  null PF mean 0.546 | real at null percentile 5%  (null resolves 100.0% of draws)
+T=300 ALL   cost 0.8: real pts   -553.2 PF  0.261 | null pts mean   -389.3 p5   -553.2 p95   -201.0  null PF mean 0.464 | real at null percentile 5%  (null resolves 100.0% of draws)
+T=300 TRAIN cost 0.45: real pts   -253.3 PF  0.187 | null pts mean   -157.2 p5   -259.0 p95    -46.8  null PF mean 0.484 | real at null percentile 6%  (null resolves 100.0% of draws)
+T=300 TRAIN cost 0.8: real pts   -320.8 PF  0.149 | null pts mean   -224.7 p5   -326.6 p95   -114.4  null PF mean 0.390 | real at null percentile 6%  (null resolves 100.0% of draws)
+T=300 TEST  cost 0.45: real pts   -195.6 PF  0.417 | null pts mean   -127.8 p5   -270.1 p95     62.9  null PF mean 0.613 | real at null percentile 24%  (null resolves 100.0% of draws)
+T=300 TEST  cost 0.8: real pts   -232.3 PF  0.374 | null pts mean   -164.5 p5   -306.9 p95     26.2  null PF mean 0.547 | real at null percentile 24%  (null resolves 100.0% of draws)
+  (C2 T=300 0s)
+T=900 ALL   cost 0.45: real pts   -602.5 PF  0.248 | null pts mean   -283.3 p5   -470.8 p95    -82.2  null PF mean 0.599 | real at null percentile 0%  (null resolves 100.0% of draws)
+T=900 ALL   cost 0.8: real pts   -711.7 PF  0.215 | null pts mean   -392.5 p5   -580.0 p95   -191.4  null PF mean 0.514 | real at null percentile 0%  (null resolves 100.0% of draws)
+T=900 TRAIN cost 0.45: real pts   -283.6 PF  0.171 | null pts mean   -161.7 p5   -262.6 p95    -57.9  null PF mean 0.510 | real at null percentile 2%  (null resolves 100.0% of draws)
+T=900 TRAIN cost 0.8: real pts   -354.0 PF  0.137 | null pts mean   -232.1 p5   -333.0 p95   -128.2  null PF mean 0.414 | real at null percentile 2%  (null resolves 100.0% of draws)
+T=900 TEST  cost 0.45: real pts   -318.8 PF  0.305 | null pts mean   -121.5 p5   -279.5 p95     69.1  null PF mean 0.686 | real at null percentile 2%  (null resolves 100.0% of draws)
+T=900 TEST  cost 0.8: real pts   -357.7 PF  0.279 | null pts mean   -160.4 p5   -318.3 p95     30.2  null PF mean 0.618 | real at null percentile 2%  (null resolves 100.0% of draws)
+  (C2 T=900 0s)
+
+total 3s

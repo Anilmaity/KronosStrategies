@@ -1,0 +1,13 @@
+{
+ "label": "rand_LON_T120_r2_c0.80",
+ "strategy": "rand_LON_T120_r2",
+ "status": "ok",
+ "cost": 0.8,
+ "n": 3362,
+ "pts": -3979.6,
+ "pf": 0.426,
+ "level_type": "LON",
+ "T": 120,
+ "kind": "C-RAND",
+ "seed": 2
+}

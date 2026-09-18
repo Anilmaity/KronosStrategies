@@ -1,0 +1,12 @@
+{
+ "label": "sweepopp_ASIA_T300_c0.45",
+ "strategy": "sweepopp_ASIA_T300",
+ "status": "ok",
+ "cost": 0.45,
+ "n": 3247,
+ "pts": -3271.0,
+ "pf": 0.575,
+ "level_type": "ASIA",
+ "T": 300,
+ "kind": "REAL-opp"
+}

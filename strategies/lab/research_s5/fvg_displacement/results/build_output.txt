@@ -1,0 +1,34 @@
+M5 FVGs (gap>=0.5, consecutive): 20573  in window: 20229  after spike exclusion: 20229
+  bullish 10687  bearish 9542
+S5 bars 8,682,738  (1s)
+dense grid slots 13,209,492  (1s)
+features done (1s); events with <12 S5 bars in bar2: 0
+labels + trades done (2s)
+label counts (primary, near-edge touch):
+label  filled_through  respected  unresolved  untouched
+split                                                  
+TEST             3925       4453          14        777
+TRAIN            5031       5039          16        974
+label counts (secondary, CE touch):
+label_ce  filled_through  respected  unresolved  untouched
+split                                                     
+TEST                5937       2121          12       1099
+TRAIN               7247       2410          15       1388
+trade outcomes:
+outcome          SL  TIME    TP
+split                          
+TEST     1204  6945     3  1017
+TRAIN    1568  8535     4   953
+feature summary:
+                 count       mean       std        min        25%        50%        75%         max
+gap_size       20229.0   2.306157  3.035040   0.500000   0.855000   1.435000   2.615000  100.455000
+gap_atr        20229.0   0.532985  0.413234   0.012666   0.262276   0.427046   0.678719    7.294068
+peak_vel       20229.0   0.332508  0.216852   0.063895   0.214192   0.281647   0.383078    5.657231
+burst30        20229.0   0.456579  0.132314   0.162608   0.360248   0.432674   0.527848    1.000000
+vol_hhi        20229.0   0.022179  0.004426   0.016788   0.019484   0.021094   0.023509    0.146834
+pullback_frac  20229.0   0.422299  0.054874   0.216667   0.383333   0.416667   0.465517    0.616667
+er2            20229.0   0.250011  0.103860   0.001089   0.175811   0.242108   0.316087    0.830800
+peak_vel3      20229.0   0.401941  0.272286   0.090137   0.267569   0.343396   0.457325   14.071918
+burst30_3      20229.0   0.294423  0.091557   0.119487   0.232819   0.276910   0.334262    1.000000
+n_s5_bar2      20229.0  59.444856  1.989215  20.000000  60.000000  60.000000  60.000000   60.000000
+wrote /Users/anil/Projects/Kronos/KronosStrategies/strategies/lab/research_s5/fvg_displacement/results/events.parquet  rows=20229  (2s)

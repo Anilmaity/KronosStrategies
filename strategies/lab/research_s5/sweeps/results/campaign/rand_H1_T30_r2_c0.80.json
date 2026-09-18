@@ -1,0 +1,13 @@
+{
+ "label": "rand_H1_T30_r2_c0.80",
+ "strategy": "rand_H1_T30_r2",
+ "status": "ok",
+ "cost": 0.8,
+ "n": 18430,
+ "pts": -23666.7,
+ "pf": 0.29,
+ "level_type": "H1",
+ "T": 30,
+ "kind": "C-RAND",
+ "seed": 2
+}

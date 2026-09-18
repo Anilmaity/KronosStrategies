@@ -1,0 +1,13 @@
+{
+ "label": "rand_PD_T120_r1_c0.80",
+ "strategy": "rand_PD_T120_r1",
+ "status": "ok",
+ "cost": 0.8,
+ "n": 3052,
+ "pts": -3623.2,
+ "pf": 0.44,
+ "level_type": "PD",
+ "T": 120,
+ "kind": "C-RAND",
+ "seed": 1
+}

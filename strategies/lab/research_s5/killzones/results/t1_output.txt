@@ -1,0 +1,167 @@
+=== Test 1: concentration of delivery events (pooled share / clock share) ===
+events: {'BURSTREL': 248829, 'BURST': 236542, 'H': 522, 'L': 522, 'X60': 522, 'X300': 522}  days: 522  (TRAIN 320, TEST 202)
+
+--- calibration: 08:00-11:59 NY block, daily H/L (Session-Timing note: 29.9% vs 17.4% = 1.72x) ---
+split  n_events  clock_share  share  share_dayavg  ratio
+  ALL      1044       0.1739 0.2625        0.2625  1.509
+TRAIN       640       0.1739 0.2531        0.2531  1.455
+ TEST       404       0.1739 0.2772        0.2772  1.594
+
+--- reopen artefact rows, daily H/L (note: 6.02x / 4.08x at 15 / 30 min) ---
+split   window  share  clock_share  ratio
+  ALL REOPEN15 0.0594       0.0109  5.464
+  ALL REOPEN30 0.0891       0.0217  4.098
+TRAIN REOPEN15 0.0594       0.0109  5.462
+TRAIN REOPEN30 0.0859       0.0217  3.953
+ TEST REOPEN15 0.0594       0.0109  5.465
+ TEST REOPEN30 0.0941       0.0217  4.327
+
+--- killzones: per window and union, ALL days, reopen included ---
+kind            BURST  BURSTREL     HL   X300    X60
+window                                              
+KZ_Asia         1.063     1.044  1.041  0.903  0.892
+KZ_London       1.100     1.072  0.558  0.397  0.338
+KZ_LondonClose  1.360     1.614  1.685  1.895  2.247
+KZ_NYAM         1.311     1.449  1.050  2.952  2.805
+UNION           1.184     1.247  1.030  1.454  1.458
+
+--- macros: per window and union, ALL days, reopen included ---
+kind    BURST  BURSTREL     HL   X300    X60
+window                                      
+M_0950  1.415     1.766  2.842  6.345  5.684
+M_1050  1.391     1.699  1.124  2.115  3.040
+M_1310  0.974     0.952  0.881  0.529  0.617
+M_1515  0.720     0.631  0.969  0.264  0.088
+UNION   1.069     1.168  1.348  1.930  1.956
+
+--- silver_bullet: per window and union, ALL days, reopen included ---
+kind    BURST  BURSTREL     HL   X300    X60
+window                                      
+SB_03   1.162     1.145  0.551  0.485  0.308
+SB_10   1.435     1.767  2.027  2.644  3.305
+SB_14   0.730     0.625  0.595  0.573  0.837
+UNION   1.109     1.179  1.057  1.234  1.483
+
+=== primary: UNION ratio with permutation null (independent random window starts, 2000 draws) ===
+split     kind           set window  n_events  clock_share  share  ratio  ci_lo  ci_hi  null_mean  null_sd     z  p_one_sided
+  ALL       HL     killzones  UNION      1044       0.5217 0.5374  1.030  0.974  1.085      1.001    0.227  0.13       0.4375
+  ALL       HL        macros  UNION      1044       0.0725 0.0977  1.348  1.124  1.580      1.005    0.383  0.90       0.1580
+  ALL       HL silver_bullet  UNION      1044       0.1304 0.1379  1.057  0.899  1.223      0.998    0.369  0.16       0.3780
+  ALL      X60     killzones  UNION       522       0.5217 0.7605  1.458  1.388  1.520      0.994    0.405  1.14       0.1560
+  ALL      X60        macros  UNION       522       0.0725 0.1418  1.956  1.586  2.340      0.994    0.701  1.37       0.1125
+  ALL      X60 silver_bullet  UNION       522       0.1304 0.1935  1.483  1.234  1.748      1.008    0.658  0.72       0.2575
+  ALL     X300     killzones  UNION       522       0.5217 0.7586  1.454  1.381  1.526      1.000    0.398  1.14       0.1615
+  ALL     X300        macros  UNION       522       0.0725 0.1398  1.930  1.519  2.353      1.006    0.688  1.34       0.1335
+  ALL     X300 silver_bullet  UNION       522       0.1304 0.1609  1.234  1.013  1.483      1.025    0.668  0.31       0.3105
+  ALL    BURST     killzones  UNION    236542       0.5217 0.6176  1.184  1.166  1.202      0.999    0.102  1.80       0.0300
+  ALL    BURST        macros  UNION    236542       0.0725 0.0775  1.069  1.035  1.107      0.993    0.137  0.56       0.2820
+  ALL    BURST silver_bullet  UNION    236542       0.1304 0.1447  1.109  1.086  1.134      1.004    0.151  0.70       0.2460
+  ALL BURSTREL     killzones  UNION    248829       0.5217 0.6507  1.247  1.228  1.268      0.994    0.142  1.79       0.0380
+  ALL BURSTREL        macros  UNION    248829       0.0725 0.0846  1.168  1.137  1.200      1.007    0.193  0.83       0.2045
+  ALL BURSTREL silver_bullet  UNION    248829       0.1304 0.1538  1.179  1.152  1.203      0.994    0.207  0.90       0.2000
+TRAIN       HL     killzones  UNION       640       0.5217 0.5438  1.042  0.970  1.117      0.994    0.191  0.25       0.3985
+TRAIN       HL        macros  UNION       640       0.0725 0.1000  1.380  1.110  1.682      0.995    0.373  1.03       0.1330
+TRAIN       HL silver_bullet  UNION       640       0.1304 0.1250  0.958  0.767  1.162      1.004    0.339 -0.14       0.4900
+TRAIN      X60     killzones  UNION       320       0.5217 0.7906  1.515  1.426  1.593      0.996    0.453  1.15       0.1600
+TRAIN      X60        macros  UNION       320       0.0725 0.1656  2.286  1.745  2.846      0.995    0.798  1.62       0.1035
+TRAIN      X60 silver_bullet  UNION       320       0.1304 0.2062  1.581  1.233  1.893      0.972    0.712  0.86       0.2330
+TRAIN     X300     killzones  UNION       320       0.5217 0.7750  1.485  1.402  1.581      1.007    0.434  1.10       0.1695
+TRAIN     X300        macros  UNION       320       0.0725 0.1531  2.113  1.552  2.696      1.008    0.759  1.46       0.1250
+TRAIN     X300 silver_bullet  UNION       320       0.1304 0.1656  1.270  1.006  1.581      1.012    0.701  0.37       0.2890
+TRAIN    BURST     killzones  UNION     92522       0.5217 0.6835  1.310  1.273  1.343      1.004    0.195  1.57       0.0575
+TRAIN    BURST        macros  UNION     92522       0.0725 0.0922  1.272  1.212  1.336      0.995    0.262  1.06       0.1495
+TRAIN    BURST silver_bullet  UNION     92522       0.1304 0.1669  1.279  1.237  1.329      1.000    0.291  0.96       0.1870
+TRAIN BURSTREL     killzones  UNION    119711       0.5217 0.6920  1.326  1.298  1.359      0.999    0.206  1.59       0.0585
+TRAIN BURSTREL        macros  UNION    119711       0.0725 0.0928  1.280  1.231  1.330      0.989    0.271  1.08       0.1495
+TRAIN BURSTREL silver_bullet  UNION    119711       0.1304 0.1697  1.301  1.260  1.349      0.992    0.298  1.04       0.1655
+ TEST       HL     killzones  UNION       404       0.5217 0.5272  1.011  0.923  1.105      1.004    0.283  0.02       0.4810
+ TEST       HL        macros  UNION       404       0.0725 0.0941  1.298  0.904  1.708      1.003    0.447  0.66       0.2505
+ TEST       HL silver_bullet  UNION       404       0.1304 0.1584  1.215  0.949  1.499      1.010    0.431  0.47       0.3015
+ TEST      X60     killzones  UNION       202       0.5217 0.7129  1.366  1.252  1.490      0.997    0.338  1.09       0.1620
+ TEST      X60        macros  UNION       202       0.0725 0.1040  1.435  0.888  2.050      0.987    0.624  0.72       0.2040
+ TEST      X60 silver_bullet  UNION       202       0.1304 0.1733  1.328  0.967  1.746      1.014    0.548  0.57       0.3020
+ TEST     X300     killzones  UNION       202       0.5217 0.7327  1.404  1.290  1.528      0.997    0.382  1.06       0.1645
+ TEST     X300        macros  UNION       202       0.0725 0.1188  1.640  1.025  2.254      1.014    0.672  0.93       0.1755
+ TEST     X300 silver_bullet  UNION       202       0.1304 0.1535  1.177  0.815  1.518      1.010    0.636  0.26       0.3485
+ TEST    BURST     killzones  UNION    144020       0.5217 0.5753  1.103  1.082  1.124      0.999    0.063  1.63       0.0295
+ TEST    BURST        macros  UNION    144020       0.0725 0.0680  0.939  0.906  0.970      1.001    0.103 -0.60       0.7365
+ TEST    BURST silver_bullet  UNION    144020       0.1304 0.1304  1.000  0.977  1.023      1.003    0.106 -0.03       0.5440
+ TEST BURSTREL     killzones  UNION    129118       0.5217 0.6124  1.174  1.152  1.196      0.999    0.091  1.92       0.0225
+ TEST BURSTREL        macros  UNION    129118       0.0725 0.0771  1.064  1.024  1.100      1.001    0.136  0.46       0.3320
+ TEST BURSTREL silver_bullet  UNION    129118       0.1304 0.1390  1.066  1.037  1.090      0.997    0.143  0.48       0.3160
+
+=== exploratory (not pre-registered claims): per-window placement null, ALL days, 500 draws ===
+kind                          BURST  BURSTREL     HL   X300    X60
+set           window                                              
+killzones     KZ_Asia         0.352     0.346  0.470  0.406  0.372
+              KZ_London       0.304     0.356  0.680  0.862  0.898
+              KZ_LondonClose  0.126     0.082  0.156  0.140  0.154
+              KZ_NYAM         0.100     0.112  0.384  0.088  0.056
+macros        M_0950          0.096     0.040  0.038  0.018  0.034
+              M_1050          0.094     0.080  0.282  0.112  0.056
+              M_1310          0.534     0.512  0.492  0.560  0.508
+              M_1515          0.824     0.872  0.398  0.840  0.946
+silver_bullet SB_03           0.224     0.286  0.746  0.584  0.818
+              SB_10           0.060     0.040  0.098  0.106  0.098
+              SB_14           0.800     0.860  0.688  0.518  0.334
+
+=== robustness: reopen (first 30 min) excluded, ALL ===
+kind             BURST  BURSTREL     HL   X300    X60
+set                                                  
+calib_0800_1159  1.441     1.683  1.674  3.142  3.159
+killzones        1.200     1.264  1.143  1.497  1.504
+macros           1.084     1.183  1.496  1.987  2.018
+silver_bullet    1.125     1.194  1.173  1.270  1.530
+
+=== 30-min NY bins: share of daily H/L, X60, bursts (uniform = 2.17% per bin) ===
+kind   HL%  X60%  BURST%
+18:00  8.9   2.1     1.1
+18:30  3.4   2.3     1.5
+19:00  2.6   1.3     1.6
+19:30  1.9   1.0     1.8
+20:00  5.2   4.8     2.5
+20:30  2.8   2.3     2.5
+21:00  3.7   3.4     2.6
+21:30  1.5   2.5     2.7
+22:00  1.6   1.0     2.4
+22:30  1.8   1.1     2.3
+23:00  1.0   0.4     2.0
+23:30  0.5   0.0     1.5
+00:00  1.0   0.0     1.5
+00:30  1.0   1.3     1.6
+01:00  1.5   0.4     2.1
+01:30  1.2   1.3     2.5
+02:00  1.2   1.1     2.5
+02:30  1.3   0.2     2.4
+03:00  1.0   0.6     2.6
+03:30  1.4   0.8     2.4
+04:00  1.3   1.3     2.4
+04:30  1.0   0.4     2.0
+05:00  0.9   1.5     2.1
+05:30  1.4   0.2     2.0
+06:00  0.5   0.8     1.9
+06:30  0.9   0.8     1.8
+07:00  1.1   1.3     2.0
+07:30  1.0   1.5     2.2
+08:00  1.3  13.0     3.1
+08:30  2.9   5.0     3.3
+09:00  2.2   4.4     3.4
+09:30  5.2  11.3     3.0
+10:00  5.6   8.6     3.1
+10:30  3.3   5.7     3.1
+11:00  3.5   3.3     2.9
+11:30  2.3   1.9     2.7
+12:00  2.6   1.0     2.4
+12:30  1.4   0.8     2.1
+13:00  2.0   0.8     2.2
+13:30  1.5   1.9     1.8
+14:00  1.6   1.9     1.7
+14:30  1.0   1.7     1.5
+15:00  2.1   1.1     1.6
+15:30  2.5   0.4     1.7
+16:00  1.8   0.8     1.0
+16:30  4.6   0.6     0.9
+
+=== descriptive: burst episodes vs the day's range ===
+TRAIN: days 320  bursts/day median 178  burst clock share median 4.8%  sum|burst move|/day range median 5.56  |net burst|/range median 0.39  day range median 43.6 pt
+TEST: days 202  bursts/day median 746  burst clock share median 38.9%  sum|burst move|/day range median 11.65  |net burst|/range median 0.48  day range median 100.4 pt

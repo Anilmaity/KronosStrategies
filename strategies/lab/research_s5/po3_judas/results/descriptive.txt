@@ -1,0 +1,175 @@
+S5 bars 8,682,738  2024-08-15 00:00:00+00:00 -> 2026-09-18 10:30:55+00:00   load 1s
+trading days in window: 527  (2024-09-02 .. 2026-09-17);  TRAIN < 2025-12-01 <= TEST
+
+====================================================================================================
+ANCHOR A1  UTC day, London 07:00-10:00 UTC (primary)
+days 527: UP 293  DOWN 234  FLAT 0;  join: p07 present 100.0%, PD present 99.8%
+Asian range (pts): median 32.86  IQR 18.77-51.86; London median spread 0.580
+
+-- 1. extreme-location by day direction (share of days; rows sum to 1)
+LOW:
+lo_bucket  prev-evening  Asia  London  post-London  NY late  post-break
+direction                                                              
+DOWN                  0  17.5     2.1         38.0     29.9        12.4
+UP                    0  65.2    11.9         19.5      3.4         0.0
+HIGH:
+hi_bucket  prev-evening  Asia  London  post-London  NY late  post-break
+direction                                                              
+DOWN                  0  59.8    10.7         23.9      5.1         0.4
+UP                    0  13.0     3.1         32.8     27.3        23.9
+
+P(day LOW in London | UP)   = 11.9%   (n_up=293);  unconditional P(low in London) = 7.6%;  P(low in London | DOWN) = 2.1%
+P(day HIGH in London | DOWN) = 10.7%   (n_down=234);  unconditional P(high in London) = 6.5%;  P(high in London | UP) = 3.1%
+P(day LOW in Asia | UP) = 65.2%;  P(day HIGH in Asia | DOWN) = 59.8%
+Judas proper (extreme in London AND opposite the close): 60 of 527 days = 11.4%
+
+-- 2. Judas-extreme time (minutes after London open), 10-min bins
+n=60  median 82.8  IQR 40.7-121.3  mean 84.3
+    0-10 :  2   10-20 :  3   20-30 :  3   30-40 :  7   40-50 :  6   50-60 :  1   60-70 :  6   70-80 :  1   80-90 :  5   90-100:  4  100-110:  1  110-120:  4  120-130:  6  130-140:  1  140-150:  2  150-160:  1  160-170:  4  170-180:  3
+
+-- 3. first London sweep of the Asian range: persistence
+days with a London breach of the AR: 338 of 527 (64.1%);  both sides breached in London: 10; side UP 190  DOWN 148
+breach time after open (min): median 35.0  IQR 9.6-78.9
+reclaimed (close back inside) by 10:00: 95.3%;  by 16:00: 98.5%;  never by 16:00: 5
+duration beyond the level, reclaimed sweeps (s): p10 5 p25 5 p50 10 p75 45 p90 685; <=60s 77.8%  <=300s 87.4%  <=900s 91.6%
+depth beyond the level (pts): median 0.53  IQR 0.15-1.77; 'real' (depth > day's London median spread): 47.3%  (reclaimed-within-900s only: 41.6%)
+first sweep DOWN: n=148  P(day closes UP vs 07:00) = 39.2%;  reclaimed-by-10:00 subset n=140: 39.3%;  P(day extreme on the swept side is IN London | sweep DOWN) = 26.4%
+first sweep UP  : n=190  P(day closes DOWN vs 07:00) = 31.6%;  reclaimed-by-10:00 subset n=182: 31.3%;  P(day extreme on the swept side is IN London | sweep UP) = 17.9%
+
+-- 4. Asian range vs previous-day extreme (London window)
+level_first
+AR only           172
+both, PD first    117
+none              105
+PD only            84
+both, AR first     39
+both, same bar      9
+n/a                 1
+first AR breach also exceeded the previous-day extreme on that side: 36.8% of 337
+
+-- 5. Null A: label permutation (shuffle day directions across days), 5000 perms
+P(low in London | UP): observed 11.9%  null mean 7.6%  95% band 5.5-9.6%  p(null >= obs) = 0.0000
+P(high in London | DOWN): observed 10.7%  null mean 6.4%  95% band 4.3-9.0%  p(null >= obs) = 0.0002
+
+-- 6. Null B: within-day return shuffle (London open -> day close), 200 perms/day, on closes
+P(low in London | UP) (closes, n=293): observed 12.6%  null mean 12.6%  sd 1.82  95% band 8.9-15.7%  p(null >= obs) = 0.525  excess over null = +0.0 pp
+P(high in London | DOWN) (closes, n=234): observed 10.3%  null mean 17.8%  sd 2.38  95% band 12.8-22.2%  p(null >= obs) = 0.995  excess over null = -7.5 pp
+(null B 17s)
+TRAIN: days 321  P(low in London | UP) 13.4% (n_up 186)  P(high in London | DOWN) 12.6% (n_down 135)  unconditional low/high in London 9.0% / 8.1%
+TEST: days 206  P(low in London | UP) 9.3% (n_up 107)  P(high in London | DOWN) 8.1% (n_down 99)  unconditional low/high in London 5.3% / 3.9%
+
+====================================================================================================
+ANCHOR A2  NY day (17:00 ET), London 07:00-10:00 UTC
+days 527: UP 291  DOWN 236  FLAT 0;  join: p07 present 100.0%, PD present 99.8%
+Asian range (pts): median 32.86  IQR 18.77-51.86; London median spread 0.580
+
+-- 1. extreme-location by day direction (share of days; rows sum to 1)
+LOW:
+lo_bucket  prev-evening  Asia  London  post-London  NY late  post-break
+direction                                                              
+DOWN                8.5  13.1     2.5         37.7     34.7         3.4
+UP                 25.8  42.3    11.3         17.9      2.7         0.0
+HIGH:
+hi_bucket  prev-evening  Asia  London  post-London  NY late  post-break
+direction                                                              
+DOWN               19.9  42.4     9.3         23.3      5.1         0.0
+UP                  6.2  10.0     3.1         35.1     39.5         6.2
+
+P(day LOW in London | UP)   = 11.3%   (n_up=291);  unconditional P(low in London) = 7.4%;  P(low in London | DOWN) = 2.5%
+P(day HIGH in London | DOWN) = 9.3%   (n_down=236);  unconditional P(high in London) = 5.9%;  P(high in London | UP) = 3.1%
+P(day LOW in Asia | UP) = 42.3%;  P(day HIGH in Asia | DOWN) = 42.4%
+Judas proper (extreme in London AND opposite the close): 55 of 527 days = 10.4%
+
+-- 2. Judas-extreme time (minutes after London open), 10-min bins
+n=55  median 74.1  IQR 40.0-122.2  mean 83.5
+    0-10 :  1   10-20 :  3   20-30 :  3   30-40 :  7   40-50 :  6   50-60 :  1   60-70 :  6   70-80 :  1   80-90 :  3   90-100:  4  100-110:  1  110-120:  3  120-130:  6  130-140:  1  140-150:  2  150-160:  1  160-170:  3  170-180:  3
+
+-- 3. first London sweep of the Asian range: persistence
+days with a London breach of the AR: 338 of 527 (64.1%);  both sides breached in London: 10; side UP 190  DOWN 148
+breach time after open (min): median 35.0  IQR 9.6-78.9
+reclaimed (close back inside) by 10:00: 95.3%;  by 16:00: 98.5%;  never by 16:00: 5
+duration beyond the level, reclaimed sweeps (s): p10 5 p25 5 p50 10 p75 45 p90 685; <=60s 77.8%  <=300s 87.4%  <=900s 91.6%
+depth beyond the level (pts): median 0.53  IQR 0.15-1.77; 'real' (depth > day's London median spread): 47.3%  (reclaimed-within-900s only: 41.6%)
+first sweep DOWN: n=148  P(day closes UP vs 07:00) = 39.2%;  reclaimed-by-10:00 subset n=140: 39.3%;  P(day extreme on the swept side is IN London | sweep DOWN) = 25.7%
+first sweep UP  : n=190  P(day closes DOWN vs 07:00) = 31.6%;  reclaimed-by-10:00 subset n=182: 31.3%;  P(day extreme on the swept side is IN London | sweep UP) = 16.3%
+
+-- 4. Asian range vs previous-day extreme (London window)
+level_first
+AR only           169
+both, PD first    122
+none              102
+PD only            87
+both, AR first     37
+both, same bar      9
+n/a                 1
+first AR breach also exceeded the previous-day extreme on that side: 37.1% of 337
+
+-- 5. Null A: label permutation (shuffle day directions across days), 5000 perms
+P(low in London | UP): observed 11.3%  null mean 7.4%  95% band 5.5-9.3%  p(null >= obs) = 0.0000
+P(high in London | DOWN): observed 9.3%  null mean 5.8%  95% band 3.8-8.1%  p(null >= obs) = 0.0024
+
+-- 6. Null B: within-day return shuffle (London open -> day close), 200 perms/day, on closes
+P(low in London | UP) (closes, n=291): observed 12.4%  null mean 12.0%  sd 1.64  95% band 8.9-14.8%  p(null >= obs) = 0.435  excess over null = +0.4 pp
+P(high in London | DOWN) (closes, n=236): observed 8.9%  null mean 17.6%  sd 2.20  95% band 12.7-21.6%  p(null >= obs) = 1.000  excess over null = -8.7 pp
+(null B 15s)
+TRAIN: days 321  P(low in London | UP) 13.1% (n_up 183)  P(high in London | DOWN) 10.1% (n_down 138)  unconditional low/high in London 8.7% / 7.2%
+TEST: days 206  P(low in London | UP) 8.3% (n_up 108)  P(high in London | DOWN) 8.2% (n_down 98)  unconditional low/high in London 5.3% / 3.9%
+
+====================================================================================================
+ANCHOR A3  UTC day, London 08:00-11:00 Europe/London (DST-aware)
+days 527: UP 299  DOWN 228  FLAT 0;  join: p07 present 100.0%, PD present 99.8%
+Asian range (pts): median 33.18  IQR 19.28-52.45; London median spread 0.580
+
+-- 1. extreme-location by day direction (share of days; rows sum to 1)
+LOW:
+lo_bucket  prev-evening  Asia  London  post-London  NY late  post-break
+direction                                                              
+DOWN                  0  18.4     1.3         37.3     30.3        12.7
+UP                    0  63.5    12.4         20.4      3.7         0.0
+HIGH:
+hi_bucket  prev-evening  Asia  London  post-London  NY late  post-break
+direction                                                              
+DOWN                  0  58.8    11.4         25.0      4.4         0.4
+UP                    0  14.7     2.7         31.8     27.4        23.4
+
+P(day LOW in London | UP)   = 12.7%   (n_up=299);  unconditional P(low in London) = 7.8%;  P(low in London | DOWN) = 1.3%
+P(day HIGH in London | DOWN) = 12.3%   (n_down=228);  unconditional P(high in London) = 7.4%;  P(high in London | UP) = 3.7%
+P(day LOW in Asia | UP) = 64.9%;  P(day HIGH in Asia | DOWN) = 60.1%
+Judas proper (extreme in London AND opposite the close): 66 of 527 days = 12.5%
+
+-- 2. Judas-extreme time (minutes after London open), 10-min bins
+n=66  median 79.1  IQR 34.6-126.0  mean 84.9
+    0-10 :  6   10-20 :  2   20-30 :  5   30-40 :  5   40-50 :  5   50-60 :  2   60-70 :  6   70-80 :  2   80-90 :  3   90-100:  3  100-110:  1  110-120:  6  120-130:  4  130-140:  2  140-150:  2  150-160:  5  160-170:  5  170-180:  2
+
+-- 3. first London sweep of the Asian range: persistence
+days with a London breach of the AR: 333 of 527 (63.2%);  both sides breached in London: 5; side UP 188  DOWN 145
+breach time after open (min): median 34.8  IQR 9.6-74.5
+reclaimed (close back inside) by 10:00: 95.2%;  by 16:00: 98.5%;  never by 16:00: 5
+duration beyond the level, reclaimed sweeps (s): p10 5 p25 5 p50 10 p75 45 p90 648; <=60s 77.7%  <=300s 86.6%  <=900s 92.1%
+depth beyond the level (pts): median 0.54  IQR 0.18-1.93; 'real' (depth > day's London median spread): 48.0%  (reclaimed-within-900s only: 42.7%)
+first sweep DOWN: n=145  P(day closes UP vs 07:00) = 41.4%;  reclaimed-by-10:00 subset n=137: 41.6%;  P(day extreme on the swept side is IN London | sweep DOWN) = 27.6%
+first sweep UP  : n=188  P(day closes DOWN vs 07:00) = 31.4%;  reclaimed-by-10:00 subset n=180: 31.7%;  P(day extreme on the swept side is IN London | sweep UP) = 20.7%
+
+-- 4. Asian range vs previous-day extreme (London window)
+level_first
+AR only           177
+both, PD first    107
+none               98
+PD only            96
+both, AR first     38
+both, same bar     10
+n/a                 1
+first AR breach also exceeded the previous-day extreme on that side: 34.9% of 332
+
+-- 5. Null A: label permutation (shuffle day directions across days), 5000 perms
+P(low in London | UP): observed 12.7%  null mean 7.8%  95% band 5.7-9.7%  p(null >= obs) = 0.0000
+P(high in London | DOWN): observed 12.3%  null mean 7.4%  95% band 4.8-10.1%  p(null >= obs) = 0.0004
+
+-- 6. Null B: within-day return shuffle (London open -> day close), 200 perms/day, on closes
+P(low in London | UP) (closes, n=299): observed 13.4%  null mean 12.6%  sd 1.77  95% band 9.4-16.1%  p(null >= obs) = 0.385  excess over null = +0.8 pp
+P(high in London | DOWN) (closes, n=228): observed 12.3%  null mean 17.4%  sd 2.21  95% band 13.2-21.9%  p(null >= obs) = 1.000  excess over null = -5.1 pp
+(null B 17s)
+TRAIN: days 321  P(low in London | UP) 13.7% (n_up 190)  P(high in London | DOWN) 15.3% (n_down 131)  unconditional low/high in London 8.7% / 9.7%
+TEST: days 206  P(low in London | UP) 11.0% (n_up 109)  P(high in London | DOWN) 8.2% (n_down 97)  unconditional low/high in London 6.3% / 3.9%
+
+total 50s
