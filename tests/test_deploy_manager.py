@@ -218,7 +218,7 @@ def test_challenge_created_when_absent(db):
     # three roster strategies land in one pass (scalper slot stays empty).
     assert deploy_manager.seed(db) == 0
     db.commit()
-    assert db.query(ManagedStrategy).count() == 5
+    assert db.query(ManagedStrategy).count() == len(deploy_manager.ROSTER) + 1   # roster + Challenge XAU
     ch = db.query(Strategy).filter_by(
         name=deploy_manager.CHALLENGE_STRATEGY_NAME).one()
     ch_us = db.query(UserStrategy).filter_by(strategy_id=ch.id).one()
@@ -291,14 +291,14 @@ def test_retire_pulls_s97(db):
     assert s97_us.deployed is False
     assert s97_us.is_active is False
     # Roster children (S93, S99, S100, S94) + the created challenge trend slot.
-    assert db.query(ManagedStrategy).count() == 5
+    assert db.query(ManagedStrategy).count() == len(deploy_manager.ROSTER) + 1   # roster + Challenge XAU
 
 
 def test_retire_noop_when_absent(db):
     # No S97 rows present -> retire pass is a clean no-op, seed still succeeds.
     assert deploy_manager.seed(db) == 0
     db.commit()
-    assert db.query(ManagedStrategy).count() == 5
+    assert db.query(ManagedStrategy).count() == len(deploy_manager.ROSTER) + 1   # roster + Challenge XAU
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -346,3 +346,15 @@ def test_seed_fails_without_currencypair():
     finally:
         sess.close()
         engine.dispose()
+
+
+def test_only_scope_adds_named_rows_and_skips_challenge_and_retire(db):
+    # --only must create rows for exactly the named ROSTER entries, leave the
+    # Challenge XAU pass alone (no row created) and not run the retire pass.
+    names = {"Concept C03_FVG_FILL", "Research OB_MIT_BIAS"}
+    assert deploy_manager.seed(db, only=names) == 0
+    assert {s.name for s in db.query(Strategy).all()} >= names
+    assert db.query(ManagedStrategy).count() == 2
+    assert db.query(Strategy).filter_by(name=deploy_manager.CHALLENGE_STRATEGY_NAME).count() == 0
+    # unknown name is a loud failure, not a silent no-op
+    assert deploy_manager.seed(db, only={"Not A Strategy"}) == 2
