@@ -311,8 +311,13 @@ def _replay_body(module_name: str, mod, bars: dict, start, end, cfg: "Cfg") -> d
         # dominant cost: S94 uses win_5m=1500, so it was building a 1500-row frame ~490k
         # times per replay instead of ~9.5k. Cache by slice index. The cached object is
         # handed to get_signal unchanged, so results are identical.
-        j5 = int(np.searchsorted(t5, t1[i], side="right"))
-        j15 = int(np.searchsorted(t15, t1[i], side="right"))
+        # CLOSED bars only (fix 2026-09-18). Bars are stamped by OPEN time, so an M5 bar
+        # has closed by the end of this M1 bar iff open <= t1[i] - 4 min (M15: - 14 min).
+        # The previous slice, searchsorted(t5, t1[i]), included the bar in progress on 4
+        # of every 5 ticks -- its close/high/low up to 4 (14) min in the future -- which is
+        # what research_runner's `complete` filter never shows. tests/test_harness_closed_bars.py.
+        j5 = int(np.searchsorted(t5, t1[i] - np.timedelta64(4, "m"), side="right"))
+        j15 = int(np.searchsorted(t15, t1[i] - np.timedelta64(14, "m"), side="right"))
         if j5 < 30:
             continue
         if j5 != _last_j5:
