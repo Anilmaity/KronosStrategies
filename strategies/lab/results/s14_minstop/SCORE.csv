@@ -1,0 +1,7 @@
+label,strategy,status,cost,n,pf,pts,train_n,train_pf,train_pts,test_n,test_pf,test_pts,test_months,test_pos_month_share,test_max_month_share,gold_corr,up_months_pts,dn_months_pts,n_up,n_dn,bar1_n,bar2_base,bar3_train,bar4_monthly,bar5_regime,test_pf_stress,bar2_stress,bars_passed,verdict
+s14_ob_mit_bias_minsl2.0_c0.45,s14_ob_mit_bias,ok,0.45,3071,1.633,3153.4,1853,1.524,1573.4,1218,1.797,1580.0,10,1.0,0.14,0.37,2269.6,883.7,17,8,True,True,True,True,True,1.529,True,6,PASS
+s14_ob_mit_bias_minsl2.0_c0.80,s14_ob_mit_bias,ok,0.8,3071,1.377,2078.5,1853,1.278,924.8,1218,1.529,1153.7,10,0.9,0.16,0.35,1486.3,592.2,17,8,True,True,True,True,True,,False,5,(stress arm)
+s14_ob_mit_bias_minsl2.5_c0.45,s14_ob_mit_bias,ok,0.45,2248,1.613,2544.9,1277,1.505,1202.6,971,1.757,1342.2,10,1.0,0.14,0.36,1858.9,686.0,17,8,True,True,True,True,True,1.517,True,6,PASS
+s14_ob_mit_bias_minsl2.5_c0.80,s14_ob_mit_bias,ok,0.8,2248,1.386,1758.0,1277,1.289,755.7,971,1.517,1002.4,10,1.0,0.15,0.36,1281.3,476.7,17,8,True,True,True,True,True,,False,5,(stress arm)
+s14_ob_mit_bias_minsl3.0_c0.45,s14_ob_mit_bias,ok,0.45,1624,1.613,2051.7,871,1.511,934.8,753,1.735,1116.8,10,1.0,0.14,0.25,1465.0,586.7,17,8,True,True,True,True,True,1.518,True,6,PASS
+s14_ob_mit_bias_minsl3.0_c0.80,s14_ob_mit_bias,ok,0.8,1624,1.408,1483.3,871,1.317,630.0,753,1.518,853.3,10,1.0,0.15,0.27,1057.9,425.4,17,8,True,True,True,True,True,,False,5,(stress arm)
