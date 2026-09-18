@@ -54,3 +54,12 @@ Also worth noting: the mid-M1 harness alone would have ranked these floors almos
 way (PF 1.311 → 1.408). The S5 cache did not change the decision; it changed the *size* of
 the problem it fixes (the baseline's [1.5, 2) trades were +225 pts in the harness and −102
 under live triggers).
+
+## Deployed 2026-09-18 11:11 UTC
+
+`MIN_SL_DIST_PTS: '3.0'` added to the `research_ob_mit_bias` block of the box `compose.yml`
+(additive, one line; backup `compose.yml.bak.s14minstop.20260918`), service recreated, verified
+by importing `shared.gate_rules` inside the running container (3.0; c03 and s93 still 1.5).
+The first signal after the restart was gated: `[ENTRY] blocked: stop 1.29pt < 3.00pt
+friction floor`. The s14 service block exists only on the box (compose drift), so this line
+has no counterpart in the repo compose; this note is its record.
