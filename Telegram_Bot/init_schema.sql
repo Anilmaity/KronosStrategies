@@ -66,3 +66,7 @@ ALTER TABLE tg_orders  ADD COLUMN IF NOT EXISTS closed_at    TIMESTAMPTZ;
 -- it was placed on. Existing rows default to 'primary'. Reconciliation routes each
 -- slice to its own account's broker state by this column.
 ALTER TABLE tg_orders  ADD COLUMN IF NOT EXISTS account TEXT NOT NULL DEFAULT 'primary';
+-- 2026-09-18: the VIP "TP: open" runner leg has no take-profit (tp = NULL).
+-- With tp NOT NULL, insert_signal aborted for every such signal (309/315 on
+-- the VIP channel) and nothing of it reached the ledger.
+ALTER TABLE tg_orders  ALTER COLUMN tp DROP NOT NULL;

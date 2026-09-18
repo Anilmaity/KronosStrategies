@@ -655,6 +655,8 @@ def _infer_close_reason(last_price, last_profit, tp, sl) -> str:
         return "tp" if last_profit > 0 else "sl"
     if last_price is None:
         return "tp"
+    if tp is None:  # "TP: open" runner leg -- only the stop can be recognised
+        return "sl" if abs(last_price - sl) <= 1.0 else "tp"
     return "tp" if abs(last_price - tp) <= abs(last_price - sl) else "sl"
 
 
