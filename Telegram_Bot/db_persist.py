@@ -246,12 +246,21 @@ def conclude_signal(msg_id: int, reason: str, realized_pnl: float | None) -> Non
     record_update(msg_id, "close", {"reason": reason, "realized_pnl": realized_pnl, "source": "broker"})
 
 
-def load_open_signals() -> list[dict]:
+def load_open_signals(channel: str | None = None) -> list[dict]:
     """Return every signal whose status is still open (not closed_*).
 
     Each dict has the same shape live_trader.place_order() produces, so it can
     be re-stored into the in-memory state store on boot.
+
+    `channel` scopes the load to one Telegram source: both copy-traders share
+    these tables on the box, and without it a restarting bot hydrates -- and
+    then mirrors and reconciles -- the OTHER channel's open signals.
     """
+    where = "status NOT LIKE 'closed_%'"
+    params: tuple = ()
+    if channel:
+        where += " AND channel = %s"
+        params = (channel,)
     try:
         with _connect() as conn, conn.cursor() as cur:
             cur.execute(
@@ -261,9 +270,10 @@ def load_open_signals() -> list[dict]:
                        risk_pts, total_volume, status, raw, dry_run,
                        posted_at, opened_at
                   FROM {_T_SIGNALS}
-                 WHERE status NOT LIKE 'closed_%'
+                 WHERE {where}
                  ORDER BY opened_at
-                """
+                """,
+                params,
             )
             sig_rows = cur.fetchall()
             if not sig_rows:

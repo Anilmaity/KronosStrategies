@@ -216,6 +216,33 @@ class ApisDashboard:
         except Exception as e:
             log.error("[apis:%s] conclude_position id=%s failed: %s", self.label, position_id, e)
 
+    def find_position_by_broker_ref(self, broker_ref: str | None) -> str | None:
+        """The dashboard row already created for a broker slice, found through
+        the broker ref stamped on its ENTRY order (apis_order.broker_order_id).
+
+        The state store is in-memory on the box, so a restart rebuilds slices
+        from tg_orders without their apis_pos_id; without this lookup the first
+        mirror pass opened a duplicate row per live slice (2026-09-18).
+        """
+        if not self.enabled or not broker_ref:
+            return None
+        try:
+            with self._connect() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT p.id FROM apis_position p "
+                    "JOIN apis_order o ON o.position_id = p.id "
+                    "WHERE p.user_strategy_id = %s AND o.condition = 'ENTRY' "
+                    "  AND o.broker_order_id = %s "
+                    "ORDER BY p.created_at ASC LIMIT 1",
+                    (self.user_strategy_id, str(broker_ref)),
+                )
+                row = cur.fetchone()
+                return str(row[0]) if row else None
+        except Exception as e:
+            log.error("[apis:%s] find_position_by_broker_ref %s failed: %s",
+                      self.label, broker_ref, e)
+            return None
+
     def find_open_position_id(self) -> str | None:
         """Fallback lookup for this strategy's single open position (no-pyramiding)."""
         if not self.enabled:

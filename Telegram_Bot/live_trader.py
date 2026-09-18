@@ -608,9 +608,16 @@ async def _ensure_slice_row(loop, dash, pos: dict, o: dict) -> str | None:
     """
     if o.get("apis_pos_id"):
         return o["apis_pos_id"]
+    ref = _slice_broker_ref(o)
+    # A restart rehydrates slices from tg_orders without their apis_pos_id;
+    # re-link to the row that already exists for this broker ref before ever
+    # creating one, or every restart doubles the live slices on the dashboard.
     pid = await loop.run_in_executor(
-        None, lambda d=dash, e=_slice_entry_px(pos, o), v=float(o["volume"]),
-        t=_slice_broker_ref(o): d.open_position(pos["side"], e, v, t))
+        None, lambda d=dash, t=ref: d.find_position_by_broker_ref(t))
+    if not pid:
+        pid = await loop.run_in_executor(
+            None, lambda d=dash, e=_slice_entry_px(pos, o), v=float(o["volume"]),
+            t=ref: d.open_position(pos["side"], e, v, t))
     if pid:
         o["apis_pos_id"] = pid
     return pid
@@ -1030,7 +1037,7 @@ async def hydrate_from_db() -> None:
     flushed or a different store backend is in use.
     """
     loop = asyncio.get_running_loop()
-    positions = await loop.run_in_executor(None, db.load_open_signals)
+    positions = await loop.run_in_executor(None, lambda: db.load_open_signals(channel=CHANNEL))
     if not positions:
         return
     restored = 0

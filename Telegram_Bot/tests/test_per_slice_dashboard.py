@@ -59,6 +59,9 @@ class _FakeDash:
     def find_open_position_id(self):
         return None
 
+    def find_position_by_broker_ref(self, ref):
+        return None
+
     def open_position(self, side, entry, volume, broker_ticket=None):
         self._n += 1
         pid = f"apis-{self._n}"
