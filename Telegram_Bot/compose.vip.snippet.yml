@@ -47,6 +47,10 @@
       APIS_STRATEGY_ID: c708a216-5c5f-41b4-a63b-7e13d15ce090
       APIS_USER_STRATEGY_ID: 5394830e-20b5-4966-8470-0e8b7de87484
       APIS_USER_BROKER_ID: 43e48e58-aec5-468e-9fb7-db36a6c846a1
+      REDIS_URL: redis://redis:6379/0   # state survives rebuilds (2026-09-18, see compose.redis.snippet.yml)
+    depends_on:
+      redis:
+        condition: service_healthy
     volumes:
     - tg_session_vip:/app/session
 

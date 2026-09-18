@@ -1,0 +1,34 @@
+# Redis state store for the two Telegram copy-traders -- merged ADDITIVELY into
+# the box compose.yml on 2026-09-18 (backup compose.yml.bak.redis.20260918).
+#
+# Why: both bots ran the in-memory store (REDIS_URL unset), so every rebuild
+# dropped their open-signal state and had to rehydrate from tg_orders -- which
+# carries no apis_pos_id and, until f6689dd, duplicated every live slice's
+# dashboard row. With Redis the state (incl. the dashboard row links) survives
+# `compose up -d --build`; verified by restarting telegram_trader with an open
+# signal: no rehydration, same apis_pos_id, no new row.
+#
+# Add the service, then on BOTH telegram_trader and telegram_trader_vip:
+#     environment:
+#       REDIS_URL: redis://redis:6379/0
+#     depends_on:
+#       redis:
+#         condition: service_healthy
+# and `redis_data: null` under top-level volumes. The VIP bot keeps its own
+# key namespace via TG_REDIS_PREFIX: 'hft:tgvip' (already in its block).
+#
+# Internal-only (no published port), ~1 MB used, 48 MB cap with noeviction so
+# a full store fails loudly rather than silently dropping signal keys.
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: ["redis-server", "--appendonly", "yes", "--save", "", "--maxmemory", "48mb", "--maxmemory-policy", "noeviction"]
+    mem_limit: 64m
+    volumes:
+    - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
