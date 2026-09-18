@@ -1,0 +1,59 @@
+M1 733,120 bars; S5 8,682,738 bars; load 3s
+
+=== H4_UTC: CRT with 3-candle hold ===
+  events 1045; skips {None: 713, 'fill_outside_geometry': 171, 'both_sides_swept': 84, 'no_consecutive_c5': 74, 'late_open': 3}; trades 713
+  outcomes quote: {'SL': 324, 'TP': 286, 'TIME': 103}; median risk 15.13; RR 1.02; median hold 3.1 h
+
+  -- H4_UTC nofilt: TRAIN gross mid-M1 expectancy +0.178 pts/trade (n=449) -> gate FAIL (>= 2.0)
+     TRAIN gross quote expectancy -0.182; TEST gross mid -2.423
+  H4 H4_UTC nofilt hold3       ALL   n=713  @0.45 PF 0.800 pts -1303.3 WR 49.6% | @0.70 PF 0.776 pts -1481.5 WR 49.4% | @0.80 PF 0.766 pts -1552.8 WR 49.4%  {'SL': 324, 'TP': 286, 'TIME': 103}
+  H4 H4_UTC nofilt hold3       TRAIN n=449  @0.45 PF 0.890 pts -283.6 WR 52.1% | @0.70 PF 0.850 pts -395.9 WR 51.9% | @0.80 PF 0.834 pts -440.8 WR 51.9%  {'SL': 194, 'TP': 190, 'TIME': 65}
+  H4 H4_UTC nofilt hold3       TEST  n=264  @0.45 PF 0.740 pts -1019.7 WR 45.5% | @0.70 PF 0.726 pts -1085.7 WR 45.1% | @0.80 PF 0.721 pts -1112.1 WR 45.1%  {'SL': 130, 'TP': 96, 'TIME': 38}
+  H4 H4_UTC nofilt hold3       BARS  FAIL 2/6  n:True base:False stress:False train:False monthly:False (pos 0.2, max None) regime:True (corr 0.13, up -596.6, dn -706.7) | TRAIN sd 14.48 TEST MDE 1.78 pts/trade
+
+  -- H4_UTC bias: TRAIN gross mid-M1 expectancy +0.083 pts/trade (n=220) -> gate FAIL (>= 2.0)
+     TRAIN gross quote expectancy -0.271; TEST gross mid -0.984
+  H4 H4_UTC bias hold3         ALL   n=353  @0.45 PF 0.846 pts -492.6 WR 51.6% | @0.70 PF 0.821 pts -580.8 WR 51.0% | @0.80 PF 0.811 pts -616.1 WR 51.0%  {'SL': 153, 'TP': 145, 'TIME': 55}
+  H4 H4_UTC bias hold3         TRAIN n=220  @0.45 PF 0.877 pts -158.6 WR 53.6% | @0.70 PF 0.837 pts -213.6 WR 53.2% | @0.80 PF 0.822 pts -235.6 WR 53.2%  {'TP': 94, 'SL': 90, 'TIME': 36}
+  H4 H4_UTC bias hold3         TEST  n=133  @0.45 PF 0.825 pts -334.0 WR 48.1% | @0.70 PF 0.810 pts -367.2 WR 47.4% | @0.80 PF 0.804 pts -380.5 WR 47.4%  {'SL': 63, 'TP': 51, 'TIME': 19}
+  H4 H4_UTC bias hold3         BARS  FAIL 2/6  n:True base:False stress:False train:False monthly:False (pos 0.4, max None) regime:True (corr 0.01, up -191.5, dn -301.1) | TRAIN sd 15.00 TEST MDE 2.60 pts/trade
+
+  control (random C3', 3-candle hold, K=20): rows 14260; covered trades 713/713
+    nofilt TRAIN @0.45: real PF 0.89 pts -283.6 | ctl PF mean 0.803 (p5 0.614, p95 1.035) pts -552.8 | share ctl >= real 0.25
+    nofilt TRAIN @0.70: real PF 0.85 pts -395.9 | ctl PF mean 0.765 (p5 0.585, p95 0.987) pts -665.1 | share ctl >= real 0.25
+    nofilt TEST @0.45: real PF 0.74 pts -1019.7 | ctl PF mean 0.888 (p5 0.701, p95 1.142) pts -419.2 | share ctl >= real 0.9
+    nofilt TEST @0.70: real PF 0.726 pts -1085.7 | ctl PF mean 0.871 (p5 0.688, p95 1.119) pts -485.2 | share ctl >= real 0.9
+    bias TRAIN @0.45: real PF 0.877 pts -158.6 | ctl PF mean 0.949 (p5 0.673, p95 1.305) pts -88.4 | share ctl >= real 0.6
+    bias TRAIN @0.70: real PF 0.837 pts -213.6 | ctl PF mean 0.905 (p5 0.641, p95 1.249) pts -143.4 | share ctl >= real 0.6
+    bias TEST @0.45: real PF 0.825 pts -334.0 | ctl PF mean 0.959 (p5 0.63, p95 1.252) pts -105.0 | share ctl >= real 0.75
+    bias TEST @0.70: real PF 0.81 pts -367.2 | ctl PF mean 0.94 (p5 0.618, p95 1.226) pts -138.3 | share ctl >= real 0.75
+
+=== H4_NY: CRT with 3-candle hold ===
+  events 1054; skips {None: 634, 'fill_outside_geometry': 137, 'both_sides_swept': 112, 'no_consecutive_c5': 97, 'late_open': 74}; trades 633
+  outcomes quote: {'SL': 285, 'TP': 278, 'TIME': 70}; median risk 15.60; RR 0.99; median hold 2.8 h
+
+  -- H4_NY nofilt: TRAIN gross mid-M1 expectancy +0.254 pts/trade (n=377) -> gate FAIL (>= 2.0)
+     TRAIN gross quote expectancy -0.110; TEST gross mid +0.055
+  H4 H4_NY nofilt hold3        ALL   n=633  @0.45 PF 0.917 pts -459.4 WR 50.2% | @0.70 PF 0.890 pts -617.6 WR 49.8% | @0.80 PF 0.880 pts -680.9 WR 49.6%  {'SL': 285, 'TP': 278, 'TIME': 70}
+  H4 H4_NY nofilt hold3        TRAIN n=377  @0.45 PF 0.905 pts -211.3 WR 50.4% | @0.70 PF 0.865 pts -305.5 WR 49.6% | @0.80 PF 0.850 pts -343.2 WR 49.6%  {'SL': 166, 'TP': 164, 'TIME': 47}
+  H4 H4_NY nofilt hold3        TEST  n=256  @0.45 PF 0.926 pts -248.1 WR 50.0% | @0.70 PF 0.907 pts -312.1 WR 50.0% | @0.80 PF 0.900 pts -337.7 WR 49.6%  {'SL': 119, 'TP': 114, 'TIME': 23}
+  H4 H4_NY nofilt hold3        BARS  FAIL 3/6  n:True base:False stress:False train:True monthly:False (pos 0.3, max None) regime:True (corr 0.34, up -71.8, dn -387.6) | TRAIN sd 15.07 TEST MDE 1.88 pts/trade
+
+  -- H4_NY bias: TRAIN gross mid-M1 expectancy +0.754 pts/trade (n=198) -> gate FAIL (>= 2.0)
+     TRAIN gross quote expectancy +0.619; TEST gross mid +1.015
+  H4 H4_NY bias hold3          ALL   n=319  @0.45 PF 1.013 pts +36.0 WR 52.4% | @0.70 PF 0.984 pts -43.8 WR 51.7% | @0.80 PF 0.973 pts -75.7 WR 51.7%  {'TP': 145, 'SL': 141, 'TIME': 33}
+  H4 H4_NY bias hold3          TRAIN n=198  @0.45 PF 1.029 pts +33.5 WR 54.0% | @0.70 PF 0.986 pts -16.0 WR 53.0% | @0.80 PF 0.970 pts -35.8 WR 53.0%  {'TP': 93, 'SL': 84, 'TIME': 21}
+  H4 H4_NY bias hold3          TEST  n=121  @0.45 PF 1.002 pts +2.5 WR 49.6% | @0.70 PF 0.983 pts -27.8 WR 49.6% | @0.80 PF 0.976 pts -39.9 WR 49.6%  {'SL': 57, 'TP': 52, 'TIME': 12}
+  H4 H4_NY bias hold3          BARS  FAIL 4/6  n:True base:True stress:False train:True monthly:False (pos 0.4, max 103.55) regime:True (corr 0.2, up 155.1, dn -119.1) | TRAIN sd 16.87 TEST MDE 3.07 pts/trade
+
+  control (random C3', 3-candle hold, K=20): rows 12660; covered trades 633/633
+    nofilt TRAIN @0.45: real PF 0.905 pts -211.3 | ctl PF mean 0.861 (p5 0.697, p95 1.084) pts -328.1 | share ctl >= real 0.25
+    nofilt TRAIN @0.70: real PF 0.865 pts -305.5 | ctl PF mean 0.822 (p5 0.666, p95 1.034) pts -422.4 | share ctl >= real 0.2
+    nofilt TEST @0.45: real PF 0.926 pts -248.1 | ctl PF mean 0.873 (p5 0.689, p95 1.085) pts -440.1 | share ctl >= real 0.3
+    nofilt TEST @0.70: real PF 0.907 pts -312.1 | ctl PF mean 0.855 (p5 0.674, p95 1.063) pts -504.1 | share ctl >= real 0.3
+    bias TRAIN @0.45: real PF 1.029 pts 33.5 | ctl PF mean 0.944 (p5 0.758, p95 1.302) pts -79.2 | share ctl >= real 0.35
+    bias TRAIN @0.70: real PF 0.986 pts -16.0 | ctl PF mean 0.899 (p5 0.722, p95 1.242) pts -128.7 | share ctl >= real 0.3
+    bias TEST @0.45: real PF 1.002 pts 2.5 | ctl PF mean 0.978 (p5 0.739, p95 1.229) pts -49.4 | share ctl >= real 0.45
+    bias TEST @0.70: real PF 0.983 pts -27.8 | ctl PF mean 0.958 (p5 0.723, p95 1.203) pts -79.6 | share ctl >= real 0.45
+
+done in 5s

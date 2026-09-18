@@ -1,0 +1,25 @@
+
+L_H0_base: n=2161 quote-S5@0.70 PF 1.287 pts 1843.3 | median hold 20 min | TP share 48.0%
+        n   q_pf    q_pts  mid_pf    wr  med_hold
+off                                              
+0    1495  1.328  1551.03   1.408  44.6      24.0
+1     267  1.692   418.07   1.755  52.4      14.0
+2     161  1.068    27.51   1.201  47.8      15.0
+3     138  0.614  -148.02   0.729  38.4      15.5
+4     100  0.982    -5.33   1.118  38.0      16.0
+
+F_H0_base: n=1997 quote-S5@0.70 PF 0.876 pts -914.6 | median hold 20 min | TP share 40.7%
+        n   q_pf   q_pts  mid_pf    wr  med_hold
+off                                             
+0     321  0.784 -237.28   0.880  41.4      15.0
+1     158  0.736 -125.32   0.814  40.5      13.0
+2     146  0.833  -84.04   0.808  42.5      15.0
+3     121  0.912  -27.51   0.946  43.8      12.0
+4    1251  0.911 -440.47   0.956  35.9      25.0
+
+leaky base: (in-progress M5 close - entry) in the trade direction, by minute offset:
+  offset 0: n=1495 mean +1.836 pt, share favourable 77.8 %
+  offset 1: n= 267 mean +1.722 pt, share favourable 79.4 %
+  offset 2: n= 161 mean +0.876 pt, share favourable 69.6 %
+  offset 3: n= 138 mean +0.535 pt, share favourable 71.0 %
+  offset 4: n= 100 mean -0.000 pt, share favourable 23.0 %

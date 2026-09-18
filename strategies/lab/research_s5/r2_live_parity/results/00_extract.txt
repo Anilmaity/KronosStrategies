@@ -1,0 +1,62 @@
+signals: 1445  (2026-07-01 07:21:45+00:00 .. 2026-09-18 11:37:05.297033+00:00)
+key                   status  
+c03_fvg_fill          PLACED        2
+                      REJECTED      4
+copy_free             PLACED       61
+                      REJECTED     29
+copy_vip              PLACED       34
+                      REJECTED      6
+orb                   PLACED        8
+                      REJECTED      1
+s100_m3_combo         PLACED      268
+                      REJECTED    361
+s14_ob_mit_bias       PLACED        1
+                      REJECTED     12
+s93_fvg_scalp         PLACED       61
+                      REJECTED     96
+s94_sweep_reversal    PLACED       85
+                      REJECTED    131
+s95_session_breakout  PLACED        5
+                      REJECTED      3
+s99_mss_fvg           PLACED      102
+                      REJECTED    175
+positions: 867
+                        n  closed  broker
+key                                      
+c03_fvg_fill            2       2       2
+copy_free             183     180     177
+copy_vip              152     148     152
+orb                     8       8       8
+s100_m3_combo         268     268     268
+s14_ob_mit_bias         1       1       1
+s93_fvg_scalp          61      61      61
+s94_sweep_reversal     85      85      85
+s95_session_breakout    5       5       5
+s99_mss_fvg           102     102     102
+deals: 1780  (2026-07-06 10:23:17.983000+00:00 .. 2026-09-18 11:36:08.598000+00:00)
+entry_type      raw_reason        
+DEAL_ENTRY_IN   DEAL_REASON_EXPERT    866
+                DEAL_REASON_MOBILE     27
+DEAL_ENTRY_OUT  DEAL_REASON_EXPERT     33
+                DEAL_REASON_MOBILE      5
+                DEAL_REASON_SL        572
+                DEAL_REASON_TP        275
+                         created_at       action                                                                                       reason
+0  2026-07-09 12:33:58.803331+00:00  KILL_SWITCH  daily realized P&L -225.00 USD <= -200.00 — pausing all armed strategies until next UTC day
+1  2026-07-10 00:00:59.020929+00:00         INFO                                                  kill-switch auto-reset (tripped 2026-07-09)
+2  2026-07-10 12:33:59.125778+00:00  KILL_SWITCH  daily realized P&L -178.00 USD <= -150.00 — pausing all armed strategies until next UTC day
+3  2026-07-11 00:00:59.614464+00:00         INFO                                                  kill-switch auto-reset (tripped 2026-07-10)
+4  2026-08-07 07:26:27.019093+00:00  KILL_SWITCH  daily realized P&L -160.00 USD <= -150.00 — pausing all armed strategies until next UTC day
+5  2026-08-08 00:00:28.347924+00:00         INFO                                                  kill-switch auto-reset (tripped 2026-08-07)
+6  2026-08-12 09:11:27.585585+00:00  KILL_SWITCH  daily realized P&L -211.00 USD <= -150.00 — pausing all armed strategies until next UTC day
+7  2026-08-13 18:28:22.112090+00:00         INFO                                                  kill-switch auto-reset (tripped 2026-08-12)
+8  2026-08-18 09:24:19.056353+00:00  KILL_SWITCH  daily realized P&L -233.00 USD <= -150.00 — pausing all armed strategies until next UTC day
+9  2026-08-19 00:00:20.785017+00:00         INFO                                                  kill-switch auto-reset (tripped 2026-08-18)
+10 2026-08-25 13:23:18.856972+00:00  KILL_SWITCH  daily realized P&L -178.00 USD <= -150.00 — pausing all armed strategies until next UTC day
+11 2026-08-26 00:00:19.929378+00:00         INFO                                                  kill-switch auto-reset (tripped 2026-08-25)
+12 2026-08-28 12:27:19.445785+00:00  KILL_SWITCH  daily realized P&L -369.00 USD <= -250.00 — pausing all armed strategies until next UTC day
+13 2026-08-29 00:00:21.081922+00:00         INFO                                                  kill-switch auto-reset (tripped 2026-08-28)
+14 2026-09-09 12:15:24.057602+00:00  KILL_SWITCH  daily realized P&L -311.00 USD <= -250.00 — pausing all armed strategies until next UTC day
+15 2026-09-10 00:00:22.084714+00:00         INFO                                                  kill-switch auto-reset (tripped 2026-09-09)
+  master_mode  kill_switch_loss_usd  max_concurrent_positions                    state                      modified_at
+0          ON                 250.0                         5  {"soft_brake_usd": 120} 2026-09-10 00:00:22.085953+00:00

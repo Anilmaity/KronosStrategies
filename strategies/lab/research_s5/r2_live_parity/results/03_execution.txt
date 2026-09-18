@@ -1,0 +1,122 @@
+=== (b1) ENTRY: live fill vs nominal signal level (adverse +), n with broker truth ===
+                      n  lat_med  lat_p90  fill_vs_nom_mean  fill_vs_nom_med  nominal_vs_mid_mean  fill_vs_quote_mean  fill_vs_quote_med  spread_fill
+key                                                                                                                                                  
+s100_m3_combo       267    0.827    1.731            -0.365           -0.160               -0.469              -0.192             -0.190         0.57
+s93_fvg_scalp        60    0.873    2.263            -0.447           -0.072               -0.616              -0.160             -0.145         0.57
+s94_sweep_reversal   85    0.885    2.504            -0.375           -0.140               -0.503              -0.243             -0.210         0.60
+s99_mss_fvg         102    0.894    2.190            -0.349           -0.280               -0.500              -0.077             -0.085         0.54
+  s100_m3_combo: fill_vs_nominal mean -0.365 [90% CI -0.453, -0.280]  share favourable (<0) 59%
+  s93_fvg_scalp: fill_vs_nominal mean -0.447 [90% CI -0.735, -0.173]  share favourable (<0) 55%
+  s94_sweep_reversal: fill_vs_nominal mean -0.375 [90% CI -0.687, -0.090]  share favourable (<0) 58%
+  s99_mss_fvg: fill_vs_nominal mean -0.349 [90% CI -0.521, -0.175]  share favourable (<0) 62%
+
+fill vs nominal by UTC hour (all four legs):
+             n  fill_vs_nom  fill_vs_quote  nominal_vs_mid
+entry_hour                                                
+0           11       -0.286         -0.259          -0.355
+1           39       -0.318         -0.195          -0.429
+2           39       -0.498         -0.253          -0.621
+3           31       -0.173         -0.299          -0.221
+4           29       -0.112         -0.218          -0.183
+5           31       -0.262         -0.141          -0.422
+6           49       -0.337         -0.220          -0.445
+7           44       -0.020         -0.176          -0.094
+8           48       -0.375         -0.111          -0.529
+9           26       -0.110         -0.127          -0.248
+10          10       -0.437         -0.227          -0.526
+11          16       -0.297         -0.143          -0.354
+12          27       -0.272         -0.089          -0.502
+13          36       -0.725         -0.063          -0.939
+14          38       -0.746         -0.081          -0.928
+15          26       -0.390         -0.156          -0.458
+16           2       -0.158         -0.200          -0.213
+18           3       -4.792         -1.143          -4.637
+19           4       -1.590         -0.262          -1.800
+20           2       -0.052         -0.245          -0.162
+23           3        0.205         -0.090          -0.198
+
+=== drift gate: REJECTED entry_drift detail (adverse drift at the gate) ===
+                      n  drift_mean  drift_med  drift_p90  budget_med
+key                                                                  
+s100_m3_combo       117       1.312      0.990      2.454         0.5
+s93_fvg_scalp        33       1.632      1.470      2.734         0.5
+s94_sweep_reversal   42       1.834      1.395      3.946         0.5
+s99_mss_fvg          47       1.446      1.110      2.620         0.5
+accepted (PLACED) fill_vs_nominal quantiles, all legs: p5 -2.26, p25 -0.81, p50 -0.16, p75 +0.24, p95 +0.72
+
+=== (b2) STOP-OUTS: live slip beyond the nominal stop (adverse +), n=350; broker SL level differed from the signal SL on 49 ===
+all: mean +0.208, median +0.040, p90 +0.673, share > 1 pt 7.1%
+excluding moved-SL rows: mean +0.087, median +0.020, p90 +0.220
+by strategy:
+                      n   mean    med    p90  moved
+key                                                
+s100_m3_combo       191  0.105  0.030  0.220      9
+s93_fvg_scalp        37  0.258  0.020  0.806      8
+s94_sweep_reversal   64  0.345  0.095  1.100     16
+s99_mss_fvg          58  0.365  0.060  1.172     16
+by exit hour (live) vs the execution study's TEST-era S5 overshoot and E[J^2]/2E[J] slip:
+            n  live_mean  live_med  model_S5_overshoot_TEST  model_jump_slip_TEST
+exit_hour                                                                        
+0          11      0.240     0.050                    0.734                 0.603
+1          21      0.223     0.070                    0.538                 0.748
+2          28      0.142     0.055                    0.540                 0.601
+3          28      0.099     0.010                    0.311                 0.468
+4          14      0.126     0.060                    0.311                 0.372
+5          24      0.163     0.035                    0.511                 0.505
+6          33      0.099     0.020                    0.405                 0.531
+7          33      0.309     0.070                    0.393                 0.493
+8          31      0.301     0.040                    0.371                 0.491
+9          13      0.296     0.130                    0.484                 0.506
+10          9      0.202     0.110                    0.410                 0.448
+11         13      0.578     0.170                    0.396                 0.558
+12         21      0.381     0.030                    0.474                 0.637
+13         21      0.119    -0.000                    0.615                 0.680
+14         24      0.053     0.000                    0.550                 0.696
+15         19      0.232     0.030                    0.688                 0.823
+16          1      0.000     0.000                    0.881                 0.599
+18          3      0.300     0.070                    0.645                 0.665
+23          3      0.047     0.040                    1.846                 0.684
+by stop bucket vs the study's TEST overshoot:
+               n  live_mean  live_p90  model_overshoot_TEST
+stop_bucket                                                
+<2            51      0.640     1.870                 0.374
+2-3          113      0.189     0.574                 0.418
+3-5          115      0.090     0.188                 0.516
+5-10          59      0.136     0.530                 0.716
+10+           12      0.043     0.127                 1.564
+07-16 UTC pooled: live +0.264 [90% CI +0.203, +0.330] n=185 vs study TEST 0.517 (S5 overshoot) / 0.618 (jump model)
+
+=== (b3) TARGET fills vs nominal TP (adverse +), n=157 ===
+                     n   mean    med
+key                                 
+s100_m3_combo       69 -0.099 -0.030
+s93_fvg_scalp       23 -0.066 -0.000
+s94_sweep_reversal  21 -0.229 -0.010
+s99_mss_fvg         44 -0.070 -0.005
+
+=== (b4) all-in live cost per trade vs the nominal-level model (pts; positive = paid): SL and TP exits only ===
+                      n   mean    med    p90
+key                                         
+s100_m3_combo       260 -0.316 -0.140  0.480
+s93_fvg_scalp        60 -0.313 -0.083  0.995
+s94_sweep_reversal   85 -0.171  0.035  1.177
+s99_mss_fvg         102 -0.172 -0.177  1.474
+pooled: mean -0.263 [90% CI -0.354, -0.175], median -0.120, n=507  (the harness convention charges 0.45 on quote-S5 / 0.75 on mid-M1)
+
+=== (b5) broker backstop exits (SL level at the broker != signal SL) ===
+n=49 of 350 stop-outs; signal stop dist median 2.14 (max 2.95); broker SL dist from nominal entry median 3.00
+share of ALL stop-outs with signal stop < 3.0: 46% (n=162); of those, backstop-filled: 30%
+extra loss beyond the signal stop on backstop rows: mean +0.954, median +0.980, total +46.7 pts, USD at their lots -479
+by strategy:
+                     n  extra_mean  extra_total  usd
+key                                                 
+s100_m3_combo        9        0.92         8.29    0
+s93_fvg_scalp        8        0.89         7.14    0
+s94_sweep_reversal  16        0.91        14.57    0
+s99_mss_fvg         16        1.05        16.73    0
+by month:
+          n  extra_total
+m                       
+2026-07  44         43.2
+2026-08   5          3.5
+tight (<3 pt) stops closed by the monitor at the strategy stop: n=113, slip mean +0.062, p90 +0.170

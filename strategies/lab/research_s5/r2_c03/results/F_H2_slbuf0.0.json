@@ -1,0 +1,60 @@
+{
+ "label": "F_H2_slbuf0.0",
+ "strategy": "c03r2",
+ "start": "2024-09-01",
+ "end": "2026-09-17",
+ "split": "2025-12-01",
+ "cfg": {
+  "cost_pts": 0.75,
+  "min_sl_dist_pts": 1.5,
+  "news_blackout": "12:25-12:45",
+  "max_concurrent": 0,
+  "cooldown_s": 0,
+  "win_1m": 700,
+  "win_5m": 160,
+  "win_15m": 100,
+  "block_hours": [],
+  "sides": [
+   "BUY",
+   "SELL"
+  ],
+  "regime": null,
+  "regime_sma": 20,
+  "be_at_r": 0.0,
+  "env": {},
+  "patch": {
+   "_SL_BUF_ATR": 0.0
+  }
+ },
+ "harness": "harness_fixed",
+ "cost": 0.75,
+ "min_sl": 1.5,
+ "block_hours": [],
+ "sides": [
+  "BUY",
+  "SELL"
+ ],
+ "regime": null,
+ "n": 2121,
+ "pts": -655.0,
+ "pf": 0.911,
+ "wr": 39.7,
+ "r": -306.15,
+ "exp_r": -0.1443,
+ "exp_pts": -0.309,
+ "maxdd_pts": -795.7,
+ "avg_win": 7.95,
+ "avg_loss": -5.74,
+ "train_n": 1286,
+ "train_pts": -464.2,
+ "train_pf": 0.858,
+ "train_wr": 40.9,
+ "train_maxdd_pts": -504.4,
+ "test_n": 835,
+ "test_pts": -190.8,
+ "test_pf": 0.953,
+ "test_wr": 37.7,
+ "test_maxdd_pts": -422.5,
+ "elapsed_s": 556.82,
+ "status": "ok"
+}

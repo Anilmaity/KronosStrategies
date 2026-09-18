@@ -1,0 +1,101 @@
+=== (d1) live edge per leg (broker truth; R = pts / nominal stop) ===
+                 leg   n  meanR  ci_lo  ci_hi  pf_pts   wr   sqn   pts    usd  usd_per_trade   hwm_date  trades_since_hwm  dd_from_hwm_pts  roll30_R                                      verdict
+       s100_m3_combo 268  0.018 -0.138  0.177    1.17 27.0  0.19 103.8  477.0            1.8 2026-09-03                79            -99.2    -0.394                     indistinguishable from 0
+         s99_mss_fvg 102  0.026 -0.210  0.260    1.02 43.0  0.18   4.7  186.0            1.8 2026-07-09                91            -18.4     0.141                     indistinguishable from 0
+  s94_sweep_reversal  85 -0.162 -0.563  0.238    1.13 25.0 -0.66  34.1  148.0            1.7 2026-09-16                 2            -13.1     0.017 indistinguishable from 0 [indicative, n<100]
+       s93_fvg_scalp  60 -0.032 -0.308  0.249    0.90 38.0 -0.19 -18.8 -122.0           -2.0 2026-07-13                48            -73.7     0.120 indistinguishable from 0 [indicative, n<100]
+                 orb   8 -0.363 -0.860  0.217    0.59 25.0 -1.06 -43.0  -86.0          -10.8 2026-07-01                 7            -95.5       NaN                            no verdict (n<40)
+s95_session_breakout   5  0.097 -0.484  0.414    1.48 80.0  0.33  14.3   29.0            5.8 2026-07-08                 3            -15.2       NaN                            no verdict (n<40)
+        c03_fvg_fill   2  0.136 -1.054  1.325    1.82 50.0  0.11   2.4   19.0            9.5 2026-09-18                 1             -2.9       NaN                            no verdict (n<40)
+     s14_ob_mit_bias   1 -0.586 -0.586 -0.586    0.00  0.0   NaN  -1.0  -10.0           -9.9 2026-09-18                 0              0.0       NaN                            no verdict (n<40)
+
+monthly by leg:
+                                n     R    pts    usd
+key                  m                               
+c03_fvg_fill         2026-09    2   0.3    2.4   18.9
+orb                  2026-07    8  -2.9  -43.0  -86.0
+s100_m3_combo        2026-07   33   2.8    3.8   52.9
+                     2026-08  138   7.5  123.5  474.5
+                     2026-09   97  -5.5  -23.5  -50.4
+s14_ob_mit_bias      2026-09    1  -0.6   -1.0   -9.9
+s93_fvg_scalp        2026-07   36  -6.0  -28.4 -193.8
+                     2026-08   20   4.3   11.2   79.5
+                     2026-09    4  -0.2   -1.5   -8.0
+s94_sweep_reversal   2026-07   37 -23.0  -14.3 -224.2
+                     2026-08   25  10.2   52.5  359.4
+                     2026-09   23  -0.9   -4.1   12.8
+s95_session_breakout 2026-07    5   0.5   14.3   28.8
+s99_mss_fvg          2026-07   42  -0.2  -22.3  144.4
+                     2026-08   32   1.8    9.1   69.3
+                     2026-09   28   1.1   17.8  -27.9
+
+copy slots (USD, Position.realized; one row per broker leg):
+             n    usd  usd_per_leg   pf    wr
+key                                          
+copy_free  180 -827.0         -4.6  0.6  46.1
+copy_vip   148 -394.0         -2.7  0.3  33.1
+copy slots monthly USD:
+key        m      
+copy_free  2026-07     67.0
+           2026-08   -250.0
+           2026-09   -457.0
+copy_vip   2026-08   -108.0
+           2026-09   -286.0
+
+=== (d2) live daily-R correlations (days with any trade filled as 0; n days 53) ===
+                    s93_fvg_scalp  s94_sweep_reversal  s99_mss_fvg  s100_m3_combo  copy_usd/100
+s93_fvg_scalp                1.00                0.13         0.25           0.12         -0.07
+s94_sweep_reversal           0.13                1.00         0.08          -0.15          0.15
+s99_mss_fvg                  0.25                0.08         1.00           0.17          0.01
+s100_m3_combo                0.12               -0.15         0.17           1.00         -0.03
+copy_usd/100                -0.07                0.15         0.01          -0.03          1.00
+live daily R by leg: mean / sd / worst: s93_fvg_scalp -0.04/1.45/-4.1, s94_sweep_reversal -0.26/3.05/-11.0, s99_mss_fvg +0.07/2.25/-5.8, s100_m3_combo +0.05/3.43/-6.7, copy_usd/100 -0.21/0.83/-2.5
+
+=== (d3) 24-month harness legs (mid-M1 @0.80 lists; S94 long-only SD 2.5; s14 floor 3.0; S93 hours 13-14) ===
+               leg  n_train  meanR_train  varR_train  pf_train  n_test  meanR_test  pf_test  trades_per_day_test
+     s93_fvg_scalp      293      -0.0788      1.5544      0.99     200      0.0427     1.24                 1.50
+s94_sweep_reversal      280      -0.0734      5.7568      0.92     318      0.0167     0.98                 2.11
+       s99_mss_fvg      910      -0.2820      1.5357      0.79     961     -0.1508     0.83                 4.76
+     s100_m3_combo     2147      -0.2311      2.5230      0.76    2432     -0.1079     0.96                12.04
+      c03_fvg_fill     1323       0.0975      2.6544      1.23     838      0.3875     1.46                 4.30
+   s14_ob_mit_bias      871       0.2042      2.2471      1.32     753      0.3152     1.52                 4.40
+
+harness daily-R correlations TRAIN:
+                    s93_fvg_scalp  s94_sweep_reversal  s99_mss_fvg  s100_m3_combo  c03_fvg_fill  s14_ob_mit_bias
+s93_fvg_scalp                1.00               -0.07         0.35           0.12          0.19             0.01
+s94_sweep_reversal          -0.07                1.00        -0.07          -0.15         -0.04            -0.14
+s99_mss_fvg                  0.35               -0.07         1.00           0.19          0.14            -0.02
+s100_m3_combo                0.12               -0.15         0.19           1.00          0.11             0.03
+c03_fvg_fill                 0.19               -0.04         0.14           0.11          1.00             0.07
+s14_ob_mit_bias              0.01               -0.14        -0.02           0.03          0.07             1.00
+harness daily-R correlations TEST:
+                    s93_fvg_scalp  s94_sweep_reversal  s99_mss_fvg  s100_m3_combo  c03_fvg_fill  s14_ob_mit_bias
+s93_fvg_scalp                1.00                0.01         0.16           0.07          0.24            -0.03
+s94_sweep_reversal           0.01                1.00        -0.06          -0.11         -0.08             0.07
+s99_mss_fvg                  0.16               -0.06         1.00           0.10          0.12            -0.09
+s100_m3_combo                0.07               -0.11         0.10           1.00          0.18            -0.02
+c03_fvg_fill                 0.24               -0.08         0.12           0.18          1.00            -0.06
+s14_ob_mit_bias             -0.03                0.07        -0.09          -0.02         -0.06             1.00
+
+=== (d4) equal-risk vs edge-weighted (weights from TRAIN meanR/varR, cap 2x, same total risk) ===
+edge weights: s93_fvg_scalp 0.00, s94_sweep_reversal 0.00, s99_mss_fvg 0.00, s100_m3_combo 0.00, c03_fvg_fill 2.78, s14_ob_mit_bias 3.22
+TRAIN (fit)                            equal {'netR': np.float64(-489.8), 'maxDD_R': -491.9, 'worst_day': np.float64(-21.2), 'sharpe_d': np.float64(-3.34), 'days_pos': np.float64(37.0)}   edge {'netR': np.float64(931.0), 'maxDD_R': -87.0, 'worst_day': np.float64(-35.7), 'sharpe_d': np.float64(3.62), 'days_pos': np.float64(56.0)}
+TEST (read once)                       equal {'netR': np.float64(168.7), 'maxDD_R': -50.5, 'worst_day': np.float64(-18.2), 'sharpe_d': np.float64(1.41), 'days_pos': np.float64(51.0)}   edge {'netR': np.float64(1667.0), 'maxDD_R': -31.9, 'worst_day': np.float64(-26.7), 'sharpe_d': np.float64(8.44), 'days_pos': np.float64(70.0)}
+live window 07-01..09-17 (harness)     equal {'netR': np.float64(10.3), 'maxDD_R': -50.5, 'worst_day': np.float64(-16.5), 'sharpe_d': np.float64(0.32), 'days_pos': np.float64(53.0)}   edge {'netR': np.float64(435.6), 'maxDD_R': -31.8, 'worst_day': np.float64(-26.7), 'sharpe_d': np.float64(7.9), 'days_pos': np.float64(74.0)}
+
+leg-drop test on TEST (equal risk): book netR / maxDD without each leg
+  drop s93_fvg_scalp        {'netR': np.float64(160.2), 'maxDD_R': -47.2, 'worst_day': np.float64(-18.2), 'sharpe_d': np.float64(1.39), 'days_pos': np.float64(49.0)}
+  drop s94_sweep_reversal   {'netR': np.float64(163.4), 'maxDD_R': -52.4, 'worst_day': np.float64(-22.5), 'sharpe_d': np.float64(1.4), 'days_pos': np.float64(50.0)}
+  drop s99_mss_fvg          {'netR': np.float64(313.6), 'maxDD_R': -36.2, 'worst_day': np.float64(-18.3), 'sharpe_d': np.float64(2.8), 'days_pos': np.float64(55.0)}
+  drop s100_m3_combo        {'netR': np.float64(431.0), 'maxDD_R': -26.7, 'worst_day': np.float64(-12.4), 'sharpe_d': np.float64(4.71), 'days_pos': np.float64(57.0)}
+  drop c03_fvg_fill         {'netR': np.float64(-156.1), 'maxDD_R': -156.6, 'worst_day': np.float64(-16.5), 'sharpe_d': np.float64(-1.63), 'days_pos': np.float64(43.0)}
+  drop s14_ob_mit_bias      {'netR': np.float64(-68.6), 'maxDD_R': -110.6, 'worst_day': np.float64(-21.0), 'sharpe_d': np.float64(-0.59), 'days_pos': np.float64(42.0)}
+  full book                 {'netR': np.float64(168.7), 'maxDD_R': -50.5, 'worst_day': np.float64(-18.2), 'sharpe_d': np.float64(1.41), 'days_pos': np.float64(51.0)}
+
+live four-leg book (daily R, live window): {'netR': np.float64(-9.5), 'maxDD_R': -42.0, 'worst_day': np.float64(-16.7), 'sharpe_d': np.float64(-0.5), 'days_pos': np.float64(49.0)}
+harness 09-18 roster over the same window (daily R): {'netR': np.float64(10.3), 'maxDD_R': -50.5, 'worst_day': np.float64(-16.5), 'sharpe_d': np.float64(0.32), 'days_pos': np.float64(53.0)}; c03+s14 only: {'netR': np.float64(145.9), 'maxDD_R': -11.4, 'worst_day': np.float64(-8.6), 'sharpe_d': np.float64(7.8), 'days_pos': np.float64(70.0)}
+
+TEST book at $38 per R (6 legs, equal): mean day +31, sd 346, p5 -495, worst -690; days <= -120: 74 of 209 (35.4%), <= -150: 62, <= -250: 41
+  at $25/R: days <= -150: 46 (22.0%), <= -250: 18; annualised net $+5,085; maxDD $-1,263
+  at $38/R: days <= -150: 62 (29.7%), <= -250: 41; annualised net $+7,729; maxDD $-1,920
+  at $50/R: days <= -150: 75 (35.9%), <= -250: 51; annualised net $+10,170; maxDD $-2,526

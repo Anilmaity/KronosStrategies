@@ -1,0 +1,647 @@
+{
+ "c03_fvg_fill": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 18
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 34
+  },
+  "B3_db0.10": {
+   "missing": 34
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 20
+  },
+  "s5_covered": 2147,
+  "n": 2161
+ },
+ "s14_ob_mit_bias": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 30
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 55
+  },
+  "B3_db0.10": {
+   "missing": 55
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 34
+  },
+  "s5_covered": 3970,
+  "n": 3970
+ },
+ "s95_session_breakout": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 10
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 15
+  },
+  "B3_db0.10": {
+   "missing": 15
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 10
+  },
+  "s5_covered": 999,
+  "n": 999
+ },
+ "s93_fvg_scalp": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 5
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 9
+  },
+  "B3_db0.10": {
+   "missing": 9
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 7
+  },
+  "s5_covered": 493,
+  "n": 493
+ },
+ "s97_snap_scalper_m5": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 5
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 25
+  },
+  "B3_db0.10": {
+   "missing": 25
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 14
+  },
+  "s5_covered": 730,
+  "n": 730
+ },
+ "s96_h1_momentum": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 9
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 8
+  },
+  "B3_db0.10": {
+   "missing": 8
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 5
+  },
+  "s5_covered": 764,
+  "n": 775
+ },
+ "s100_m3_combo": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 46
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 24
+  },
+  "B3_db0.10": {
+   "missing": 24
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 16
+  },
+  "s5_covered": 4579,
+  "n": 4579
+ },
+ "s12_m90_fade_bias": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 33
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 40
+  },
+  "B3_db0.10": {
+   "missing": 40
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 23
+  },
+  "s5_covered": 4089,
+  "n": 4089
+ },
+ "s03_ob_mitigation": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 58
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 82
+  },
+  "B3_db0.10": {
+   "missing": 82
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 48
+  },
+  "s5_covered": 6678,
+  "n": 6703
+ },
+ "s99_mss_fvg": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 15
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 12
+  },
+  "B3_db0.10": {
+   "missing": 12
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 7
+  },
+  "s5_covered": 1871,
+  "n": 1871
+ },
+ "s04_breaker_block": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 57
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 30
+  },
+  "B3_db0.10": {
+   "missing": 30
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 16
+  },
+  "s5_covered": 6613,
+  "n": 6613
+ },
+ "s94_sweep_reversal": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 8
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 7
+  },
+  "B3_db0.10": {
+   "missing": 7
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 7
+  },
+  "s5_covered": 1304,
+  "n": 1304
+ },
+ "s11_m90_fade_ny": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 21
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 14
+  },
+  "B3_db0.10": {
+   "missing": 14
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 11
+  },
+  "s5_covered": 1810,
+  "n": 1810
+ },
+ "s10_90min_fade": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 78
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 78
+  },
+  "B3_db0.10": {
+   "missing": 78
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 45
+  },
+  "s5_covered": 9339,
+  "n": 9401
+ },
+ "s98_zscore_mr_m15": {
+  "B1": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B1_utc": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B2_lb3": {
+   "missing": 0
+  },
+  "B2_lb2": {
+   "missing": 0
+  },
+  "B2_lb5": {
+   "missing": 0
+  },
+  "B3": {
+   "missing": 0
+  },
+  "B3_db0.05": {
+   "missing": 1
+  },
+  "B3_db0.10": {
+   "missing": 1
+  },
+  "B4": {
+   "missing": 0,
+   "stale_ref": 0
+  },
+  "B5": {
+   "missing": 0
+  },
+  "B5_w2": {
+   "missing": 0
+  },
+  "C2": {
+   "missing": 0
+  },
+  "s5_covered": 39,
+  "n": 39
+ }
+}

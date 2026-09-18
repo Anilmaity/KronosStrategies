@@ -1,0 +1,21 @@
+
+=== s14 shared-harness alignment: sim signals in 07:00-10:30 = 7; live rows = 3 ===
+                bar     _merge side side_sim  entry_price   entry  stop_loss      sl  take_profit      tp   status             rejection_reason
+2026-09-18 08:50:00 right_only  NaN      BUY          NaN 4388.35        NaN 4386.12          NaN 4392.80      NaN                          NaN
+2026-09-18 08:51:00 right_only  NaN      BUY          NaN 4387.80        NaN 4386.12          NaN 4391.15      NaN                          NaN
+2026-09-18 09:25:00       both  BUY      BUY      4387.55 4387.55    4386.12 4386.12      4390.41 4390.41 REJECTED sl_too_tight: 1.43pt < 1.5pt
+2026-09-18 09:26:00       both  BUY      BUY      4387.04 4387.04    4386.12 4386.12      4388.88 4388.88 REJECTED sl_too_tight: 0.92pt < 1.5pt
+2026-09-18 09:27:00       both  BUY      BUY      4387.81 4387.81    4386.12 4386.12      4391.19 4391.19   PLACED                          NaN
+2026-09-18 09:28:00 right_only  NaN      BUY          NaN 4388.11        NaN 4386.12          NaN 4392.09      NaN                          NaN
+2026-09-18 09:29:00 right_only  NaN      BUY          NaN 4387.94        NaN 4386.12          NaN 4391.57      NaN                          NaN
+
+=== s14 closed-bar alignment: sim signals in 07:00-10:30 = 8; live rows = 3 ===
+                bar     _merge side side_sim  entry_price   entry  stop_loss      sl  take_profit      tp   status             rejection_reason
+2026-09-18 09:25:00       both  BUY      BUY      4387.55 4387.55    4386.12 4386.12      4390.41 4390.41 REJECTED sl_too_tight: 1.43pt < 1.5pt
+2026-09-18 09:26:00       both  BUY      BUY      4387.04 4387.04    4386.12 4386.12      4388.88 4388.88 REJECTED sl_too_tight: 0.92pt < 1.5pt
+2026-09-18 09:27:00       both  BUY      BUY      4387.81 4387.81    4386.12 4386.12      4391.19 4391.19   PLACED                          NaN
+2026-09-18 09:28:00 right_only  NaN      BUY          NaN 4388.11        NaN 4386.12          NaN 4392.09      NaN                          NaN
+2026-09-18 09:29:00 right_only  NaN      BUY          NaN 4387.94        NaN 4386.12          NaN 4391.57      NaN                          NaN
+2026-09-18 09:30:00 right_only  NaN      BUY          NaN 4387.35        NaN 4386.12          NaN 4389.82      NaN                          NaN
+2026-09-18 09:31:00 right_only  NaN      BUY          NaN 4388.61        NaN 4386.12          NaN 4393.60      NaN                          NaN
+2026-09-18 09:32:00 right_only  NaN      BUY          NaN 4387.69        NaN 4386.12          NaN 4390.82      NaN                          NaN

@@ -1,0 +1,50 @@
+# live record since 2026-07-01 (pulled 2026-09-18 11:57 UTC)
+
+## S99 MSS FVG Reversal -- signals: 277  PLACED 102  REJECTED 175  other 0
+rejection_reason
+sl_too_tight         47
+entry_drift          47
+soft_daily_brake     31
+no_add_to_loser      17
+metaapi_rejection    15
+news_blackout         8
+duplicate_entry       6
+open_position_cap     4
+sl_too_tight stop distances: n 47 median 1.17 p90 1.38
+generated stop distance: median 2.85  share < 1.5: 18.8%  share < 3.0: 54.2%
+signals by month: status      PLACED  REJECTED | created_at                   | 2026-07         42        48 | 2026-08         32        76 | 2026-09         28        51
+
+closed positions: n 102  USD +191  PF(usd) 1.107  WR 43.1%  mean lots 0.085  pts-per-0.01lot-equivalent PF 1.010  pts sum +2.9
+by month (USD, n, PF):
+          n    usd   pfv     wr
+month                          
+2026-07  42  151.0  1.20  50.00
+2026-08  32   69.0  1.13  37.50
+2026-09  28  -29.0  0.94  39.29
+by exit kind:            size     sum | exit_kind               | STOPLOSS     57 -1689.0 | TARGET       44  1932.0 | TIME_EXIT     1   -52.0
+by entry hour UTC (n, USD):           size    sum | hour_utc              | 1            1  -67.0 | 6           11    1.0 | 7           10 -100.0 | 8           11    9.0 | 9           10  106.0 | 10           8   66.0 | 11          15  -70.0 | 12          11 -101.0 | 13           9   53.0 | 14           8   68.0 | 15           8  226.0
+placed & closed by stop bucket (n, USD, PF):         size    sum    pf | bucket                    | <1.5       3  -52.0  0.22 | 1.5-2     14 -138.0  0.50 | 2-3       29  356.0  2.08 | 3-4       15  -77.0  0.74 | 4-6       21 -201.0  0.61 | 6+        20  303.0  2.02
+
+## S100 M3 Combo Scalper -- signals: 629  PLACED 268  REJECTED 361  other 0
+rejection_reason
+entry_drift          117
+sl_too_tight          83
+open_position_cap     72
+soft_daily_brake      56
+metaapi_rejection     24
+no_add_to_loser        8
+duplicate_entry        1
+sl_too_tight stop distances: n 83 median 1.10 p90 1.40
+generated stop distance: median 2.74  share < 1.5: 15.1%  share < 3.0: 55.6%
+signals by month: status      PLACED  REJECTED | created_at                   | 2026-07         33        68 | 2026-08        138       169 | 2026-09         97       124
+
+closed positions: n 268  USD +478  PF(usd) 1.095  WR 27.2%  mean lots 0.089  pts-per-0.01lot-equivalent PF 1.169  pts sum +103.0
+by month (USD, n, PF):
+           n    usd   pfv     wr
+month                           
+2026-07   33   53.0  1.09  30.30
+2026-08  138  475.0  1.19  27.54
+2026-09   97  -50.0  0.97  25.77
+by exit kind:            size     sum | exit_kind               | STOPLOSS    191 -4867.0 | TARGET       69  5183.0 | TIME_EXIT     8   162.0
+by entry hour UTC (n, USD):           size    sum | hour_utc              | 1           31  207.0 | 2           34  -52.0 | 3           28 -348.0 | 4           25  435.0 | 5           27  163.0 | 6           32 -149.0 | 7           23   50.0 | 8           23   36.0 | 13          15  187.0 | 14          16   67.0 | 15          14 -118.0
+placed & closed by stop bucket (n, USD, PF):         size    sum    pf | bucket                    | 1.5-2     37  -49.0  0.90 | 2-3       92 -541.0  0.68 | 3-4       58   75.0  1.06 | 4-6       53  842.0  1.83 | 6+        28  151.0  1.27

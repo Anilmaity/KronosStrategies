@@ -1,0 +1,17 @@
+created_at,action,reason
+2026-07-09 12:33:58.803331+00:00,KILL_SWITCH,daily realized P&L -225.00 USD <= -200.00 — pausing all armed strategies until next UTC day
+2026-07-10 00:00:59.020929+00:00,INFO,kill-switch auto-reset (tripped 2026-07-09)
+2026-07-10 12:33:59.125778+00:00,KILL_SWITCH,daily realized P&L -178.00 USD <= -150.00 — pausing all armed strategies until next UTC day
+2026-07-11 00:00:59.614464+00:00,INFO,kill-switch auto-reset (tripped 2026-07-10)
+2026-08-07 07:26:27.019093+00:00,KILL_SWITCH,daily realized P&L -160.00 USD <= -150.00 — pausing all armed strategies until next UTC day
+2026-08-08 00:00:28.347924+00:00,INFO,kill-switch auto-reset (tripped 2026-08-07)
+2026-08-12 09:11:27.585585+00:00,KILL_SWITCH,daily realized P&L -211.00 USD <= -150.00 — pausing all armed strategies until next UTC day
+2026-08-13 18:28:22.112090+00:00,INFO,kill-switch auto-reset (tripped 2026-08-12)
+2026-08-18 09:24:19.056353+00:00,KILL_SWITCH,daily realized P&L -233.00 USD <= -150.00 — pausing all armed strategies until next UTC day
+2026-08-19 00:00:20.785017+00:00,INFO,kill-switch auto-reset (tripped 2026-08-18)
+2026-08-25 13:23:18.856972+00:00,KILL_SWITCH,daily realized P&L -178.00 USD <= -150.00 — pausing all armed strategies until next UTC day
+2026-08-26 00:00:19.929378+00:00,INFO,kill-switch auto-reset (tripped 2026-08-25)
+2026-08-28 12:27:19.445785+00:00,KILL_SWITCH,daily realized P&L -369.00 USD <= -250.00 — pausing all armed strategies until next UTC day
+2026-08-29 00:00:21.081922+00:00,INFO,kill-switch auto-reset (tripped 2026-08-28)
+2026-09-09 12:15:24.057602+00:00,KILL_SWITCH,daily realized P&L -311.00 USD <= -250.00 — pausing all armed strategies until next UTC day
+2026-09-10 00:00:22.084714+00:00,INFO,kill-switch auto-reset (tripped 2026-09-09)

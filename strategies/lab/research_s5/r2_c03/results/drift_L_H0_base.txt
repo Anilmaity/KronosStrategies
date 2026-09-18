@@ -1,0 +1,18 @@
+L_H0_base: n=2161; drift budget: median 0.50 pt, share at the 0.5 cap 81.3 %
+nominal gap (market mid at the signal close - entry, adverse>0): mean +0.000, |median| 0.000
+
+ delta  rejected%  TRAIN rej%  TEST rej%   admitted: n / PF@0.70 / pts     rejected: n / PF@0.70 / pts   drift mean(adverse>0)
+   5s    20.0%      14.6%      28.6%     1728 / 1.167 /    819.0     433 / 1.673 /  1024.3    +0.113
+  15s    28.7%      23.6%      36.9%     1540 / 1.110 /    486.0     621 / 1.676 /  1357.2    +0.206
+  30s    35.4%      30.4%      43.4%     1395 / 1.016 /     65.1     766 / 1.765 /  1778.2    +0.318
+
+ by stop bucket (delta 15 s):
+          n  rej_pct  budget    q_pts
+bucket                               
+<2      417     20.9    0.43   124.11
+2-3     476     21.6    0.50   179.18
+3-4     350     26.6    0.50   175.92
+4-6     415     34.9    0.50   202.40
+6+      503     38.4    0.50  1161.65
+
+ note: a rejected signal is re-evaluated by the runner on the next M1 bar (no cooldown is set); the harness has no LTP and enters at the signal bar's close.

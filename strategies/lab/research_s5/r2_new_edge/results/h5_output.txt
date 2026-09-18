@@ -1,0 +1,21 @@
+=== H5 arms, mid-M1 (harness), TRAIN / TEST at 0.75 and 1.00 ===
+  c03_incumbent    TRAIN n=1320  PF 1.248 /1.123  pts    697.7/   367.7 | TEST n=842   PF 1.487 /1.411  pts   1652.0/  1441.5 WR 48.0% | bars PASS 6/6 (months+ 0.9, max 0.25, corr -0.41)
+  c03_G1           TRAIN n=1195  PF 1.315 /1.183  pts    779.2/   480.4 | TEST n=729   PF 1.489 /1.415  pts   1462.4/  1280.2 WR 48.4% | bars PASS 6/6 (months+ 0.9, max 0.22, corr -0.38)
+  c03_G2           TRAIN n=723   PF 1.181 /1.057  pts    271.9/    91.2 | TEST n=532   PF 1.539 /1.463  pts   1173.1/  1040.1 WR 48.9% | bars PASS 6/6 (months+ 0.9, max 0.29, corr -0.53)
+  s14_incumbent    TRAIN n=2549  PF 1.294 /1.122  pts   1156.1/   518.9 | TEST n=1421  PF 1.435 /1.267  pts   1036.0/   680.7 WR 52.2% | bars PASS 6/6 (months+ 0.9, max 0.16, corr 0.43)
+  s14_G1           TRAIN n=1845  PF 1.306 /1.13   pts    855.0/   393.7 | TEST n=953   PF 1.346 /1.187  pts    567.0/   328.7 WR 50.8% | bars PASS 6/6 (months+ 0.9, max 0.27, corr 0.53)
+  s14_G2           TRAIN n=1328  PF 1.211 /1.049  pts    444.3/   112.3 | TEST n=763   PF 1.52  /1.343  pts    647.6/   456.9 WR 54.4% | bars PASS 6/6 (months+ 1.0, max 0.19, corr 0.11)
+
+=== bar 7: gated arm vs incumbent at stress 1.00 on TEST PF AND points; TRAIN-justified (same ordering on TRAIN) ===
+  c03 G1: TEST PF 1.415 vs 1.411, pts 1280.2 vs 1441.5 -> bar7 FAIL; TRAIN PF 1.183 vs 1.123, pts 480.4 vs 367.7 -> TRAIN-justified True; trades kept 729/842 TEST
+  c03 G2: TEST PF 1.463 vs 1.411, pts 1040.1 vs 1441.5 -> bar7 FAIL; TRAIN PF 1.057 vs 1.123, pts 91.2 vs 367.7 -> TRAIN-justified False; trades kept 532/842 TEST
+  s14 G1: TEST PF 1.187 vs 1.267, pts 328.7 vs 680.7 -> bar7 FAIL; TRAIN PF 1.13 vs 1.122, pts 393.7 vs 518.9 -> TRAIN-justified False; trades kept 953/1421 TEST
+  s14 G2: TEST PF 1.343 vs 1.267, pts 456.9 vs 680.7 -> bar7 FAIL; TRAIN PF 1.049 vs 1.122, pts 112.3 vs 518.9 -> TRAIN-justified False; trades kept 763/1421 TEST
+
+=== record: side mix of the gated arms (TEST) ===
+  c03_incumbent    TEST sides {'BUY': 438, 'SELL': 404}
+  c03_G1           TEST sides {'BUY': 379, 'SELL': 350}
+  c03_G2           TEST sides {'SELL': 267, 'BUY': 265}
+  s14_incumbent    TEST sides {'BUY': 754, 'SELL': 667}
+  s14_G1           TEST sides {'BUY': 533, 'SELL': 420}
+  s14_G2           TEST sides {'BUY': 416, 'SELL': 347}

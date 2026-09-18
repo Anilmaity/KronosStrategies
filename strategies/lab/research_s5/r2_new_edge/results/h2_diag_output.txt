@@ -1,0 +1,60 @@
+=== A_fixed TEST months @0.70 (net 563.6, R 8.2) ===
+              n    pts     R
+entry_time                 
+2025-12     33  -81.9  -3.7
+2026-01     37  906.4  10.4
+2026-02     23 -478.3  -0.6
+2026-03     23  239.8   2.3
+2026-04     18 -118.3  -0.3
+2026-05     31 -200.5  -3.2
+2026-06     34  191.9   2.7
+2026-07     24  -29.1  -0.3
+2026-08     32  315.0   4.1
+2026-09     14 -181.4  -3.2
+TEST months positive in R: 4 / 10 | TRAIN mean R 0.002 TEST mean R 0.030
+top-3 TEST trades:
+                    entry_time  side     risk outcome      pts
+560 2026-01-30 10:00:00+00:00  SELL  262.720      TP  133.980
+561 2026-01-30 18:00:00+00:00  SELL  293.940      TP  128.840
+559 2026-01-29 00:04:00+00:00   BUY  124.805      TP   88.455
+nominal gap check: mean |entry_px - sl|/risk 1.0 ; TP dist / risk median 0.377
+=== B_stop TEST months @0.70 (net 903.8, R 13.6) ===
+              n     pts     R
+entry_time                  
+2025-12     33    40.3   1.4
+2026-01     48  1025.7  10.2
+2026-02     26   -82.9   1.8
+2026-03     35   317.9   2.5
+2026-04     27  -406.3  -3.5
+2026-05     35  -186.3  -1.9
+2026-06     41   201.3   3.3
+2026-07     31  -133.7  -2.1
+2026-08     38   311.7   4.9
+2026-09     14  -183.9  -3.0
+TEST months positive in R: 6 / 10 | TRAIN mean R 0.022 TEST mean R 0.042
+top-3 TEST trades:
+                    entry_time  side     risk outcome      pts
+632 2026-02-02 01:10:00+00:00  SELL  370.135      TP  147.355
+631 2026-01-30 18:43:00+00:00  SELL  302.480      TP  120.290
+630 2026-01-30 17:43:00+00:00  SELL  279.870      TP  111.250
+nominal gap check: mean |entry_px - sl|/risk 1.0 ; TP dist / risk median 0.4
+=== stage1_s96 TEST months @0.70 (net 1117.9, R 19.2) ===
+              n    pts     R
+entry_time                 
+2025-12     33  -63.3  -1.4
+2026-01     37  987.0  11.6
+2026-02     23 -465.0  -0.8
+2026-03     24  390.6   3.6
+2026-04     20  -79.6   0.8
+2026-05     31 -144.8  -2.0
+2026-06     35  269.9   3.8
+2026-07     24   20.8   0.8
+2026-08     32  347.4   5.4
+2026-09     15 -145.1  -2.6
+TEST months positive in R: 6 / 10 | TRAIN mean R 0.030 TEST mean R 0.070
+top-3 TEST trades:
+                    entry_time  side     risk outcome      pts
+569 2026-01-30 18:00:00+00:00  SELL  302.485      TP  120.295
+568 2026-01-30 10:00:00+00:00  SELL  283.860      TP  112.840
+610 2026-03-23 07:05:00+00:00  SELL  221.105      TP   87.745
+nominal gap check: mean |entry_px - sl|/risk 1.0 ; TP dist / risk median 0.4

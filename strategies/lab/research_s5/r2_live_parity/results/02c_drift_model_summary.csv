@@ -1,0 +1,5 @@
+strategy,harness_n,harness_q45,harness_pf,gate_n,gate_pts,gate_pf,live_n,live_pts,live_pf
+s93_fvg_scalp,113,42.2,1.142,65,40.9,1.249,60,-18.8,0.905
+s94_sweep_reversal,147,-103.4,0.817,84,-24.2,0.915,85,34.1,1.129
+s99_mss_fvg,202,51.4,1.099,116,66.9,1.236,102,4.7,1.017
+s100_m3_combo,436,-136.3,0.886,247,62.0,1.11,268,103.8,1.171

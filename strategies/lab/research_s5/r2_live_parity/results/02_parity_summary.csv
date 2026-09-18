@@ -1,0 +1,5 @@
+strategy,live_n,live_pts,live_pf,live_meanR,sim_n,sim_q45_pts,sim_q45_pf,sim_m75_pts,sim_m75_pf,matched_placed,live_only,sim_only,exec_term,term_duplicate_entry,term_entry_drift,term_metaapi_rejection,term_no_add_to_loser,term_open_position_cap,term_sim_only,term_soft_daily_brake
+s93_fvg_scalp,60,-18.8,0.905,-0.0321,134,-1.4,0.996,-32.8,0.92,44,17,23,-33.4,-9.5,54.9,-21.7,-7.5,-8.3,-40.8,-4.5
+s94_sweep_reversal,85,34.1,1.129,-0.1621,174,-81.7,0.877,-92.0,0.867,81,4,27,-59.8,,27.8,-62.6,-4.7,,21.7,-52.5
+s99_mss_fvg,102,4.7,1.017,0.026,239,27.7,1.043,0.2,1.0,95,7,37,-60.3,15.9,91.7,14.5,16.4,,-23.7,-36.6
+s100_m3_combo,268,103.8,1.171,0.0179,660,-237.1,0.869,-239.7,0.874,235,33,229,-218.6,-4.5,27.7,-23.7,12.9,-30.1,-98.9,17.9

@@ -1,0 +1,634 @@
+created_at,action,reason,strategy_name
+2026-07-02 19:02:48.399654+00:00,PAUSE,session_live: session_vol: outside windows (19.05h UTC) | d1=bearish h4=long vol=NORMAL trend=MIXED session=NY closed=False,Session Breakout M5 ORB
+2026-07-06 11:38:21.124698+00:00,START,trend: always_on: regime-independent | d1=bearish h4=long vol=NORMAL trend=RANGING session=LONDON closed=False,Challenge XAU H4 Trend
+2026-07-06 19:14:56.707896+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=long vol=LOW trend=RANGING session=NY closed=False,S99 MSS FVG Reversal
+2026-07-06 19:14:56.711814+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=long vol=LOW trend=RANGING session=NY closed=False,S93 FVG Scalp
+2026-07-06 21:00:56.128032+00:00,PAUSE,trend: market closed | d1=bearish h4=long vol=LOW trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-06 21:00:56.132220+00:00,PAUSE,reversal: market closed | d1=bearish h4=long vol=LOW trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-06 21:00:56.135449+00:00,PAUSE,scalping: market closed | d1=bearish h4=long vol=LOW trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-06 22:00:55.839415+00:00,START,trend: always_on: regime-independent | d1=bearish h4=long vol=LOW trend=MIXED session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-07-06 22:00:55.843355+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=long vol=LOW trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-07-06 22:00:55.846790+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=long vol=LOW trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-07-07 06:35:58.430610+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=MIXED session=ASIA closed=False,S94 Sweep Reversal
+2026-07-07 14:00:58.781922+00:00,START,"trend: session_vol: in window (14.02h UTC), vol=NORMAL | d1=bearish h4=neutral vol=NORMAL trend=RANGING session=OVERLAP closed=False",
+2026-07-07 15:00:58.724299+00:00,PAUSE,trend: session_vol: outside windows (15.02h UTC) | d1=bearish h4=neutral vol=NORMAL trend=RANGING session=OVERLAP closed=False,
+2026-07-07 21:00:59.246284+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-07 21:00:59.250313+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-07 21:00:59.254494+00:00,PAUSE,reversal: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-07 21:00:59.258035+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-07 22:00:58.701974+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-07-07 22:00:58.706185+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-07-07 22:00:58.710533+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-07-07 22:00:58.714417+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-07-08 01:00:58.388198+00:00,START,"trend: session_vol: in window (1.02h UTC), vol=NORMAL | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False",
+2026-07-08 02:00:58.362995+00:00,PAUSE,trend: session_vol: outside windows (2.02h UTC) | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,
+2026-07-08 12:00:58.929756+00:00,START,"trend: session_vol: in window (12.02h UTC), vol=NORMAL | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=LONDON closed=False",
+2026-07-08 15:00:58.778397+00:00,PAUSE,trend: session_vol: outside windows (15.02h UTC) | d1=bearish h4=neutral vol=NORMAL trend=TRENDING session=OVERLAP closed=False,
+2026-07-08 21:00:59.386126+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-08 21:00:59.389767+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-08 21:00:59.393650+00:00,PAUSE,reversal: market closed | d1=bearish h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-08 21:00:59.397266+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-08 22:00:58.564013+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-07-08 22:00:58.567607+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-07-08 22:00:58.571670+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-07-08 22:00:58.575541+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=False,S93 FVG Scalp
+2026-07-09 01:00:58.810527+00:00,START,"trend: session_vol: in window (1.02h UTC), vol=NORMAL | d1=bearish h4=long vol=NORMAL trend=MIXED session=ASIA closed=False",
+2026-07-09 02:00:58.736552+00:00,PAUSE,trend: session_vol: outside windows (2.02h UTC) | d1=bearish h4=long vol=NORMAL trend=RANGING session=ASIA closed=False,
+2026-07-09 07:00:58.825514+00:00,START,"trend: session_vol: in window (7.02h UTC), vol=NORMAL | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=LONDON closed=False",
+2026-07-09 08:00:59.050593+00:00,PAUSE,trend: session_vol: outside windows (8.02h UTC) | d1=bearish h4=neutral vol=LOW trend=MIXED session=LONDON closed=False,
+2026-07-09 12:33:58.803331+00:00,KILL_SWITCH,daily realized P&L -225.00 USD <= -200.00 — pausing all armed strategies until next UTC day,
+2026-07-09 12:33:58.818799+00:00,PAUSE,scalping: kill-switch active (daily P&L -225.00 USD) | d1=bearish h4=neutral vol=LOW trend=MIXED session=LONDON closed=False,S93 FVG Scalp
+2026-07-09 12:33:58.824709+00:00,PAUSE,trend: kill-switch active (daily P&L -225.00 USD) | d1=bearish h4=neutral vol=LOW trend=MIXED session=LONDON closed=False,S94 Sweep Reversal
+2026-07-09 12:33:58.828163+00:00,PAUSE,trend: kill-switch active (daily P&L -225.00 USD) | d1=bearish h4=neutral vol=LOW trend=MIXED session=LONDON closed=False,Challenge XAU H4 Trend
+2026-07-09 12:33:58.831615+00:00,PAUSE,reversal: kill-switch active (daily P&L -225.00 USD) | d1=bearish h4=neutral vol=LOW trend=MIXED session=LONDON closed=False,S99 MSS FVG Reversal
+2026-07-10 00:00:59.020929+00:00,INFO,kill-switch auto-reset (tripped 2026-07-09),
+2026-07-10 00:00:59.029244+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=MIXED session=ASIA closed=False,S93 FVG Scalp
+2026-07-10 00:00:59.035986+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=MIXED session=ASIA closed=False,S94 Sweep Reversal
+2026-07-10 00:00:59.039914+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=MIXED session=ASIA closed=False,Challenge XAU H4 Trend
+2026-07-10 00:00:59.043521+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=MIXED session=ASIA closed=False,S99 MSS FVG Reversal
+2026-07-10 12:33:59.125778+00:00,KILL_SWITCH,daily realized P&L -178.00 USD <= -150.00 — pausing all armed strategies until next UTC day,
+2026-07-10 12:33:59.132693+00:00,PAUSE,trend: kill-switch active (daily P&L -178.00 USD) | d1=bearish h4=short vol=LOW trend=RANGING session=LONDON closed=False,S94 Sweep Reversal
+2026-07-10 12:33:59.136619+00:00,PAUSE,trend: kill-switch active (daily P&L -178.00 USD) | d1=bearish h4=short vol=LOW trend=RANGING session=LONDON closed=False,Challenge XAU H4 Trend
+2026-07-10 12:33:59.140897+00:00,PAUSE,reversal: kill-switch active (daily P&L -178.00 USD) | d1=bearish h4=short vol=LOW trend=RANGING session=LONDON closed=False,S99 MSS FVG Reversal
+2026-07-10 12:33:59.144713+00:00,PAUSE,scalping: kill-switch active (daily P&L -178.00 USD) | d1=bearish h4=short vol=LOW trend=RANGING session=LONDON closed=False,S93 FVG Scalp
+2026-07-11 00:00:59.614464+00:00,INFO,kill-switch auto-reset (tripped 2026-07-10),
+2026-07-12 22:00:05.638895+00:00,START,trend: always_on: regime-independent | d1=bearish h4=short vol=LOW trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-07-12 22:00:05.643917+00:00,START,trend: always_on: regime-independent | d1=bearish h4=short vol=LOW trend=MIXED session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-07-12 22:00:05.648062+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=short vol=LOW trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-07-12 22:00:05.651924+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=short vol=LOW trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-07-13 01:00:06.213911+00:00,START,"trend: session_vol: in window (1.00h UTC), vol=NORMAL | d1=ranging h4=short vol=NORMAL trend=MIXED session=ASIA closed=False",
+2026-07-13 02:00:06.376221+00:00,PAUSE,trend: session_vol: outside windows (2.00h UTC) | d1=ranging h4=short vol=NORMAL trend=MIXED session=ASIA closed=False,
+2026-07-13 07:00:05.820171+00:00,START,"trend: session_vol: in window (7.00h UTC), vol=NORMAL | d1=ranging h4=short vol=NORMAL trend=MIXED session=LONDON closed=False",
+2026-07-13 08:00:06.665672+00:00,PAUSE,trend: session_vol: outside windows (8.00h UTC) | d1=ranging h4=short vol=NORMAL trend=MIXED session=LONDON closed=False,
+2026-07-13 12:00:06.628132+00:00,START,"trend: session_vol: in window (12.00h UTC), vol=NORMAL | d1=ranging h4=short vol=NORMAL trend=MIXED session=LONDON closed=False",
+2026-07-13 15:00:06.542239+00:00,PAUSE,trend: session_vol: outside windows (15.00h UTC) | d1=ranging h4=short vol=NORMAL trend=MIXED session=OVERLAP closed=False,
+2026-07-13 21:00:06.512601+00:00,PAUSE,trend: market closed | d1=ranging h4=short vol=NORMAL trend=TRENDING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-13 21:00:06.516640+00:00,PAUSE,trend: market closed | d1=ranging h4=short vol=NORMAL trend=TRENDING session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-13 21:00:06.520836+00:00,PAUSE,reversal: market closed | d1=ranging h4=short vol=NORMAL trend=TRENDING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-13 21:00:06.524767+00:00,PAUSE,scalping: market closed | d1=ranging h4=short vol=NORMAL trend=TRENDING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-13 22:00:07.399072+00:00,START,trend: always_on: regime-independent | d1=ranging h4=short vol=NORMAL trend=TRENDING session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-07-13 22:00:07.403155+00:00,START,trend: always_on: regime-independent | d1=ranging h4=short vol=NORMAL trend=TRENDING session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-07-13 22:00:07.407364+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=short vol=NORMAL trend=TRENDING session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-07-13 22:00:07.411180+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=short vol=NORMAL trend=TRENDING session=ROLLOVER closed=False,S93 FVG Scalp
+2026-07-14 01:00:06.530617+00:00,START,"trend: session_vol: in window (1.00h UTC), vol=NORMAL | d1=ranging h4=short vol=NORMAL trend=MIXED session=ASIA closed=False",
+2026-07-14 02:00:06.948991+00:00,PAUSE,trend: session_vol: outside windows (2.00h UTC) | d1=ranging h4=short vol=NORMAL trend=MIXED session=ASIA closed=False,
+2026-07-14 13:00:07.042020+00:00,START,"trend: session_vol: in window (13.00h UTC), vol=NORMAL | d1=ranging h4=short vol=NORMAL trend=MIXED session=OVERLAP closed=False",
+2026-07-14 15:00:07.061661+00:00,PAUSE,trend: session_vol: outside windows (15.00h UTC) | d1=ranging h4=short vol=NORMAL trend=MIXED session=OVERLAP closed=False,
+2026-07-14 21:00:06.915279+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-14 21:00:06.921735+00:00,PAUSE,reversal: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-14 21:00:06.926258+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-14 21:00:06.934506+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-14 22:00:07.175806+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-07-14 22:00:07.180440+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-07-14 22:00:07.185172+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-07-14 22:00:07.189383+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-07-15 01:00:06.650715+00:00,START,"trend: session_vol: in window (1.00h UTC), vol=NORMAL | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False",
+2026-07-15 02:00:07.306786+00:00,PAUSE,trend: session_vol: outside windows (2.00h UTC) | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,
+2026-07-15 21:00:07.628554+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-15 21:00:07.635534+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-15 21:00:07.642139+00:00,PAUSE,reversal: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-15 21:00:07.647385+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-15 22:00:07.885340+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-07-15 22:00:07.890812+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-07-15 22:00:07.896344+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-07-15 22:00:07.902854+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S93 FVG Scalp
+2026-07-16 01:00:07.321620+00:00,START,"trend: session_vol: in window (1.00h UTC), vol=NORMAL | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ASIA closed=False",
+2026-07-16 02:00:08.327489+00:00,PAUSE,trend: session_vol: outside windows (2.00h UTC) | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ASIA closed=False,
+2026-07-16 14:00:08.498421+00:00,START,"trend: session_vol: in window (14.00h UTC), vol=NORMAL | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=OVERLAP closed=False",
+2026-07-16 15:00:07.786589+00:00,PAUSE,trend: session_vol: outside windows (15.00h UTC) | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=OVERLAP closed=False,
+2026-07-16 21:00:08.110776+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-16 21:00:08.133820+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-16 21:00:08.159867+00:00,PAUSE,reversal: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-16 21:00:08.174493+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-17 00:00:07.787037+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S94 Sweep Reversal
+2026-07-17 00:00:07.804126+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,Challenge XAU H4 Trend
+2026-07-17 00:00:07.819752+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S99 MSS FVG Reversal
+2026-07-17 00:00:07.845176+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S93 FVG Scalp
+2026-07-17 01:00:08.221628+00:00,START,"trend: session_vol: in window (1.00h UTC), vol=NORMAL | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False",
+2026-07-17 02:00:07.265934+00:00,PAUSE,trend: session_vol: outside windows (2.00h UTC) | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,
+2026-07-17 14:00:08.053434+00:00,START,"trend: session_vol: in window (14.00h UTC), vol=NORMAL | d1=ranging h4=short vol=NORMAL trend=RANGING session=OVERLAP closed=False",
+2026-07-17 15:00:08.110466+00:00,PAUSE,trend: session_vol: outside windows (15.00h UTC) | d1=ranging h4=short vol=NORMAL trend=RANGING session=OVERLAP closed=False,
+2026-07-17 21:00:07.922825+00:00,PAUSE,trend: market closed | d1=ranging h4=short vol=LOW trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-17 21:00:07.929152+00:00,PAUSE,trend: market closed | d1=ranging h4=short vol=LOW trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-17 21:00:07.940092+00:00,PAUSE,reversal: market closed | d1=ranging h4=short vol=LOW trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-17 21:00:07.947670+00:00,PAUSE,scalping: market closed | d1=ranging h4=short vol=LOW trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-19 22:00:07.770922+00:00,START,trend: always_on: regime-independent | d1=ranging h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-07-19 22:00:07.788684+00:00,START,trend: always_on: regime-independent | d1=ranging h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-07-19 22:00:07.804483+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-07-19 22:00:07.862519+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-07-20 01:00:08.349346+00:00,START,"trend: session_vol: in window (1.00h UTC), vol=NORMAL | d1=ranging h4=short vol=NORMAL trend=RANGING session=ASIA closed=False",
+2026-07-20 02:00:07.428226+00:00,PAUSE,trend: session_vol: outside windows (2.00h UTC) | d1=ranging h4=short vol=NORMAL trend=RANGING session=ASIA closed=False,
+2026-07-20 12:00:08.133396+00:00,START,"trend: session_vol: in window (12.00h UTC), vol=NORMAL | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=LONDON closed=False",
+2026-07-20 15:00:09.296796+00:00,PAUSE,trend: session_vol: outside windows (15.00h UTC) | d1=ranging h4=neutral vol=LOW trend=RANGING session=OVERLAP closed=False,
+2026-07-20 21:00:08.100079+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=LOW trend=RANGING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-20 21:00:08.105357+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=LOW trend=RANGING session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-20 21:00:08.111522+00:00,PAUSE,reversal: market closed | d1=ranging h4=neutral vol=LOW trend=RANGING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-20 21:00:08.117172+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=LOW trend=RANGING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-20 22:00:08.451296+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=LOW trend=RANGING session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-07-20 22:00:08.468859+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=LOW trend=RANGING session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-07-20 22:00:08.493284+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=neutral vol=LOW trend=RANGING session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-07-20 22:00:08.546502+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=LOW trend=RANGING session=ROLLOVER closed=False,S93 FVG Scalp
+2026-07-21 21:00:08.529257+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-21 21:00:08.534557+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-21 21:00:08.545366+00:00,PAUSE,reversal: market closed | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-21 21:00:08.550035+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-22 00:00:09.242436+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=MIXED session=ASIA closed=False,S94 Sweep Reversal
+2026-07-22 00:00:09.255898+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=MIXED session=ASIA closed=False,Challenge XAU H4 Trend
+2026-07-22 00:00:09.273897+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=MIXED session=ASIA closed=False,S99 MSS FVG Reversal
+2026-07-22 00:00:09.283507+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=MIXED session=ASIA closed=False,S93 FVG Scalp
+2026-07-22 14:00:09.316909+00:00,START,"trend: session_vol: in window (14.00h UTC), vol=NORMAL | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=OVERLAP closed=False",
+2026-07-22 15:00:09.216932+00:00,PAUSE,trend: session_vol: outside windows (15.00h UTC) | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=OVERLAP closed=False,
+2026-07-22 21:00:08.849155+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-22 21:00:08.854903+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-22 21:00:08.861094+00:00,PAUSE,reversal: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-22 21:00:08.866103+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-22 22:00:09.128392+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-07-22 22:00:09.144280+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-07-22 22:00:09.153468+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-07-22 22:00:09.170810+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-07-23 01:00:08.870975+00:00,START,"trend: session_vol: in window (1.00h UTC), vol=NORMAL | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False",
+2026-07-23 02:00:09.374212+00:00,PAUSE,trend: session_vol: outside windows (2.00h UTC) | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,
+2026-07-23 12:03:08.868316+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=long vol=LOW trend=MIXED session=LONDON closed=False,S100 M3 Combo Scalper
+2026-07-23 21:00:09.509997+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-23 21:00:09.521752+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-23 21:00:09.534287+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-07-23 21:00:09.553284+00:00,PAUSE,reversal: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-23 21:00:09.566171+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-23 22:00:09.489615+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-07-23 22:00:09.494849+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-07-23 22:00:09.499490+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-07-23 22:00:09.505022+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-07-23 22:00:09.509211+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-07-24 21:00:09.393601+00:00,PAUSE,scalping: market closed | d1=bearish h4=long vol=LOW trend=RANGING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-24 21:00:09.401234+00:00,PAUSE,trend: market closed | d1=bearish h4=long vol=LOW trend=RANGING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-24 21:00:09.407723+00:00,PAUSE,trend: market closed | d1=bearish h4=long vol=LOW trend=RANGING session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-24 21:00:09.412626+00:00,PAUSE,scalping: market closed | d1=bearish h4=long vol=LOW trend=RANGING session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-07-24 21:00:09.416438+00:00,PAUSE,reversal: market closed | d1=bearish h4=long vol=LOW trend=RANGING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-26 22:00:09.541930+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=long vol=LOW trend=RANGING session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-07-26 22:00:09.551498+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=long vol=LOW trend=RANGING session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-07-26 22:00:09.558389+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=long vol=LOW trend=RANGING session=ROLLOVER closed=False,S93 FVG Scalp
+2026-07-26 22:00:09.567022+00:00,START,trend: always_on: regime-independent | d1=bearish h4=long vol=LOW trend=RANGING session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-07-26 22:00:09.574237+00:00,START,trend: always_on: regime-independent | d1=bearish h4=long vol=LOW trend=RANGING session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-07-27 21:00:14.874144+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=LOW trend=RANGING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-27 21:00:14.879150+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=LOW trend=RANGING session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-27 21:00:14.883327+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=LOW trend=RANGING session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-07-27 21:00:14.888285+00:00,PAUSE,reversal: market closed | d1=bearish h4=neutral vol=LOW trend=RANGING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-27 21:00:14.891837+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=LOW trend=RANGING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-28 00:00:39.776902+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=RANGING session=ASIA closed=False,S93 FVG Scalp
+2026-07-28 00:00:39.781439+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=RANGING session=ASIA closed=False,S94 Sweep Reversal
+2026-07-28 00:00:39.785802+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=RANGING session=ASIA closed=False,Challenge XAU H4 Trend
+2026-07-28 00:00:39.790239+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=RANGING session=ASIA closed=False,S100 M3 Combo Scalper
+2026-07-28 00:00:39.793967+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=RANGING session=ASIA closed=False,S99 MSS FVG Reversal
+2026-07-28 21:00:18.482603+00:00,PAUSE,reversal: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-28 21:00:18.487230+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-28 21:00:18.491860+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-28 21:00:18.496684+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-28 21:00:18.502211+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-07-28 22:00:18.757816+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-07-28 22:00:18.763096+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-07-28 22:00:18.767865+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-07-28 22:00:18.775409+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-07-28 22:00:18.780140+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-07-29 21:00:21.415419+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-29 21:00:21.419917+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-29 21:00:21.424503+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-07-29 21:00:21.429122+00:00,PAUSE,reversal: market closed | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-29 21:00:21.432686+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-29 22:00:22.651629+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-07-29 22:00:22.656313+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-07-29 22:00:22.660928+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-07-29 22:00:22.665328+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-07-29 22:00:22.669815+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-07-30 06:24:18.952754+00:00,START,copy: always_on: regime-independent | d1=bearish h4=short vol=EXTREME trend=MIXED session=ASIA closed=False,Neymar Telegram Copy
+2026-07-30 21:00:20.240207+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-30 21:00:20.246410+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-07-30 21:00:20.251389+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-30 21:00:20.255905+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-30 21:00:20.260436+00:00,PAUSE,copy: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-07-30 21:00:20.265116+00:00,PAUSE,reversal: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-31 00:00:20.077764+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=RANGING session=ASIA closed=False,Challenge XAU H4 Trend
+2026-07-31 00:00:20.082944+00:00,START,copy: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=RANGING session=ASIA closed=False,Neymar Telegram Copy
+2026-07-31 00:00:20.087932+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=RANGING session=ASIA closed=False,S99 MSS FVG Reversal
+2026-07-31 00:00:20.092549+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=RANGING session=ASIA closed=False,S94 Sweep Reversal
+2026-07-31 00:00:20.097554+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=RANGING session=ASIA closed=False,S100 M3 Combo Scalper
+2026-07-31 00:00:20.101332+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=RANGING session=ASIA closed=False,S93 FVG Scalp
+2026-07-31 21:00:27.023879+00:00,PAUSE,reversal: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-07-31 21:00:27.030854+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-07-31 21:00:27.036498+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-07-31 21:00:27.041235+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-07-31 21:00:27.045715+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-07-31 21:00:27.049393+00:00,PAUSE,copy: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-02 22:00:27.960378+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-02 22:00:27.964660+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-08-02 22:00:27.968640+00:00,START,copy: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-02 22:00:27.972434+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-02 22:00:27.976391+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-02 22:00:27.980202+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-03 21:00:27.642868+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-08-03 21:00:27.648710+00:00,PAUSE,copy: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-03 21:00:27.652856+00:00,PAUSE,reversal: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-03 21:00:27.659441+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-03 21:00:27.664190+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-03 21:00:27.667767+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-03 22:00:27.046565+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-08-03 22:00:27.051720+00:00,START,copy: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-03 22:00:27.056361+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-03 22:00:27.060767+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-03 22:00:27.065671+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-03 22:00:27.069353+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-04 21:00:26.804760+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-04 21:00:26.810134+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-04 21:00:26.814183+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-08-04 21:00:26.818205+00:00,PAUSE,copy: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-04 21:00:26.822280+00:00,PAUSE,reversal: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-04 21:00:26.825747+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-04 22:00:28.361748+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-04 22:00:28.366786+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-04 22:00:28.370766+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-04 22:00:28.374571+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-08-04 22:00:28.378525+00:00,START,copy: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-04 22:00:28.381951+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-05 21:00:26.951754+00:00,PAUSE,copy: market closed | d1=ranging h4=neutral vol=HIGH trend=TRENDING session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-05 21:00:26.957885+00:00,PAUSE,reversal: market closed | d1=ranging h4=neutral vol=HIGH trend=TRENDING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-05 21:00:26.961860+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=HIGH trend=TRENDING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-05 21:00:26.966172+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=HIGH trend=TRENDING session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-05 21:00:26.969937+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=HIGH trend=TRENDING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-05 21:00:26.973983+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=HIGH trend=TRENDING session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-08-05 22:00:27.196211+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-05 22:00:27.201773+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-08-05 22:00:27.206376+00:00,START,copy: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-05 22:00:27.211218+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-05 22:00:27.216127+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-05 22:00:27.220529+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-06 21:00:27.595847+00:00,PAUSE,reversal: market closed | d1=ranging h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-06 21:00:27.600829+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-06 21:00:27.606600+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-06 21:00:27.611375+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-06 21:00:27.617248+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-08-06 21:00:27.622276+00:00,PAUSE,copy: market closed | d1=ranging h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-06 22:00:27.786753+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-06 22:00:27.791677+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-06 22:00:27.796694+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-06 22:00:27.801615+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-06 22:00:27.805928+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-08-06 22:00:27.811525+00:00,START,copy: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=RANGING session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-07 07:26:27.019093+00:00,KILL_SWITCH,daily realized P&L -160.00 USD <= -150.00 — pausing all armed strategies until next UTC day,
+2026-08-07 07:26:27.037017+00:00,PAUSE,scalping: kill-switch active (daily P&L -160.00 USD) | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=LONDON closed=False,S93 FVG Scalp
+2026-08-07 07:26:27.047418+00:00,PAUSE,trend: kill-switch active (daily P&L -160.00 USD) | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=LONDON closed=False,Challenge XAU H4 Trend
+2026-08-07 07:26:27.052142+00:00,PAUSE,copy: kill-switch active (daily P&L -160.00 USD) | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=LONDON closed=False,Neymar Telegram Copy
+2026-08-07 07:26:27.056689+00:00,PAUSE,reversal: kill-switch active (daily P&L -160.00 USD) | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=LONDON closed=False,S99 MSS FVG Reversal
+2026-08-07 07:26:27.060889+00:00,PAUSE,trend: kill-switch active (daily P&L -160.00 USD) | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=LONDON closed=False,S94 Sweep Reversal
+2026-08-07 07:26:27.065136+00:00,PAUSE,scalping: kill-switch active (daily P&L -160.00 USD) | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=LONDON closed=False,S100 M3 Combo Scalper
+2026-08-08 00:00:28.347924+00:00,INFO,kill-switch auto-reset (tripped 2026-08-07),
+2026-08-09 22:00:27.624255+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-09 22:00:27.629730+00:00,START,trend: always_on: regime-independent | d1=ranging h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=False,Challenge XAU H4 Trend
+2026-08-09 22:00:27.633872+00:00,START,copy: always_on: regime-independent | d1=ranging h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-09 22:00:27.638635+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-09 22:00:27.642736+00:00,START,trend: always_on: regime-independent | d1=ranging h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-09 22:00:27.646704+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-10 21:00:28.178009+00:00,PAUSE,reversal: market closed | d1=ranging h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-10 21:00:28.184754+00:00,PAUSE,trend: market closed | d1=ranging h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-10 21:00:28.190228+00:00,PAUSE,scalping: market closed | d1=ranging h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-10 21:00:28.195127+00:00,PAUSE,scalping: market closed | d1=ranging h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-10 21:00:28.200306+00:00,PAUSE,trend: market closed | d1=ranging h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-08-10 21:00:28.204424+00:00,PAUSE,copy: market closed | d1=ranging h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-11 00:00:28.208285+00:00,START,copy: always_on: regime-independent | d1=ranging h4=long vol=NORMAL trend=MIXED session=ASIA closed=False,Neymar Telegram Copy
+2026-08-11 00:00:28.214137+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=long vol=NORMAL trend=MIXED session=ASIA closed=False,S99 MSS FVG Reversal
+2026-08-11 00:00:28.222191+00:00,START,trend: always_on: regime-independent | d1=ranging h4=long vol=NORMAL trend=MIXED session=ASIA closed=False,S94 Sweep Reversal
+2026-08-11 00:00:28.228063+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=long vol=NORMAL trend=MIXED session=ASIA closed=False,S100 M3 Combo Scalper
+2026-08-11 00:00:28.233348+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=long vol=NORMAL trend=MIXED session=ASIA closed=False,S93 FVG Scalp
+2026-08-11 00:00:28.237976+00:00,START,trend: always_on: regime-independent | d1=ranging h4=long vol=NORMAL trend=MIXED session=ASIA closed=False,Challenge XAU H4 Trend
+2026-08-11 21:00:29.446111+00:00,PAUSE,trend: market closed | d1=ranging h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-11 21:00:29.451090+00:00,PAUSE,scalping: market closed | d1=ranging h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-11 21:00:29.455397+00:00,PAUSE,scalping: market closed | d1=ranging h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-11 21:00:29.459622+00:00,PAUSE,trend: market closed | d1=ranging h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Challenge XAU H4 Trend
+2026-08-11 21:00:29.463709+00:00,PAUSE,copy: market closed | d1=ranging h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-11 21:00:29.467155+00:00,PAUSE,reversal: market closed | d1=ranging h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-12 00:00:28.446263+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=long vol=NORMAL trend=RANGING session=ASIA closed=False,S99 MSS FVG Reversal
+2026-08-12 00:00:28.451325+00:00,START,trend: always_on: regime-independent | d1=ranging h4=long vol=NORMAL trend=RANGING session=ASIA closed=False,S94 Sweep Reversal
+2026-08-12 00:00:28.456288+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=long vol=NORMAL trend=RANGING session=ASIA closed=False,S100 M3 Combo Scalper
+2026-08-12 00:00:28.460855+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=long vol=NORMAL trend=RANGING session=ASIA closed=False,S93 FVG Scalp
+2026-08-12 00:00:28.465301+00:00,START,trend: always_on: regime-independent | d1=ranging h4=long vol=NORMAL trend=RANGING session=ASIA closed=False,Challenge XAU H4 Trend
+2026-08-12 00:00:28.469204+00:00,START,copy: always_on: regime-independent | d1=ranging h4=long vol=NORMAL trend=RANGING session=ASIA closed=False,Neymar Telegram Copy
+2026-08-12 09:11:27.585585+00:00,KILL_SWITCH,daily realized P&L -211.00 USD <= -150.00 — pausing all armed strategies until next UTC day,
+2026-08-12 09:11:27.593831+00:00,PAUSE,trend: kill-switch active (daily P&L -211.00 USD) | d1=ranging h4=long vol=NORMAL trend=MIXED session=LONDON closed=False,S94 Sweep Reversal
+2026-08-12 09:11:27.598671+00:00,PAUSE,scalping: kill-switch active (daily P&L -211.00 USD) | d1=ranging h4=long vol=NORMAL trend=MIXED session=LONDON closed=False,S100 M3 Combo Scalper
+2026-08-12 09:11:27.603169+00:00,PAUSE,scalping: kill-switch active (daily P&L -211.00 USD) | d1=ranging h4=long vol=NORMAL trend=MIXED session=LONDON closed=False,S93 FVG Scalp
+2026-08-12 09:11:27.607708+00:00,PAUSE,trend: kill-switch active (daily P&L -211.00 USD) | d1=ranging h4=long vol=NORMAL trend=MIXED session=LONDON closed=False,Challenge XAU H4 Trend
+2026-08-12 09:11:27.612364+00:00,PAUSE,copy: kill-switch active (daily P&L -211.00 USD) | d1=ranging h4=long vol=NORMAL trend=MIXED session=LONDON closed=False,Neymar Telegram Copy
+2026-08-12 09:11:27.618011+00:00,PAUSE,reversal: kill-switch active (daily P&L -211.00 USD) | d1=ranging h4=long vol=NORMAL trend=MIXED session=LONDON closed=False,S99 MSS FVG Reversal
+2026-08-13 18:28:22.112090+00:00,INFO,kill-switch auto-reset (tripped 2026-08-12),
+2026-08-13 18:28:22.167258+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=MIXED session=NY closed=False,S93 FVG Scalp
+2026-08-13 18:28:22.183662+00:00,START,copy: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=MIXED session=NY closed=False,Neymar Telegram Copy
+2026-08-13 18:28:22.196669+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=MIXED session=NY closed=False,S99 MSS FVG Reversal
+2026-08-13 18:28:22.227024+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=MIXED session=NY closed=False,S94 Sweep Reversal
+2026-08-13 18:28:22.240630+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=HIGH trend=MIXED session=NY closed=False,S100 M3 Combo Scalper
+2026-08-13 21:00:18.143738+00:00,PAUSE,reversal: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-13 21:00:18.148670+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-13 21:00:18.154164+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-13 21:00:18.158832+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-13 21:00:18.162644+00:00,PAUSE,copy: market closed | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-13 22:00:19.412653+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-13 22:00:19.417826+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-13 22:00:19.422277+00:00,START,copy: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-13 22:00:19.426672+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-13 22:00:19.431100+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-14 21:00:18.122082+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-14 21:00:18.127082+00:00,PAUSE,copy: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-14 21:00:18.132165+00:00,PAUSE,reversal: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-14 21:00:18.137144+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-14 21:00:18.141137+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-16 22:00:20.980159+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-16 22:00:20.988462+00:00,START,copy: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-16 22:00:20.992629+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-16 22:00:20.996927+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-16 22:00:21.000585+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-17 21:00:18.308728+00:00,PAUSE,copy: market closed | d1=ranging h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-17 21:00:18.313103+00:00,PAUSE,reversal: market closed | d1=ranging h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-17 21:00:18.317080+00:00,PAUSE,trend: market closed | d1=ranging h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-17 21:00:18.321525+00:00,PAUSE,scalping: market closed | d1=ranging h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-17 21:00:18.325220+00:00,PAUSE,scalping: market closed | d1=ranging h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-17 22:00:20.469184+00:00,START,copy: always_on: regime-independent | d1=ranging h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-17 22:00:20.474576+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-17 22:00:20.479276+00:00,START,trend: always_on: regime-independent | d1=ranging h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-17 22:00:20.484063+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-17 22:00:20.488630+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-18 09:24:19.056353+00:00,KILL_SWITCH,daily realized P&L -233.00 USD <= -150.00 — pausing all armed strategies until next UTC day,
+2026-08-18 09:24:19.067083+00:00,PAUSE,trend: kill-switch active (daily P&L -233.00 USD) | d1=bullish h4=short vol=NORMAL trend=MIXED session=LONDON closed=False,S94 Sweep Reversal
+2026-08-18 09:24:19.073707+00:00,PAUSE,scalping: kill-switch active (daily P&L -233.00 USD) | d1=bullish h4=short vol=NORMAL trend=MIXED session=LONDON closed=False,S100 M3 Combo Scalper
+2026-08-18 09:24:19.078714+00:00,PAUSE,scalping: kill-switch active (daily P&L -233.00 USD) | d1=bullish h4=short vol=NORMAL trend=MIXED session=LONDON closed=False,S93 FVG Scalp
+2026-08-18 09:24:19.083313+00:00,PAUSE,copy: kill-switch active (daily P&L -233.00 USD) | d1=bullish h4=short vol=NORMAL trend=MIXED session=LONDON closed=False,Neymar Telegram Copy
+2026-08-18 09:24:19.087201+00:00,PAUSE,reversal: kill-switch active (daily P&L -233.00 USD) | d1=bullish h4=short vol=NORMAL trend=MIXED session=LONDON closed=False,S99 MSS FVG Reversal
+2026-08-19 00:00:20.785017+00:00,INFO,kill-switch auto-reset (tripped 2026-08-18),
+2026-08-19 00:00:20.798262+00:00,START,reversal: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S99 MSS FVG Reversal
+2026-08-19 00:00:20.804944+00:00,START,trend: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S94 Sweep Reversal
+2026-08-19 00:00:20.810970+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S100 M3 Combo Scalper
+2026-08-19 00:00:20.815637+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S93 FVG Scalp
+2026-08-19 00:00:20.819920+00:00,START,copy: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,Neymar Telegram Copy
+2026-08-19 21:00:21.063015+00:00,PAUSE,reversal: market closed | d1=bullish h4=long vol=EXTREME trend=TRENDING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-19 21:00:21.068616+00:00,PAUSE,trend: market closed | d1=bullish h4=long vol=EXTREME trend=TRENDING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-19 21:00:21.074276+00:00,PAUSE,scalping: market closed | d1=bullish h4=long vol=EXTREME trend=TRENDING session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-19 21:00:21.079134+00:00,PAUSE,scalping: market closed | d1=bullish h4=long vol=EXTREME trend=TRENDING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-19 21:00:21.084100+00:00,PAUSE,copy: market closed | d1=bullish h4=long vol=EXTREME trend=TRENDING session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-19 22:00:19.964124+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=long vol=EXTREME trend=TRENDING session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-19 22:00:19.970405+00:00,START,copy: always_on: regime-independent | d1=bullish h4=long vol=EXTREME trend=TRENDING session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-19 22:00:19.974919+00:00,START,reversal: always_on: regime-independent | d1=bullish h4=long vol=EXTREME trend=TRENDING session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-19 22:00:19.979308+00:00,START,trend: always_on: regime-independent | d1=bullish h4=long vol=EXTREME trend=TRENDING session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-19 22:00:19.982851+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=long vol=EXTREME trend=TRENDING session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-20 21:00:22.972465+00:00,PAUSE,scalping: market closed | d1=bullish h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-20 21:00:22.980688+00:00,PAUSE,copy: market closed | d1=bullish h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-20 21:00:22.985167+00:00,PAUSE,reversal: market closed | d1=bullish h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-20 21:00:22.990798+00:00,PAUSE,trend: market closed | d1=bullish h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-20 21:00:22.994936+00:00,PAUSE,scalping: market closed | d1=bullish h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-20 22:00:19.228919+00:00,START,copy: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-20 22:00:19.233818+00:00,START,reversal: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-20 22:00:19.238560+00:00,START,trend: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-20 22:00:19.246308+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-20 22:00:19.250180+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-21 21:00:19.327121+00:00,PAUSE,trend: market closed | d1=bullish h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-21 21:00:19.332783+00:00,PAUSE,scalping: market closed | d1=bullish h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-21 21:00:19.337695+00:00,PAUSE,scalping: market closed | d1=bullish h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-21 21:00:19.342481+00:00,PAUSE,copy: market closed | d1=bullish h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-21 21:00:19.346589+00:00,PAUSE,reversal: market closed | d1=bullish h4=long vol=HIGH trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-23 22:00:19.163672+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-23 22:00:19.170570+00:00,START,copy: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-23 22:00:19.175589+00:00,START,reversal: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-23 22:00:19.179779+00:00,START,trend: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-23 22:00:19.184141+00:00,START,copy: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Neymar VIP
+2026-08-23 22:00:19.187774+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-24 21:00:20.129114+00:00,PAUSE,trend: market closed | d1=bullish h4=long vol=HIGH trend=RANGING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-24 21:00:20.134259+00:00,PAUSE,copy: market closed | d1=bullish h4=long vol=HIGH trend=RANGING session=ROLLOVER closed=True,Neymar VIP
+2026-08-24 21:00:20.139484+00:00,PAUSE,scalping: market closed | d1=bullish h4=long vol=HIGH trend=RANGING session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-24 21:00:20.143777+00:00,PAUSE,scalping: market closed | d1=bullish h4=long vol=HIGH trend=RANGING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-24 21:00:20.148440+00:00,PAUSE,copy: market closed | d1=bullish h4=long vol=HIGH trend=RANGING session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-24 21:00:20.152057+00:00,PAUSE,reversal: market closed | d1=bullish h4=long vol=HIGH trend=RANGING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-24 22:00:19.669738+00:00,START,trend: always_on: regime-independent | d1=bullish h4=long vol=HIGH trend=RANGING session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-24 22:00:19.674579+00:00,START,copy: always_on: regime-independent | d1=bullish h4=long vol=HIGH trend=RANGING session=ROLLOVER closed=False,Neymar VIP
+2026-08-24 22:00:19.679702+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=long vol=HIGH trend=RANGING session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-24 22:00:19.684391+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=long vol=HIGH trend=RANGING session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-24 22:00:19.691590+00:00,START,copy: always_on: regime-independent | d1=bullish h4=long vol=HIGH trend=RANGING session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-24 22:00:19.695721+00:00,START,reversal: always_on: regime-independent | d1=bullish h4=long vol=HIGH trend=RANGING session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-25 13:23:18.856972+00:00,KILL_SWITCH,daily realized P&L -178.00 USD <= -150.00 — pausing all armed strategies until next UTC day,
+2026-08-25 13:23:18.868369+00:00,PAUSE,scalping: kill-switch active (daily P&L -178.00 USD) | d1=bullish h4=long vol=NORMAL trend=RANGING session=OVERLAP closed=False,S100 M3 Combo Scalper
+2026-08-25 13:23:18.873181+00:00,PAUSE,scalping: kill-switch active (daily P&L -178.00 USD) | d1=bullish h4=long vol=NORMAL trend=RANGING session=OVERLAP closed=False,S93 FVG Scalp
+2026-08-25 13:23:18.877642+00:00,PAUSE,copy: kill-switch active (daily P&L -178.00 USD) | d1=bullish h4=long vol=NORMAL trend=RANGING session=OVERLAP closed=False,Neymar Telegram Copy
+2026-08-25 13:23:18.883743+00:00,PAUSE,reversal: kill-switch active (daily P&L -178.00 USD) | d1=bullish h4=long vol=NORMAL trend=RANGING session=OVERLAP closed=False,S99 MSS FVG Reversal
+2026-08-25 13:23:18.888458+00:00,PAUSE,trend: kill-switch active (daily P&L -178.00 USD) | d1=bullish h4=long vol=NORMAL trend=RANGING session=OVERLAP closed=False,S94 Sweep Reversal
+2026-08-25 13:23:18.892207+00:00,PAUSE,copy: kill-switch active (daily P&L -178.00 USD) | d1=bullish h4=long vol=NORMAL trend=RANGING session=OVERLAP closed=False,Neymar VIP
+2026-08-26 00:00:19.929378+00:00,INFO,kill-switch auto-reset (tripped 2026-08-25),
+2026-08-26 00:00:19.938373+00:00,START,copy: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=RANGING session=ASIA closed=False,Neymar Telegram Copy
+2026-08-26 00:00:19.944413+00:00,START,reversal: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=RANGING session=ASIA closed=False,S99 MSS FVG Reversal
+2026-08-26 00:00:19.948883+00:00,START,trend: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=RANGING session=ASIA closed=False,S94 Sweep Reversal
+2026-08-26 00:00:19.953265+00:00,START,copy: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=RANGING session=ASIA closed=False,Neymar VIP
+2026-08-26 00:00:19.957886+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=RANGING session=ASIA closed=False,S100 M3 Combo Scalper
+2026-08-26 00:00:19.961989+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=long vol=NORMAL trend=RANGING session=ASIA closed=False,S93 FVG Scalp
+2026-08-26 21:00:21.260581+00:00,PAUSE,reversal: market closed | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-26 21:00:21.265205+00:00,PAUSE,trend: market closed | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-26 21:00:21.269446+00:00,PAUSE,copy: market closed | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Neymar VIP
+2026-08-26 21:00:21.274261+00:00,PAUSE,scalping: market closed | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-26 21:00:21.279014+00:00,PAUSE,scalping: market closed | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-26 21:00:21.282557+00:00,PAUSE,copy: market closed | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-26 22:00:20.796272+00:00,START,copy: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-26 22:00:20.801217+00:00,START,reversal: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-26 22:00:20.805951+00:00,START,trend: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-26 22:00:20.810434+00:00,START,copy: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Neymar VIP
+2026-08-26 22:00:20.815334+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-26 22:00:20.819327+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-27 21:00:20.228202+00:00,PAUSE,trend: market closed | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-27 21:00:20.236889+00:00,PAUSE,copy: market closed | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=True,Neymar VIP
+2026-08-27 21:00:20.242207+00:00,PAUSE,scalping: market closed | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-27 21:00:20.247284+00:00,PAUSE,scalping: market closed | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-27 21:00:20.251547+00:00,PAUSE,copy: market closed | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-27 21:00:20.255108+00:00,PAUSE,reversal: market closed | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-27 22:00:21.379723+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-27 22:00:21.384588+00:00,START,copy: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-27 22:00:21.390350+00:00,START,reversal: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-27 22:00:21.395082+00:00,START,trend: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-27 22:00:21.399429+00:00,START,copy: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=False,Neymar VIP
+2026-08-27 22:00:21.403612+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-28 12:27:19.445785+00:00,KILL_SWITCH,daily realized P&L -369.00 USD <= -250.00 — pausing all armed strategies until next UTC day,
+2026-08-28 12:27:19.456453+00:00,PAUSE,copy: kill-switch active (daily P&L -369.00 USD) | d1=bullish h4=short vol=NORMAL trend=RANGING session=LONDON closed=False,Neymar VIP
+2026-08-28 12:27:19.461489+00:00,PAUSE,scalping: kill-switch active (daily P&L -369.00 USD) | d1=bullish h4=short vol=NORMAL trend=RANGING session=LONDON closed=False,S100 M3 Combo Scalper
+2026-08-28 12:27:19.465969+00:00,PAUSE,scalping: kill-switch active (daily P&L -369.00 USD) | d1=bullish h4=short vol=NORMAL trend=RANGING session=LONDON closed=False,S93 FVG Scalp
+2026-08-28 12:27:19.473199+00:00,PAUSE,copy: kill-switch active (daily P&L -369.00 USD) | d1=bullish h4=short vol=NORMAL trend=RANGING session=LONDON closed=False,Neymar Telegram Copy
+2026-08-28 12:27:19.477460+00:00,PAUSE,reversal: kill-switch active (daily P&L -369.00 USD) | d1=bullish h4=short vol=NORMAL trend=RANGING session=LONDON closed=False,S99 MSS FVG Reversal
+2026-08-28 12:27:19.481139+00:00,PAUSE,trend: kill-switch active (daily P&L -369.00 USD) | d1=bullish h4=short vol=NORMAL trend=RANGING session=LONDON closed=False,S94 Sweep Reversal
+2026-08-29 00:00:21.081922+00:00,INFO,kill-switch auto-reset (tripped 2026-08-28),
+2026-08-30 22:00:20.799496+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=neutral vol=EXTREME trend=TRENDING session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-30 22:00:20.806011+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=neutral vol=EXTREME trend=TRENDING session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-30 22:00:20.811843+00:00,START,copy: always_on: regime-independent | d1=bullish h4=neutral vol=EXTREME trend=TRENDING session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-30 22:00:20.817051+00:00,START,reversal: always_on: regime-independent | d1=bullish h4=neutral vol=EXTREME trend=TRENDING session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-08-30 22:00:20.821707+00:00,START,trend: always_on: regime-independent | d1=bullish h4=neutral vol=EXTREME trend=TRENDING session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-30 22:00:20.825875+00:00,START,copy: always_on: regime-independent | d1=bullish h4=neutral vol=EXTREME trend=TRENDING session=ROLLOVER closed=False,Neymar VIP
+2026-08-31 21:00:22.638345+00:00,PAUSE,reversal: market closed | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-08-31 21:00:22.644225+00:00,PAUSE,trend: market closed | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-08-31 21:00:22.648365+00:00,PAUSE,copy: market closed | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=True,Neymar VIP
+2026-08-31 21:00:22.653217+00:00,PAUSE,scalping: market closed | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-08-31 21:00:22.657938+00:00,PAUSE,scalping: market closed | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-08-31 21:00:22.662804+00:00,PAUSE,copy: market closed | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-08-31 22:00:21.228754+00:00,START,trend: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-08-31 22:00:21.234463+00:00,START,copy: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=False,Neymar VIP
+2026-08-31 22:00:21.239794+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-08-31 22:00:21.247344+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S93 FVG Scalp
+2026-08-31 22:00:21.252355+00:00,START,copy: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-08-31 22:00:21.256290+00:00,START,reversal: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=RANGING session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-09-01 21:00:21.419474+00:00,PAUSE,scalping: market closed | d1=bullish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-09-01 21:00:21.424894+00:00,PAUSE,scalping: market closed | d1=bullish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-09-01 21:00:21.429327+00:00,PAUSE,copy: market closed | d1=bullish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-09-01 21:00:21.433769+00:00,PAUSE,reversal: market closed | d1=bullish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-09-01 21:00:21.438425+00:00,PAUSE,trend: market closed | d1=bullish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-09-01 21:00:21.442634+00:00,PAUSE,copy: market closed | d1=bullish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=True,Neymar VIP
+2026-09-01 22:00:21.265571+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-09-01 22:00:21.270888+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-09-01 22:00:21.276150+00:00,START,copy: always_on: regime-independent | d1=bullish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-09-01 22:00:21.280738+00:00,START,reversal: always_on: regime-independent | d1=bullish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-09-01 22:00:21.284974+00:00,START,trend: always_on: regime-independent | d1=bullish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-09-01 22:00:21.289045+00:00,START,copy: always_on: regime-independent | d1=bullish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=False,Neymar VIP
+2026-09-02 21:00:21.275511+00:00,PAUSE,trend: market closed | d1=bullish h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-09-02 21:00:21.280077+00:00,PAUSE,copy: market closed | d1=bullish h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Neymar VIP
+2026-09-02 21:00:21.284521+00:00,PAUSE,scalping: market closed | d1=bullish h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-09-02 21:00:21.288915+00:00,PAUSE,scalping: market closed | d1=bullish h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-09-02 21:00:21.293007+00:00,PAUSE,copy: market closed | d1=bullish h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-09-02 21:00:21.296866+00:00,PAUSE,reversal: market closed | d1=bullish h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-09-02 22:00:21.457397+00:00,START,reversal: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-09-02 22:00:21.462787+00:00,START,trend: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-09-02 22:00:21.468958+00:00,START,copy: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Neymar VIP
+2026-09-02 22:00:21.474146+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-09-02 22:00:21.479567+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-09-02 22:00:21.485737+00:00,START,copy: always_on: regime-independent | d1=bullish h4=short vol=NORMAL trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-09-03 21:00:21.113416+00:00,PAUSE,trend: market closed | d1=bullish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-09-03 21:00:21.117916+00:00,PAUSE,copy: market closed | d1=bullish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,Neymar VIP
+2026-09-03 21:00:21.122386+00:00,PAUSE,scalping: market closed | d1=bullish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-09-03 21:00:21.126575+00:00,PAUSE,scalping: market closed | d1=bullish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-09-03 21:00:21.131837+00:00,PAUSE,copy: market closed | d1=bullish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-09-03 21:00:21.135310+00:00,PAUSE,reversal: market closed | d1=bullish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-09-04 00:00:21.318111+00:00,START,trend: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S94 Sweep Reversal
+2026-09-04 00:00:21.324343+00:00,START,copy: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,Neymar VIP
+2026-09-04 00:00:21.332331+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S100 M3 Combo Scalper
+2026-09-04 00:00:21.338611+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S93 FVG Scalp
+2026-09-04 00:00:21.345401+00:00,START,copy: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,Neymar Telegram Copy
+2026-09-04 00:00:21.350362+00:00,START,reversal: always_on: regime-independent | d1=bullish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S99 MSS FVG Reversal
+2026-09-04 21:00:21.288877+00:00,PAUSE,scalping: market closed | d1=bullish h4=neutral vol=EXTREME trend=RANGING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-09-04 21:00:21.293484+00:00,PAUSE,copy: market closed | d1=bullish h4=neutral vol=EXTREME trend=RANGING session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-09-04 21:00:21.297475+00:00,PAUSE,reversal: market closed | d1=bullish h4=neutral vol=EXTREME trend=RANGING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-09-04 21:00:21.301459+00:00,PAUSE,trend: market closed | d1=bullish h4=neutral vol=EXTREME trend=RANGING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-09-04 21:00:21.306017+00:00,PAUSE,copy: market closed | d1=bullish h4=neutral vol=EXTREME trend=RANGING session=ROLLOVER closed=True,Neymar VIP
+2026-09-04 21:00:21.310065+00:00,PAUSE,scalping: market closed | d1=bullish h4=neutral vol=EXTREME trend=RANGING session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-09-06 22:00:21.270018+00:00,START,copy: always_on: regime-independent | d1=bullish h4=neutral vol=EXTREME trend=RANGING session=ROLLOVER closed=False,Neymar VIP
+2026-09-06 22:00:21.277008+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=neutral vol=EXTREME trend=RANGING session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-09-06 22:00:21.281507+00:00,START,scalping: always_on: regime-independent | d1=bullish h4=neutral vol=EXTREME trend=RANGING session=ROLLOVER closed=False,S93 FVG Scalp
+2026-09-06 22:00:21.287373+00:00,START,copy: always_on: regime-independent | d1=bullish h4=neutral vol=EXTREME trend=RANGING session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-09-06 22:00:21.291873+00:00,START,reversal: always_on: regime-independent | d1=bullish h4=neutral vol=EXTREME trend=RANGING session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-09-06 22:00:21.297200+00:00,START,trend: always_on: regime-independent | d1=bullish h4=neutral vol=EXTREME trend=RANGING session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-09-07 21:00:21.917018+00:00,PAUSE,copy: market closed | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-09-07 21:00:21.922847+00:00,PAUSE,reversal: market closed | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-09-07 21:00:21.928265+00:00,PAUSE,trend: market closed | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-09-07 21:00:21.933108+00:00,PAUSE,copy: market closed | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=True,Neymar VIP
+2026-09-07 21:00:21.938220+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-09-07 21:00:21.942602+00:00,PAUSE,scalping: market closed | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-09-07 22:00:22.203289+00:00,START,copy: always_on: regime-independent | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-09-07 22:00:22.208318+00:00,START,reversal: always_on: regime-independent | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-09-07 22:00:22.212504+00:00,START,trend: always_on: regime-independent | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-09-07 22:00:22.216547+00:00,START,copy: always_on: regime-independent | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=False,Neymar VIP
+2026-09-07 22:00:22.221203+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-09-07 22:00:22.224955+00:00,START,scalping: always_on: regime-independent | d1=ranging h4=neutral vol=LOW trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-09-08 21:00:27.058914+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-09-08 21:00:27.064718+00:00,PAUSE,copy: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-09-08 21:00:27.069010+00:00,PAUSE,reversal: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-09-08 21:00:27.073914+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-09-08 21:00:27.078257+00:00,PAUSE,copy: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Neymar VIP
+2026-09-08 21:00:27.082256+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-09-09 00:00:22.042592+00:00,START,copy: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,Neymar VIP
+2026-09-09 00:00:22.055500+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S100 M3 Combo Scalper
+2026-09-09 00:00:22.062494+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S93 FVG Scalp
+2026-09-09 00:00:22.068533+00:00,START,copy: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,Neymar Telegram Copy
+2026-09-09 00:00:22.076086+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S99 MSS FVG Reversal
+2026-09-09 00:00:22.081994+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S94 Sweep Reversal
+2026-09-09 12:15:24.057602+00:00,KILL_SWITCH,daily realized P&L -311.00 USD <= -250.00 — pausing all armed strategies until next UTC day,
+2026-09-09 12:15:24.079849+00:00,PAUSE,reversal: kill-switch active (daily P&L -311.00 USD) | d1=bearish h4=neutral vol=LOW trend=MIXED session=LONDON closed=False,S99 MSS FVG Reversal
+2026-09-09 12:15:24.090414+00:00,PAUSE,trend: kill-switch active (daily P&L -311.00 USD) | d1=bearish h4=neutral vol=LOW trend=MIXED session=LONDON closed=False,S94 Sweep Reversal
+2026-09-09 12:15:24.104821+00:00,PAUSE,copy: kill-switch active (daily P&L -311.00 USD) | d1=bearish h4=neutral vol=LOW trend=MIXED session=LONDON closed=False,Neymar VIP
+2026-09-09 12:15:24.111889+00:00,PAUSE,scalping: kill-switch active (daily P&L -311.00 USD) | d1=bearish h4=neutral vol=LOW trend=MIXED session=LONDON closed=False,S100 M3 Combo Scalper
+2026-09-09 12:15:24.122172+00:00,PAUSE,scalping: kill-switch active (daily P&L -311.00 USD) | d1=bearish h4=neutral vol=LOW trend=MIXED session=LONDON closed=False,S93 FVG Scalp
+2026-09-09 12:15:24.128537+00:00,PAUSE,copy: kill-switch active (daily P&L -311.00 USD) | d1=bearish h4=neutral vol=LOW trend=MIXED session=LONDON closed=False,Neymar Telegram Copy
+2026-09-10 00:00:22.084714+00:00,INFO,kill-switch auto-reset (tripped 2026-09-09),
+2026-09-10 00:00:22.096459+00:00,START,trend: always_on: regime-independent | d1=bearish h4=short vol=NORMAL trend=MIXED session=ASIA closed=False,S94 Sweep Reversal
+2026-09-10 00:00:22.101667+00:00,START,copy: always_on: regime-independent | d1=bearish h4=short vol=NORMAL trend=MIXED session=ASIA closed=False,Neymar VIP
+2026-09-10 00:00:22.108252+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=short vol=NORMAL trend=MIXED session=ASIA closed=False,S100 M3 Combo Scalper
+2026-09-10 00:00:22.113216+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=short vol=NORMAL trend=MIXED session=ASIA closed=False,S93 FVG Scalp
+2026-09-10 00:00:22.117979+00:00,START,copy: always_on: regime-independent | d1=bearish h4=short vol=NORMAL trend=MIXED session=ASIA closed=False,Neymar Telegram Copy
+2026-09-10 00:00:22.122107+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=short vol=NORMAL trend=MIXED session=ASIA closed=False,S99 MSS FVG Reversal
+2026-09-10 21:00:22.216496+00:00,PAUSE,copy: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,Neymar VIP
+2026-09-10 21:00:22.221814+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-09-10 21:00:22.226425+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-09-10 21:00:22.232361+00:00,PAUSE,copy: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-09-10 21:00:22.238074+00:00,PAUSE,reversal: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-09-10 21:00:22.241891+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-09-10 22:00:22.213319+00:00,START,copy: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,Neymar VIP
+2026-09-10 22:00:22.218821+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-09-10 22:00:22.223369+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-09-10 22:00:22.227781+00:00,START,copy: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-09-10 22:00:22.232712+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-09-10 22:00:22.237199+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-09-11 21:00:22.932619+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-09-11 21:00:22.938371+00:00,PAUSE,copy: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,Neymar VIP
+2026-09-11 21:00:22.944534+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-09-11 21:00:22.949413+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-09-11 21:00:22.954047+00:00,PAUSE,copy: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-09-11 21:00:22.957839+00:00,PAUSE,reversal: market closed | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-09-13 22:00:22.664990+00:00,START,copy: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-09-13 22:00:22.670629+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-09-13 22:00:22.675945+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-09-13 22:00:22.680953+00:00,START,copy: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,Neymar VIP
+2026-09-13 22:00:22.685970+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-09-13 22:00:22.691285+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=HIGH trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-09-14 21:00:26.421058+00:00,PAUSE,copy: market closed | d1=bearish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=True,Neymar VIP
+2026-09-14 21:00:26.426695+00:00,PAUSE,scalping: market closed | d1=bearish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-09-14 21:00:26.432412+00:00,PAUSE,scalping: market closed | d1=bearish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-09-14 21:00:26.437365+00:00,PAUSE,copy: market closed | d1=bearish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-09-14 21:00:26.441618+00:00,PAUSE,reversal: market closed | d1=bearish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-09-14 21:00:26.445545+00:00,PAUSE,trend: market closed | d1=bearish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-09-14 22:00:24.164512+00:00,START,copy: always_on: regime-independent | d1=bearish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=False,Neymar VIP
+2026-09-14 22:00:24.174132+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-09-14 22:00:24.195388+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-09-14 22:00:24.209536+00:00,START,copy: always_on: regime-independent | d1=bearish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-09-14 22:00:24.218999+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-09-14 22:00:24.224090+00:00,START,trend: always_on: regime-independent | d1=bearish h4=short vol=HIGH trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-09-15 21:00:24.614918+00:00,PAUSE,copy: market closed | d1=bearish h4=short vol=LOW trend=RANGING session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-09-15 21:00:24.620438+00:00,PAUSE,reversal: market closed | d1=bearish h4=short vol=LOW trend=RANGING session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-09-15 21:00:24.625568+00:00,PAUSE,trend: market closed | d1=bearish h4=short vol=LOW trend=RANGING session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-09-15 21:00:24.630601+00:00,PAUSE,copy: market closed | d1=bearish h4=short vol=LOW trend=RANGING session=ROLLOVER closed=True,Neymar VIP
+2026-09-15 21:00:24.636354+00:00,PAUSE,scalping: market closed | d1=bearish h4=short vol=LOW trend=RANGING session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-09-15 21:00:24.642177+00:00,PAUSE,scalping: market closed | d1=bearish h4=short vol=LOW trend=RANGING session=ROLLOVER closed=True,S93 FVG Scalp
+2026-09-16 00:00:24.570481+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=RANGING session=ASIA closed=False,S94 Sweep Reversal
+2026-09-16 00:00:24.575601+00:00,START,copy: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=RANGING session=ASIA closed=False,Neymar VIP
+2026-09-16 00:00:24.580788+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=RANGING session=ASIA closed=False,S100 M3 Combo Scalper
+2026-09-16 00:00:24.585578+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=RANGING session=ASIA closed=False,S93 FVG Scalp
+2026-09-16 00:00:24.590363+00:00,START,copy: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=RANGING session=ASIA closed=False,Neymar Telegram Copy
+2026-09-16 00:00:24.594573+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=RANGING session=ASIA closed=False,S99 MSS FVG Reversal
+2026-09-16 21:00:25.021558+00:00,PAUSE,copy: market closed | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-09-16 21:00:25.036552+00:00,PAUSE,reversal: market closed | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-09-16 21:00:25.048899+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-09-16 21:00:25.064306+00:00,PAUSE,copy: market closed | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=True,Neymar VIP
+2026-09-16 21:00:25.091733+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-09-16 21:00:25.106762+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-09-16 22:00:24.498717+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=False,S93 FVG Scalp
+2026-09-16 22:00:24.505365+00:00,START,copy: always_on: regime-independent | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=False,Neymar Telegram Copy
+2026-09-16 22:00:24.510550+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=False,S99 MSS FVG Reversal
+2026-09-16 22:00:24.516906+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=False,S94 Sweep Reversal
+2026-09-16 22:00:24.521603+00:00,START,copy: always_on: regime-independent | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=False,Neymar VIP
+2026-09-16 22:00:24.526082+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=EXTREME trend=MIXED session=ROLLOVER closed=False,S100 M3 Combo Scalper
+2026-09-17 21:00:25.934011+00:00,PAUSE,copy: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Neymar Telegram Copy
+2026-09-17 21:00:25.939998+00:00,PAUSE,reversal: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S99 MSS FVG Reversal
+2026-09-17 21:00:25.944182+00:00,PAUSE,trend: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S94 Sweep Reversal
+2026-09-17 21:00:25.948170+00:00,PAUSE,copy: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,Neymar VIP
+2026-09-17 21:00:25.952439+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S100 M3 Combo Scalper
+2026-09-17 21:00:25.956260+00:00,PAUSE,scalping: market closed | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ROLLOVER closed=True,S93 FVG Scalp
+2026-09-18 00:00:24.780763+00:00,START,reversal: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S99 MSS FVG Reversal
+2026-09-18 00:00:24.785679+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S94 Sweep Reversal
+2026-09-18 00:00:24.790553+00:00,START,copy: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,Neymar VIP
+2026-09-18 00:00:24.796451+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S100 M3 Combo Scalper
+2026-09-18 00:00:24.800892+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,S93 FVG Scalp
+2026-09-18 00:00:24.806268+00:00,START,copy: always_on: regime-independent | d1=bearish h4=neutral vol=NORMAL trend=MIXED session=ASIA closed=False,Neymar Telegram Copy
+2026-09-18 04:46:24.509153+00:00,START,scalping: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=MIXED session=ASIA closed=False,Concept C03_FVG_FILL
+2026-09-18 04:46:24.514774+00:00,START,trend: always_on: regime-independent | d1=bearish h4=neutral vol=LOW trend=MIXED session=ASIA closed=False,Research OB_MIT_BIAS

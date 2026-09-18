@@ -1,0 +1,54 @@
+
+=== s93_fvg_scalp: sim-only harness trades n=23 (all harness 134; live-active windows 55) ===
+                      n   q45   m75
+cls                                
+kill_switch_pause    12 -36.0 -39.6
+live_active           2   2.8   2.2
+other_pause_or_down   9  -7.7 -10.4
+all harness trades by live-activity class:
+                       n   q45   m75
+cls                                 
+kill_switch_pause     12 -36.0 -39.6
+live_active          113  42.2  17.1
+other_pause_or_down    9  -7.7 -10.4
+harness trades matched to a live signal but outside live-active windows: 0 of 111
+
+=== s94_sweep_reversal: sim-only harness trades n=27 (all harness 174; live-active windows 54) ===
+                      n   q45   m75
+cls                                
+kill_switch_pause    10 -41.5 -44.5
+other_pause_or_down  17  63.2  58.1
+all harness trades by live-activity class:
+                       n    q45    m75
+cls                                   
+kill_switch_pause     10  -41.5  -44.5
+live_active          147 -103.4 -105.6
+other_pause_or_down   17   63.2   58.1
+harness trades matched to a live signal but outside live-active windows: 0 of 147
+
+=== s99_mss_fvg: sim-only harness trades n=37 (all harness 239; live-active windows 55) ===
+                      n   q45   m75
+cls                                
+kill_switch_pause    17 -25.8 -32.5
+other_pause_or_down  20   2.1  -3.9
+all harness trades by live-activity class:
+                       n   q45   m75
+cls                                 
+kill_switch_pause     17 -25.8 -32.5
+live_active          202  51.4  36.6
+other_pause_or_down   20   2.1  -3.9
+harness trades matched to a live signal but outside live-active windows: 0 of 202
+
+=== s100_m3_combo: sim-only harness trades n=229 (all harness 660; live-active windows 42) ===
+                       n   q45   m75
+cls                                 
+kill_switch_pause     29 -30.8  -2.8
+live_active            5   1.9   0.8
+other_pause_or_down  195 -70.0 -69.0
+all harness trades by live-activity class:
+                       n    q45    m75
+cls                                   
+kill_switch_pause     29  -30.8   -2.8
+live_active          436 -136.3 -167.8
+other_pause_or_down  195  -70.0  -69.0
+harness trades matched to a live signal but outside live-active windows: 0 of 431

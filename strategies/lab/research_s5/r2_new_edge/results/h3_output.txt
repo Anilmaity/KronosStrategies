@@ -1,0 +1,69 @@
+S5 bars 8,682,738; NY trading days with >=50% coverage 09-12 ET: 528; prep 5s
+
+=== H3 grid: range 09:45-10:00 ET, OCO 10:00-11:10, stop opposite edge, exit 12:00 ET ===
+  M=1.0: n=523 TRAIN n=318 PF@0.70=0.695 pts=-391.5 WR=46.9% | median risk 10.28 reward 9.36 slip 0.32 | stats {'days': 528, 'no_range': 0, 'no_trigger': 3, 'both_same_bar': 0, 'beyond_target': 2, 'gap_through': 0, 'no_bars': 0, 'bad_window': 0}
+  M=2.0: n=524 TRAIN n=319 PF@0.70=0.874 pts=-177.6 WR=40.8% | median risk 10.28 reward 19.06 slip 0.33 | stats {'days': 528, 'no_range': 0, 'no_trigger': 3, 'both_same_bar': 0, 'beyond_target': 1, 'gap_through': 0, 'no_bars': 0, 'bad_window': 0}
+
+SELECTED on TRAIN PF@0.70: M=2.0
+
+--- anatomy (primary arm) ---
+  trigger minute after 10:00: median 1.2 (IQR 0.2-5.9); share in the 10:00 minute 0.462
+  range median 9.79; risk median 10.28; reward 19.06; RR 1.90; fill slip beyond the edge median 0.33 (p90 1.69); spread at fill 0.66
+  side {'SELL': 281, 'BUY': 243}; outcome {'SL': 245, 'TIME': 193, 'TP': 86}; hold median 60.1 min
+
+=== JUDGED ARMS (TEST read once) ===
+  H3 primary r15 M=2.0         ALL   n=524  @0.45 PF 0.802 pts -671.3 WR 39.3% | @0.70 PF 0.769 pts -802.3 WR 38.9% | @0.80 PF 0.756 pts -854.7 WR 38.9%  {'SL': 245, 'TIME': 193, 'TP': 86}
+  H3 primary r15 M=2.0         TRAIN n=319  @0.45 PF 0.928 pts -97.9 WR 41.4% | @0.70 PF 0.874 pts -177.6 WR 40.8% | @0.80 PF 0.853 pts -209.5 WR 40.8%  {'SL': 138, 'TIME': 122, 'TP': 59}
+  H3 primary r15 M=2.0         TEST  n=205  @0.45 PF 0.718 pts -573.5 WR 36.1% | @0.70 PF 0.697 pts -624.7 WR 36.1% | @0.80 PF 0.689 pts -645.2 WR 36.1%  {'SL': 107, 'TIME': 71, 'TP': 27}
+  H3 primary r15 M=2.0         BARS  FAIL 3/6  n:True base:False stress:False train:True monthly:False (pos 0.2, max None) regime:True (corr 0.12, up -280.9, dn -390.4) | TRAIN sd 10.83 TEST MDE 1.51 pts/trade
+  r30 stats {'days': 528, 'no_range': 0, 'no_trigger': 25, 'both_same_bar': 0, 'beyond_target': 0, 'gap_through': 0, 'no_bars': 0, 'bad_window': 0}
+  H3 variant r30 M=2.0         ALL   n=503  @0.45 PF 0.789 pts -731.3 WR 44.3% | @0.70 PF 0.758 pts -857.1 WR 43.9% | @0.80 PF 0.746 pts -907.4 WR 43.9%  {'TIME': 317, 'SL': 149, 'TP': 37}
+  H3 variant r30 M=2.0         TRAIN n=304  @0.45 PF 0.896 pts -145.2 WR 45.7% | @0.70 PF 0.846 pts -221.2 WR 45.4% | @0.80 PF 0.827 pts -251.6 WR 45.4%  {'TIME': 189, 'SL': 88, 'TP': 27}
+  H3 variant r30 M=2.0         TEST  n=199  @0.45 PF 0.718 pts -586.1 WR 42.2% | @0.70 PF 0.698 pts -635.8 WR 41.7% | @0.80 PF 0.690 pts -655.7 WR 41.7%  {'TIME': 128, 'SL': 61, 'TP': 10}
+  H3 variant r30 M=2.0         BARS  FAIL 1/6  n:True base:False stress:False train:False monthly:False (pos 0.2, max None) regime:False (corr 0.52, up -190.7, dn -540.7) | TRAIN sd 11.14 TEST MDE 1.58 pts/trade
+
+--- other grid cell TEST @0.70 (record only) ---
+  M=1.0: TEST n=205 PF 0.663 pts -637.5
+  M=2.0: TEST n=205 PF 0.697 pts -624.7
+
+=== pre-declared splits of the primary arm (PF/pts @0.70) ===
+  primary side=BUY          TRAIN n=147  PF 0.915  pts    -49.8 | TEST n=96   PF 0.555  pts   -437.4
+  primary side=SELL         TRAIN n=172  PF 0.845  pts   -127.8 | TEST n=109  PF 0.827  pts   -187.3
+  primary weekday=Fri          TRAIN n=62   PF 0.81   pts    -61.6 | TEST n=40   PF 1.339  pts    +96.2
+  primary weekday=Mon          TRAIN n=64   PF 0.559  pts   -119.6 | TEST n=42   PF 0.581  pts   -170.5
+  primary weekday=Thu          TRAIN n=65   PF 1.403  pts    +90.1 | TEST n=39   PF 0.57   pts   -203.1
+  primary weekday=Tue          TRAIN n=65   PF 0.976  pts     -7.1 | TEST n=42   PF 0.596  pts   -180.3
+  primary weekday=Wed          TRAIN n=63   PF 0.723  pts    -79.3 | TEST n=42   PF 0.633  pts   -167.1
+  primary release_minute=10:00 burst  TRAIN n=154  PF 0.752  pts   -191.8 | TEST n=88   PF 0.728  pts   -233.2
+  primary release_minute=later        TRAIN n=165  PF 1.022  pts    +14.2 | TEST n=117  PF 0.675  pts   -391.5
+  primary year=2024         TRAIN n=86   PF 0.912  pts    -22.4 | TEST n=0    PF nan    pts     +0.0
+  primary year=2025         TRAIN n=233  PF 0.865  pts   -155.2 | TEST n=22   PF 0.86   pts    -28.5
+  primary year=2026         TRAIN n=0    PF nan    pts     +0.0 | TEST n=183  PF 0.68   pts   -596.2
+
+=== C-NOON control: range 11:45-12:00 ET, OCO 12:00-13:10, exit 14:00 ET ===
+  C-NOON stats {'days': 528, 'no_range': 0, 'no_trigger': 6, 'both_same_bar': 0, 'beyond_target': 0, 'gap_through': 0, 'no_bars': 0, 'bad_window': 0}; range median 5.69 vs primary 9.79
+  C-NOON r15 M=2.0             ALL   n=522  @0.45 PF 0.681 pts -730.0 WR 32.0% | @0.70 PF 0.638 pts -860.5 WR 31.2% | @0.80 PF 0.622 pts -912.7 WR 30.5%  {'SL': 286, 'TIME': 155, 'TP': 81}
+  C-NOON r15 M=2.0             TRAIN n=320  @0.45 PF 0.680 pts -301.1 WR 33.8% | @0.70 PF 0.617 pts -381.1 WR 32.5% | @0.80 PF 0.594 pts -413.1 WR 31.6%  {'SL': 167, 'TIME': 98, 'TP': 55}
+  C-NOON r15 M=2.0             TEST  n=202  @0.45 PF 0.682 pts -428.9 WR 29.2% | @0.70 PF 0.653 pts -479.4 WR 29.2% | @0.80 PF 0.642 pts -499.6 WR 28.7%  {'SL': 119, 'TIME': 57, 'TP': 26}
+  C-NOON r15 M=2.0             BARS  FAIL 1/6  n:True base:False stress:False train:False monthly:False (pos 0.2, max None) regime:False (corr 0.42, up -324.9, dn -405.1) | TRAIN sd 6.47 TEST MDE 0.91 pts/trade
+
+=== C-RAND control: 200 geometry-matched random draws per trade (same NY clock minute, day +-30) ===
+  primary: 104800 control rows, dropped 0
+  C-RAND primary ALL @0.45: real n=524 net=-671.3 PF=0.802 WR=39.3% | null (n_books=200) net mean=-579.6 p5=-1042.1 p95=-4.4 PF mean=0.821 p95=0.998 WR=39.0% | real at pct net=0.39 pf=0.45
+  C-RAND primary ALL @0.70: real n=524 net=-802.3 PF=0.769 WR=38.9% | null (n_books=200) net mean=-710.6 p5=-1173.1 p95=-135.4 PF mean=0.785 p95=0.955 WR=38.5% | real at pct net=0.39 pf=0.45
+  C-RAND primary TRAIN @0.45: real n=319 net=-97.9 PF=0.928 WR=41.4% | null (n_books=200) net mean=-296.0 p5=-584.0 p95=-14.2 PF mean=0.793 p95=0.989 WR=39.0% | real at pct net=0.86 pf=0.86
+  C-RAND primary TRAIN @0.70: real n=319 net=-177.6 PF=0.874 WR=40.8% | null (n_books=200) net mean=-375.8 p5=-663.7 p95=-94.0 PF mean=0.744 p95=0.929 WR=38.4% | real at pct net=0.86 pf=0.87
+  C-RAND primary TEST @0.45: real n=205 net=-573.5 PF=0.718 WR=36.1% | null (n_books=200) net mean=-283.5 p5=-738.7 p95=+129.4 PF mean=0.849 p95=1.085 WR=38.9% | real at pct net=0.14 pf=0.15
+  C-RAND primary TEST @0.70: real n=205 net=-624.7 PF=0.697 WR=36.1% | null (n_books=200) net mean=-334.8 p5=-790.0 p95=+78.2 PF mean=0.823 p95=1.050 WR=38.6% | real at pct net=0.14 pf=0.15
+  r30: 100600 control rows, dropped 0
+  C-RAND r30 ALL @0.45: real n=503 net=-731.3 PF=0.789 WR=44.3% | null (n_books=200) net mean=-487.3 p5=-1112.7 p95=+124.5 PF mean=0.857 p95=1.042 WR=43.3% | real at pct net=0.23 pf=0.27
+  C-RAND r30 ALL @0.70: real n=503 net=-857.1 PF=0.758 WR=43.9% | null (n_books=200) net mean=-613.0 p5=-1238.5 p95=-1.2 PF mean=0.823 p95=1.000 WR=42.6% | real at pct net=0.23 pf=0.28
+  C-RAND r30 TRAIN @0.45: real n=304 net=-145.2 PF=0.896 WR=45.7% | null (n_books=200) net mean=-248.1 p5=-544.6 p95=+69.5 PF mean=0.829 p95=1.058 WR=43.2% | real at pct net=0.73 pf=0.73
+  C-RAND r30 TRAIN @0.70: real n=304 net=-221.2 PF=0.846 WR=45.4% | null (n_books=200) net mean=-324.1 p5=-620.6 p95=-6.5 PF mean=0.781 p95=0.995 WR=42.4% | real at pct net=0.73 pf=0.73
+  C-RAND r30 TEST @0.45: real n=199 net=-586.1 PF=0.718 WR=42.2% | null (n_books=200) net mean=-239.1 p5=-773.5 p95=+307.1 PF mean=0.886 p95=1.174 WR=43.4% | real at pct net=0.15 pf=0.14
+  C-RAND r30 TEST @0.70: real n=199 net=-635.8 PF=0.698 WR=41.7% | null (n_books=200) net mean=-288.9 p5=-823.2 p95=+257.3 PF mean=0.862 p95=1.143 WR=43.0% | real at pct net=0.15 pf=0.14
+
+=== daily-R correlation with the book (primary, @0.70) ===
+  H3 primary daily-R corr: c03_fvg_fill +0.114, s14_ob_mit_bias +0.009, s93_fvg_scalp +0.021, s95_session_breakout -0.045
+
+done in 10s

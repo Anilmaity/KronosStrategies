@@ -1,0 +1,37 @@
+=== sim-with-drift-gate (market fill at bar-open+66 s, live drift budget, quote exits, +0.26 on SL) vs live, live-active windows ===
+
+--- s93_fvg_scalp ---
+harness live-active n 113: drift-gate accepts 65 (58%), rejects 48; live: generated-excl-cap placed share = 60 placed
+plain harness quote@0.45 : n 113  pts    +42.2  PF 1.14  pts/trade +0.373
+sim-with-drift-gate      : n 65   pts    +40.9  PF 1.25  pts/trade +0.629  mean fill adverse -0.697  WR 38%
+  gate-rejected in the sim : n 48   (adverse mean +1.34)
+LIVE (broker truth)      : n 60   pts    -18.8  PF 0.90  pts/trade -0.313  mean fill adverse -0.447  WR 38%
+  pts/trade 90% CI: sim-with-gate [-0.758, +2.104]  live [-2.378, +1.584]
+  matched PLACED pairs n 32: sim-with-gate +65.0 vs live +73.8 (per pair sim-live mean -0.276, median -0.220)
+
+--- s94_sweep_reversal ---
+harness live-active n 147: drift-gate accepts 84 (57%), rejects 63; live: generated-excl-cap placed share = 85 placed
+plain harness quote@0.45 : n 147  pts   -103.4  PF 0.82  pts/trade -0.703
+sim-with-drift-gate      : n 84   pts    -24.2  PF 0.91  pts/trade -0.288  mean fill adverse -0.662  WR 23%
+  gate-rejected in the sim : n 63   (adverse mean +1.88)
+LIVE (broker truth)      : n 85   pts    +34.1  PF 1.13  pts/trade +0.401  mean fill adverse -0.375  WR 25%
+  pts/trade 90% CI: sim-with-gate [-1.782, +1.297]  live [-1.112, +1.968]
+  matched PLACED pairs n 62: sim-with-gate +49.4 vs live +62.9 (per pair sim-live mean -0.217, median -0.190)
+
+--- s99_mss_fvg ---
+harness live-active n 202: drift-gate accepts 116 (57%), rejects 86; live: generated-excl-cap placed share = 102 placed
+plain harness quote@0.45 : n 202  pts    +51.4  PF 1.10  pts/trade +0.254
+sim-with-drift-gate      : n 116  pts    +66.9  PF 1.24  pts/trade +0.577  mean fill adverse -0.739  WR 40%
+  gate-rejected in the sim : n 86   (adverse mean +1.49)
+LIVE (broker truth)      : n 102  pts     +4.7  PF 1.02  pts/trade +0.046  mean fill adverse -0.349  WR 43%
+  pts/trade 90% CI: sim-with-gate [-0.524, +1.656]  live [-1.300, +1.279]
+  matched PLACED pairs n 70: sim-with-gate +13.1 vs live +13.6 (per pair sim-live mean -0.007, median -0.185)
+
+--- s100_m3_combo ---
+harness live-active n 436: drift-gate accepts 247 (57%), rejects 189; live: generated-excl-cap placed share = 268 placed
+plain harness quote@0.45 : n 436  pts   -136.3  PF 0.89  pts/trade -0.313
+sim-with-drift-gate      : n 247  pts    +62.0  PF 1.11  pts/trade +0.251  mean fill adverse -0.477  WR 27%
+  gate-rejected in the sim : n 189  (adverse mean +1.42)
+LIVE (broker truth)      : n 268  pts   +103.8  PF 1.17  pts/trade +0.387  mean fill adverse -0.362  WR 27%
+  pts/trade 90% CI: sim-with-gate [-0.413, +0.937]  live [-0.252, +1.047]
+  matched PLACED pairs n 176: sim-with-gate +8.4 vs live +66.1 (per pair sim-live mean -0.328, median -0.250)

@@ -1,0 +1,123 @@
+
+=== s93_fvg_scalp ===
+live generated 157 (excl. open_position_cap 155) | placed 61 | live closed trades 60 | harness trades 134
+live rejection reasons: PLACED 61, entry_drift 33, soft_daily_brake 19, metaapi_rejection 15, no_add_to_loser 12, duplicate_entry 8, news_blackout 6, open_position_cap 2, sl_too_tight 1
+harness trades by live status: PLACED 44, entry_drift 26, sim_only 23, soft_daily_brake 13, metaapi_rejection 12, no_add_to_loser 9, duplicate_entry 6, open_position_cap 1
+live PLACED matched to a harness trade: 44 / 61  (live-only 17)
+bar-open minus signal_at (s): median -65, p10 -72, p90 -62
+|harness entry - live signal entry| pts: median 0.00, p90 0.00, share <= 0.5: 100%
+TOTAL live pts -18.8 (PF 0.90, n 60, mean R -0.032) | harness quote@0.45 -1.4 (PF 1.00) | mid@0.75 -32.8 (PF 0.92)
+D8 decomposition of harness(quote@0.45) - live = +17.3:
+   harness pts of trades live duplicate_entry        n=6        -9.5   (mid@0.75    -11.3)
+   harness pts of trades live entry_drift            n=26      +54.9   (mid@0.75    +47.1)
+   harness pts of trades live metaapi_rejection      n=12      -21.7   (mid@0.75    -25.3)
+   harness pts of trades live no_add_to_loser        n=9        -7.5   (mid@0.75    -10.2)
+   harness pts of trades live open_position_cap      n=1        -8.3   (mid@0.75     -8.6)
+   harness pts of trades live sim_only               n=23      -40.8   (mid@0.75    -47.7)
+   harness pts of trades live soft_daily_brake       n=13       -4.5   (mid@0.75     +0.4)
+   minus live pts of live-only trades       n=16      +88.2
+   matched PLACED (sim - live) execution     n=44      -33.4   (sim q +36.0 vs live +69.4; mid +22.8)
+   sum of terms +17.3  (identity check vs +17.3)
+   matched pairs: outcome agreement 100%; per-pair (sim-live) pts median -0.51, mean -0.76; live PF 1.76 vs sim PF 1.34 on the SAME trades
+   crosstab sim outcome (rows) vs live exit (cols):
+live_kind  SL  TP
+q_outcome        
+SL         24   0
+TP          0  20
+   live trades by whether the harness reproduced them:
+          n    pts     meanR        pf
+matched                               
+False    16 -88.21 -0.479242  0.164994
+True     44  69.44  0.130472  1.761988
+
+=== s94_sweep_reversal ===
+live generated 216 (excl. open_position_cap 216) | placed 85 | live closed trades 85 | harness trades 174
+live rejection reasons: PLACED 85, sl_too_tight 57, entry_drift 42, soft_daily_brake 14, metaapi_rejection 9, news_blackout 6, no_add_to_loser 3
+harness trades by live status: PLACED 81, entry_drift 42, sim_only 27, soft_daily_brake 14, metaapi_rejection 9, no_add_to_loser 1
+live PLACED matched to a harness trade: 81 / 85  (live-only 4)
+bar-open minus signal_at (s): median -65, p10 -77, p90 -62
+|harness entry - live signal entry| pts: median 0.00, p90 0.00, share <= 0.5: 100%
+TOTAL live pts +34.1 (PF 1.13, n 85, mean R -0.162) | harness quote@0.45 -81.7 (PF 0.88) | mid@0.75 -92.0 (PF 0.87)
+D8 decomposition of harness(quote@0.45) - live = -115.8:
+   harness pts of trades live entry_drift            n=42      +27.8   (mid@0.75    +15.2)
+   harness pts of trades live metaapi_rejection      n=9       -62.6   (mid@0.75    -65.3)
+   harness pts of trades live no_add_to_loser        n=1        -4.7   (mid@0.75     -5.0)
+   harness pts of trades live sim_only               n=27      +21.7   (mid@0.75    +13.6)
+   harness pts of trades live soft_daily_brake       n=14      -52.5   (mid@0.75    -42.6)
+   minus live pts of live-only trades       n=4       +14.3
+   matched PLACED (sim - live) execution     n=81      -59.8   (sim q -11.4 vs live +48.4; mid -7.9)
+   sum of terms -115.8  (identity check vs -115.8)
+   matched pairs: outcome agreement 100%; per-pair (sim-live) pts median -0.44, mean -0.74; live PF 1.19 vs sim PF 0.96 on the SAME trades
+   crosstab sim outcome (rows) vs live exit (cols):
+live_kind  SL  TP
+q_outcome        
+SL         60   0
+TP          0  21
+   live trades by whether the harness reproduced them:
+          n    pts     meanR        pf
+matched                               
+False     4 -14.32 -4.090576  0.000000
+True     81  48.42  0.031937  1.193409
+
+=== s99_mss_fvg ===
+live generated 277 (excl. open_position_cap 273) | placed 102 | live closed trades 102 | harness trades 239
+live rejection reasons: PLACED 102, sl_too_tight 47, entry_drift 47, soft_daily_brake 31, no_add_to_loser 17, metaapi_rejection 15, news_blackout 8, duplicate_entry 6, open_position_cap 4
+harness trades by live status: PLACED 95, entry_drift 41, sim_only 37, soft_daily_brake 29, no_add_to_loser 16, metaapi_rejection 15, duplicate_entry 6
+live PLACED matched to a harness trade: 95 / 102  (live-only 7)
+bar-open minus signal_at (s): median -65, p10 -77, p90 -62
+|harness entry - live signal entry| pts: median 0.00, p90 0.00, share <= 0.5: 100%
+TOTAL live pts +4.7 (PF 1.02, n 102, mean R +0.026) | harness quote@0.45 +27.7 (PF 1.04) | mid@0.75 +0.2 (PF 1.00)
+D8 decomposition of harness(quote@0.45) - live = +22.9:
+   harness pts of trades live duplicate_entry        n=6       +15.9   (mid@0.75    +14.1)
+   harness pts of trades live entry_drift            n=41      +91.7   (mid@0.75    +79.4)
+   harness pts of trades live metaapi_rejection      n=15      +14.5   (mid@0.75    +10.0)
+   harness pts of trades live no_add_to_loser        n=16      +16.4   (mid@0.75    +23.0)
+   harness pts of trades live sim_only               n=37      -23.7   (mid@0.75    -36.5)
+   harness pts of trades live soft_daily_brake       n=29      -36.6   (mid@0.75    -24.8)
+   minus live pts of live-only trades       n=7        +5.0
+   matched PLACED (sim - live) execution     n=95      -60.3   (sim q -50.6 vs live +9.7; mid -65.1)
+   sum of terms +22.9  (identity check vs +22.9)
+   matched pairs: outcome agreement 96%; per-pair (sim-live) pts median -0.65, mean -0.63; live PF 1.04 vs sim PF 0.82 on the SAME trades
+   crosstab sim outcome (rows) vs live exit (cols):
+live_kind  SL  TP
+q_outcome        
+SL         52   3
+TIME        1   0
+TP          0  39
+   live trades by whether the harness reproduced them:
+          n   pts     meanR        pf
+matched                              
+False     7 -4.98 -1.176427  0.688165
+True     95  9.70  0.114592  1.037295
+
+=== s100_m3_combo ===
+live generated 629 (excl. open_position_cap 557) | placed 268 | live closed trades 268 | harness trades 660
+live rejection reasons: PLACED 268, entry_drift 117, sl_too_tight 83, open_position_cap 72, soft_daily_brake 56, metaapi_rejection 24, no_add_to_loser 8, duplicate_entry 1
+harness trades by live status: PLACED 235, sim_only 229, entry_drift 111, soft_daily_brake 48, metaapi_rejection 20, open_position_cap 10, no_add_to_loser 6, duplicate_entry 1
+live PLACED matched to a harness trade: 235 / 268  (live-only 33)
+bar-open minus signal_at (s): median -64, p10 -72, p90 -62
+|harness entry - live signal entry| pts: median 0.00, p90 0.00, share <= 0.5: 100%
+TOTAL live pts +103.8 (PF 1.17, n 268, mean R +0.018) | harness quote@0.45 -237.1 (PF 0.87) | mid@0.75 -239.7 (PF 0.87)
+D8 decomposition of harness(quote@0.45) - live = -340.9:
+   harness pts of trades live duplicate_entry        n=1        -4.5   (mid@0.75     -4.8)
+   harness pts of trades live entry_drift            n=111     +27.7   (mid@0.75    +22.3)
+   harness pts of trades live metaapi_rejection      n=20      -23.7   (mid@0.75    -22.5)
+   harness pts of trades live no_add_to_loser        n=6       +12.9   (mid@0.75    +11.1)
+   harness pts of trades live open_position_cap      n=10      -30.1   (mid@0.75    -33.1)
+   harness pts of trades live sim_only               n=229     -98.9   (mid@0.75    -71.0)
+   harness pts of trades live soft_daily_brake       n=48      +17.9   (mid@0.75     +1.0)
+   minus live pts of live-only trades       n=33      -23.5
+   matched PLACED (sim - live) execution     n=235    -218.6   (sim q -138.3 vs live +80.3; mid -142.6)
+   sum of terms -340.9  (identity check vs -340.9)
+   matched pairs: outcome agreement 94%; per-pair (sim-live) pts median -0.59, mean -0.93; live PF 1.15 vs sim PF 0.80 on the SAME trades
+   crosstab sim outcome (rows) vs live exit (cols):
+live_kind  ACTIVE   SL  TP
+q_outcome                 
+SL              0  167   3
+TIME            6    1   3
+TP              0    1  54
+   live trades by whether the harness reproduced them:
+           n     pts     meanR        pf
+matched                                 
+False     33  23.470  0.109125  1.359638
+True     235  80.305  0.005049  1.147863

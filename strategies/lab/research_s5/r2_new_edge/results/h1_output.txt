@@ -1,0 +1,83 @@
+S5 bars 8,682,738; trading days 527 (2024-09-02 -> 2026-09-17); load 1s
+
+=== H1 grid: London breach of the 00-07 Asian range, breach window 07-10 UTC ===
+  T=0   M=1.0: n=218 TRAIN n=146 PF@0.70=0.972 pts=-27.6 WR=34.9% | median risk 13.82 reward 25.54 | stats {'days': 527, 'no_range': 0, 'no_breach': 189, 'both_same_bar': 0, 'fail_hold': 120, 'fail_depth': 0, 'beyond_target': 0, 'no_bars': 0, 'bad_window': 0}
+  T=0   M=0.5: n=218 TRAIN n=146 PF@0.70=1.205 pts=146.1 WR=52.1% | median risk 13.82 reward 12.43 | stats {'days': 527, 'no_range': 0, 'no_breach': 189, 'both_same_bar': 0, 'fail_hold': 120, 'fail_depth': 0, 'beyond_target': 0, 'no_bars': 0, 'bad_window': 0}
+  T=30  M=1.0: n=97 TRAIN n=63 PF@0.70=1.521 pts=192.7 WR=46.0% | median risk 15.59 reward 25.20 | stats {'days': 527, 'no_range': 0, 'no_breach': 189, 'both_same_bar': 0, 'fail_hold': 241, 'fail_depth': 0, 'beyond_target': 0, 'no_bars': 0, 'bad_window': 0}
+  T=30  M=0.5: n=97 TRAIN n=63 PF@0.70=1.917 pts=214.4 WR=60.3% | median risk 15.59 reward 11.69 | stats {'days': 527, 'no_range': 0, 'no_breach': 189, 'both_same_bar': 0, 'fail_hold': 241, 'fail_depth': 0, 'beyond_target': 0, 'no_bars': 0, 'bad_window': 0}
+  T=60  M=1.0: n=68 TRAIN n=46 PF@0.70=1.666 pts=182.6 WR=47.8% | median risk 14.57 reward 24.98 | stats {'days': 527, 'no_range': 0, 'no_breach': 189, 'both_same_bar': 0, 'fail_hold': 270, 'fail_depth': 0, 'beyond_target': 0, 'no_bars': 0, 'bad_window': 0}
+  T=60  M=0.5: n=68 TRAIN n=46 PF@0.70=1.758 pts=129.4 WR=60.9% | median risk 14.57 reward 10.88 | stats {'days': 527, 'no_range': 0, 'no_breach': 189, 'both_same_bar': 0, 'fail_hold': 270, 'fail_depth': 0, 'beyond_target': 0, 'no_bars': 0, 'bad_window': 0}
+
+SELECTED on TRAIN PF@0.70 (M=1.0, TRAIN n>=80): T=0
+
+--- breach anatomy (T=0, M=1 arm; all fills) ---
+  breach minute after 07:00: median 34.9 (IQR 10.3-79.8)
+  depth at breach bar: median 0.390, spread 0.60; depth>=2 spreads share 0.151
+  range: median 26.6 pts; risk median 13.82; reward median 25.54; RR median 1.87
+  side: {'BUY': 116, 'SELL': 102}; outcome: {'SL': 113, 'TP': 57, 'TIME': 48}; hold median 332 min
+
+=== JUDGED ARMS (TEST read once) ===
+  H1 primary T=0 M=1.0         ALL   n=218  @0.45 PF 1.541 pts +999.9 WR 42.7% | @0.70 PF 1.503 pts +945.4 WR 42.2% | @0.80 PF 1.488 pts +923.6 WR 42.2%  {'SL': 113, 'TP': 57, 'TIME': 48}
+  H1 primary T=0 M=1.0         TRAIN n=146  @0.45 PF 1.009 pts +8.9 WR 35.6% | @0.70 PF 0.972 pts -27.6 WR 34.9% | @0.80 PF 0.958 pts -42.2 WR 34.9%  {'SL': 86, 'TP': 33, 'TIME': 27}
+  H1 primary T=0 M=1.0         TEST  n=72   @0.45 PF 2.125 pts +991.0 WR 56.9% | @0.70 PF 2.095 pts +973.0 WR 56.9% | @0.80 PF 2.084 pts +965.8 WR 56.9%  {'SL': 27, 'TP': 24, 'TIME': 21}
+  H1 primary T=0 M=1.0         BARS  PASS 6/6  n:True base:True stress:True train:True monthly:True (pos 0.8, max 0.42) regime:True (corr 0.09, up 554.7, dn 445.2) | TRAIN sd 16.31 TEST MDE 3.85 pts/trade
+  H1 secondary T=0 M=0.5       ALL   n=218  @0.45 PF 1.360 pts +545.2 WR 56.0% | @0.70 PF 1.319 pts +490.7 WR 55.5% | @0.80 PF 1.303 pts +468.9 WR 55.5%  {'TP': 113, 'SL': 88, 'TIME': 17}
+  H1 secondary T=0 M=0.5       TRAIN n=146  @0.45 PF 1.263 pts +182.6 WR 52.7% | @0.70 PF 1.205 pts +146.1 WR 52.1% | @0.80 PF 1.183 pts +131.5 WR 52.1%  {'TP': 75, 'SL': 64, 'TIME': 7}
+  H1 secondary T=0 M=0.5       TEST  n=72   @0.45 PF 1.442 pts +362.6 WR 62.5% | @0.70 PF 1.417 pts +344.6 WR 62.5% | @0.80 PF 1.407 pts +337.4 WR 62.5%  {'TP': 38, 'SL': 24, 'TIME': 10}
+  H1 secondary T=0 M=0.5       BARS  PASS 6/6  n:True base:True stress:True train:True monthly:True (pos 0.7, max 0.43) regime:True (corr 0.12, up 355.7, dn 189.5) | TRAIN sd 12.60 TEST MDE 2.97 pts/trade
+  depth arm stats: {'days': 527, 'no_range': 0, 'no_breach': 189, 'both_same_bar': 0, 'fail_hold': 120, 'fail_depth': 185, 'beyond_target': 0, 'no_bars': 0, 'bad_window': 0}
+  H1 depth T=0 M=1.0 d>=2sp    ALL   n=33   @0.45 PF 4.190 pts +842.0 WR 60.6% | @0.70 PF 4.120 pts +833.8 WR 60.6% | @0.80 PF 4.093 pts +830.5 WR 60.6%  {'TP': 15, 'SL': 12, 'TIME': 6}
+  H1 depth T=0 M=1.0 d>=2sp    TRAIN n=11   @0.45 PF 1.197 pts +20.8 WR 36.4% | @0.70 PF 1.169 pts +18.1 WR 36.4% | @0.80 PF 1.157 pts +17.0 WR 36.4%  {'SL': 7, 'TP': 3, 'TIME': 1}
+  H1 depth T=0 M=1.0 d>=2sp    TEST  n=22   @0.45 PF 6.178 pts +821.2 WR 72.7% | @0.70 PF 6.095 pts +815.7 WR 72.7% | @0.80 PF 6.062 pts +813.5 WR 72.7%  {'TP': 12, 'SL': 5, 'TIME': 5}
+  H1 depth T=0 M=1.0 d>=2sp    BARS  NEAR 5/6  n:False base:True stress:True train:True monthly:True (pos 0.8, max 0.38) regime:True (corr -0.16, up 356.8, dn 485.2) | TRAIN sd 25.26 TEST MDE 10.77 pts/trade
+
+--- full grid TEST @0.70 (record only; not judged) ---
+  T=0   M=1.0: TEST n=72 PF 2.095 pts 973.0
+  T=0   M=0.5: TEST n=72 PF 1.417 pts 344.6
+  T=30  M=1.0: TEST n=34 PF 2.818 pts 772.1
+  T=30  M=0.5: TEST n=34 PF 1.698 pts 268.9
+  T=60  M=1.0: TEST n=22 PF 2.835 pts 600.9
+  T=60  M=0.5: TEST n=22 PF 1.504 pts 149.5
+
+=== pre-declared splits of the primary arm (PF/pts @0.70) ===
+  primary side=BUY          TRAIN n=80   PF 1.287  pts   +133.3 | TEST n=36   PF 1.251  pts   +124.0
+  primary side=SELL         TRAIN n=66   PF 0.694  pts   -160.9 | TEST n=36   PF 3.158  pts   +848.9
+  primary d1_bias=against      TRAIN n=74   PF 0.974  pts    -13.5 | TEST n=32   PF 2.978  pts   +625.8
+  primary d1_bias=none         TRAIN n=4    PF 0.528  pts    -10.5 | TEST n=0    PF nan    pts     +0.0
+  primary d1_bias=with         TRAIN n=68   PF 0.992  pts     -3.7 | TEST n=40   PF 1.607  pts   +347.2
+  primary year=2024         TRAIN n=45   PF 0.645  pts    -92.8 | TEST n=0    PF nan    pts     +0.0
+  primary year=2025         TRAIN n=101  PF 1.089  pts    +65.2 | TEST n=8    PF 0.724  pts    -26.9
+  primary year=2026         TRAIN n=0    PF nan    pts     +0.0 | TEST n=64   PF 2.264  pts   +999.9
+
+=== C-PRE control: 00-04 range, first breach 04-07 UTC, same T/M, exit 20:55 ===
+  C-PRE T=0 M=1.0 stats {'days': 527, 'no_range': 0, 'no_breach': 124, 'both_same_bar': 0, 'fail_hold': 149, 'fail_depth': 0, 'beyond_target': 0, 'no_bars': 0, 'bad_window': 0}
+  C-PRE T=0 M=1.0              ALL   n=254  @0.45 PF 1.218 pts +491.2 WR 40.2% | @0.70 PF 1.186 pts +427.7 WR 40.2% | @0.80 PF 1.174 pts +402.3 WR 40.2%  {'SL': 146, 'TP': 90, 'TIME': 18}
+  C-PRE T=0 M=1.0              TRAIN n=153  @0.45 PF 0.961 pts -39.9 WR 38.6% | @0.70 PF 0.925 pts -78.1 WR 38.6% | @0.80 PF 0.911 pts -93.4 WR 38.6%  {'SL': 92, 'TP': 54, 'TIME': 7}
+  C-PRE T=0 M=1.0              TEST  n=101  @0.45 PF 1.429 pts +531.0 WR 42.6% | @0.70 PF 1.404 pts +505.8 WR 42.6% | @0.80 PF 1.394 pts +495.7 WR 42.6%  {'SL': 54, 'TP': 36, 'TIME': 11}
+  C-PRE T=0 M=1.0              BARS  NEAR 5/6  n:True base:True stress:True train:True monthly:False (pos 0.5, max 0.54) regime:True (corr 0.01, up 252.9, dn 238.3) | TRAIN sd 16.91 TEST MDE 3.36 pts/trade
+  C-PRE T=0 M=0.5 stats {'days': 527, 'no_range': 0, 'no_breach': 124, 'both_same_bar': 0, 'fail_hold': 149, 'fail_depth': 0, 'beyond_target': 0, 'no_bars': 0, 'bad_window': 0}
+  C-PRE T=0 M=0.5              ALL   n=254  @0.45 PF 1.038 pts +71.4 WR 53.1% | @0.70 PF 1.004 pts +7.9 WR 53.1% | @0.80 PF 0.991 pts -17.5 WR 53.1%  {'TP': 133, 'SL': 118, 'TIME': 3}
+  C-PRE T=0 M=0.5              TRAIN n=153  @0.45 PF 0.758 pts -205.4 WR 51.6% | @0.70 PF 0.719 pts -243.6 WR 51.6% | @0.80 PF 0.703 pts -258.9 WR 51.6%  {'TP': 78, 'SL': 73, 'TIME': 2}
+  C-PRE T=0 M=0.5              TEST  n=101  @0.45 PF 1.273 pts +276.8 WR 55.4% | @0.70 PF 1.246 pts +251.6 WR 55.4% | @0.80 PF 1.235 pts +241.5 WR 55.4%  {'TP': 55, 'SL': 45, 'TIME': 1}
+  C-PRE T=0 M=0.5              BARS  NEAR 5/6  n:True base:True stress:True train:False monthly:True (pos 0.6, max 0.45) regime:True (corr -0.19, up -116.8, dn 188.2) | TRAIN sd 12.93 TEST MDE 2.57 pts/trade
+
+=== C-RAND control: 200 geometry-matched random draws per trade ===
+  primary: 43596 control rows, dropped 4, 1s
+  C-RAND primary ALL @0.45: real n=218 net=+999.9 PF=1.541 WR=42.7% | null (n_books=200) net mean=-248.6 p5=-816.7 p95=+345.0 PF mean=0.896 p95=1.180 WR=37.5% | real at pct net=1.00 pf=1.00
+  C-RAND primary ALL @0.70: real n=218 net=+945.4 PF=1.503 WR=42.2% | null (n_books=200) net mean=-303.1 p5=-871.2 p95=+290.5 PF mean=0.873 p95=1.148 WR=37.3% | real at pct net=1.00 pf=1.00
+  C-RAND primary TRAIN @0.45: real n=146 net=+8.9 PF=1.009 WR=35.6% | null (n_books=200) net mean=-143.4 p5=-453.4 p95=+186.9 PF mean=0.876 p95=1.194 WR=36.6% | real at pct net=0.82 pf=0.82
+  C-RAND primary TRAIN @0.70: real n=146 net=-27.6 PF=0.972 WR=34.9% | null (n_books=200) net mean=-179.9 p5=-489.9 p95=+150.4 PF mean=0.844 p95=1.152 WR=36.3% | real at pct net=0.82 pf=0.81
+  C-RAND primary TEST @0.45: real n=72 net=+991.0 PF=2.125 WR=56.9% | null (n_books=200) net mean=-105.2 p5=-600.5 p95=+366.2 PF mean=0.933 p95=1.373 WR=39.3% | real at pct net=1.00 pf=1.00
+  C-RAND primary TEST @0.70: real n=72 net=+973.0 PF=2.095 WR=56.9% | null (n_books=200) net mean=-123.2 p5=-618.5 p95=+348.2 PF mean=0.918 p95=1.351 WR=39.3% | real at pct net=1.00 pf=1.00
+  depth: 6596 control rows, dropped 4, 0s
+  C-RAND depth ALL @0.45: real n=33 net=+842.0 PF=4.190 WR=60.6% | null (n_books=200) net mean=-18.2 p5=-315.8 p95=+402.1 PF mean=1.069 p95=2.328 WR=40.9% | real at pct net=1.00 pf=1.00
+  C-RAND depth ALL @0.70: real n=33 net=+833.8 PF=4.120 WR=60.6% | null (n_books=200) net mean=-26.4 p5=-324.1 p95=+393.8 PF mean=1.049 p95=2.281 WR=40.8% | real at pct net=1.00 pf=1.00
+  C-RAND depth TRAIN @0.45: real n=11 net=+20.8 PF=1.197 WR=36.4% | null (n_books=200) net mean=-15.3 p5=-122.3 p95=+100.5 PF mean=1.069 p95=2.706 WR=38.5% | real at pct net=0.69 pf=0.67
+  C-RAND depth TRAIN @0.70: real n=11 net=+18.1 PF=1.169 WR=36.4% | null (n_books=200) net mean=-18.0 p5=-125.0 p95=+97.7 PF mean=1.036 p95=2.610 WR=38.5% | real at pct net=0.69 pf=0.67
+  C-RAND depth TEST @0.45: real n=22 net=+821.2 PF=6.178 WR=72.7% | null (n_books=200) net mean=-2.9 p5=-310.4 p95=+343.2 PF mean=1.154 p95=2.656 WR=42.1% | real at pct net=1.00 pf=1.00
+  C-RAND depth TEST @0.70: real n=22 net=+815.7 PF=6.095 WR=72.7% | null (n_books=200) net mean=-8.4 p5=-315.9 p95=+337.7 PF mean=1.136 p95=2.623 WR=42.0% | real at pct net=1.00 pf=1.00
+
+=== daily-R correlation with the book (primary arm, @0.70) ===
+  H1 primary daily-R corr: c03_fvg_fill +0.131, s14_ob_mit_bias +0.097, s93_fvg_scalp +0.012, s95_session_breakout +0.128
+
+done in 4s
