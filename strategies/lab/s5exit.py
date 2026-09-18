@@ -98,14 +98,24 @@ def main() -> None:
     ap.add_argument("--trades", required=True)
     ap.add_argument("--cost", type=float, default=0.45)
     ap.add_argument("--max-hold", type=float, required=True,
-                    help="the strategy's _MAX_HOLD_MIN (S93 120, S99 480, S94 1200, S100 72)")
+                    help="the strategy's _MAX_HOLD_MIN (S93 120, S99 480, S94 1200, S100 72); "
+                         "for a strategy without a time exit, anything beyond its longest hold")
+    ap.add_argument("--start-offset", type=int, default=60,
+                    help="seconds after the entry bar's open to start the walk (60 = the bar has closed)")
+    ap.add_argument("--split", default=None, help="TRAIN < split <= TEST summary (e.g. 2025-12-01)")
+    ap.add_argument("--out", default=None, help="write per-trade results (parquet)")
     a = ap.parse_args()
 
     s5 = load_s5()
     lo, hi = s5.time.min(), s5.time.max()
     t5 = s5["time"].dt.tz_convert(None).to_numpy("datetime64[ns]")
 
-    d = pd.read_csv(a.trades, parse_dates=["entry_time", "exit_time"])
+    if a.trades.endswith(".parquet"):
+        d = pd.read_parquet(a.trades)
+        d["entry_time"] = pd.to_datetime(d["entry_time"], utc=True)
+        d["exit_time"] = pd.to_datetime(d["exit_time"], utc=True)
+    else:
+        d = pd.read_csv(a.trades, parse_dates=["entry_time", "exit_time"])
     horizon = pd.Timedelta(minutes=a.max_hold)
     d = d[(d.entry_time >= lo) & (d.entry_time + horizon <= hi)].reset_index(drop=True)
     print(f"trades inside S5 coverage ({lo.date()} .. {hi.date()}): {len(d)}")
@@ -117,7 +127,7 @@ def main() -> None:
         row = {"entry_time": t.entry_time, "side": t.side, "risk": t.risk,
                "mid_m1_outcome": t.outcome, "mid_m1_pts": t.pts}
         for mode in ("mid_s5", "quote_s5"):
-            r = resolve(t, s5, t5, mode, a.cost, a.max_hold)
+            r = resolve(t, s5, t5, mode, a.cost, a.max_hold, start_offset_s=a.start_offset)
             if r is None:
                 row[f"{mode}_pts"] = np.nan
                 row[f"{mode}_outcome"] = None
@@ -147,6 +157,26 @@ def main() -> None:
                      blk("mid_s5_pts", "mid_s5_outcome", "mid_S5"),
                      blk("quote_s5_pts", "quote_s5_outcome", "quote_S5")], axis=1)
     print(tbl.to_string())
+
+    def _pf(v):
+        gw, gl = v[v > 0].sum(), -v[v <= 0].sum()
+        return float(gw / gl) if gl > 0 else float("inf")
+
+    def summ(x, label):
+        print(f"\n{label}: n={len(x)}")
+        for col, name in (("mid_m1_pts", "mid_M1"), ("mid_s5_pts", "mid_S5"), ("quote_s5_pts", "quote_S5")):
+            v = x[col].dropna()
+            print(f"  {name:9s} PF {_pf(v):6.3f}  pts {v.sum():9.1f}  WR {100*(v>0).mean():5.1f}%"
+                  + (f"  TIME {int((x[col.replace('_pts','_outcome')]=='TIME').sum())}" if 'm1' not in col else ""))
+
+    summ(r, "ALL")
+    if a.split:
+        cut = pd.Timestamp(a.split, tz="UTC")
+        summ(r[r.entry_time < cut], f"TRAIN (< {a.split})")
+        summ(r[r.entry_time >= cut], f"TEST (>= {a.split})")
+    if a.out:
+        r.to_parquet(a.out, index=False)
+        print(f"\nwrote {a.out}")
 
     print("\n=== totals ===")
     for c, lab in (("mid_m1_pts", "mid_M1  "), ("mid_s5_pts", "mid_S5  "),
