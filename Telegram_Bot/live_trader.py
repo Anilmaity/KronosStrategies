@@ -616,6 +616,26 @@ async def _ensure_slice_row(loop, dash, pos: dict, o: dict) -> str | None:
     return pid
 
 
+async def _conclude_slice_row(loop, dash, pos: dict, o: dict, reason: str) -> None:
+    """Flatten one closed slice's dashboard row with its own realized PnL, once.
+
+    Creates the row first if the broker filled and closed the leg between polls
+    (so the trade still shows). `apis_concluded` on the slice makes the call
+    idempotent across the per-slice and end-of-signal paths; the DB side is
+    guarded by `quantity > 0` as well.
+    """
+    if dash is None or o.get("apis_concluded"):
+        return
+    pid = await _ensure_slice_row(loop, dash, pos, o)
+    if not pid:
+        return
+    await loop.run_in_executor(
+        None, lambda d=dash, p=pid, rl=o.get("realized_pnl"),
+        cp=o.get("last_price"), v=float(o["volume"]):
+        d.conclude_position(p, rl, cp, pos["side"], v, reason))
+    o["apis_concluded"] = True
+
+
 def _infer_close_reason(last_price, last_profit, tp, sl) -> str:
     """Best-effort tp/sl call for a filled slice that left the broker.
 
@@ -729,6 +749,12 @@ async def reconcile_broker() -> None:
                                                    sid_i, idx, o["ticket_id"], reason, pnl)
                         log.info("[%s:%s] TP%d CLOSED (~%s, pnl=%s via %s) (broker)",
                                  sid_i, label, idx, reason, pnl, o.get("pnl_source"))
+                        # Flatten THIS slice's dashboard row now. Waiting for the
+                        # whole signal to conclude (below) left TP1-3 showing as
+                        # open with a frozen mark for as long as the runner leg
+                        # lived (2026-09-18: hours behind a breakeven stop).
+                        await _conclude_slice_row(loop, APIS_BY_LABEL.get(label), pos, o,
+                                                  f"broker_{reason}")
                     else:                              # pending -> gone, never filled
                         o["broker_state"] = "cancelled"
                         await loop.run_in_executor(None, db.record_slice_close,
@@ -800,13 +826,7 @@ async def reconcile_broker() -> None:
                 for o in pos["orders"]:
                     if o.get("account", "primary") != label or o.get("broker_state") != "closed":
                         continue
-                    pid = await _ensure_slice_row(loop, dash, pos, o)
-                    if not pid:
-                        continue
-                    await loop.run_in_executor(
-                        None, lambda d=dash, p=pid, rl=o.get("realized_pnl"),
-                        cp=o.get("last_price"), v=float(o["volume"]):
-                        d.conclude_position(p, rl, cp, pos["side"], v, reason))
+                    await _conclude_slice_row(loop, dash, pos, o, reason)
             await r.set(key, json.dumps(pos))
             log.info("[%s] CONCLUDED from broker: %s pnl=%s (all-acct %s)",
                      sid_i, reason, primary_total, total)
