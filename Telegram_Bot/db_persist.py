@@ -296,7 +296,8 @@ def load_open_signals(channel: str | None = None) -> list[dict]:
                 orders_by_msg.setdefault(mid, []).append({
                     "tp_index": idx, "ticket_id": tid, "kind": kind,
                     "volume": float(vol), "entry": float(entry),
-                    "sl": float(sl), "tp": float(tp),
+                    "sl": float(sl),
+                    "tp": float(tp) if tp is not None else None,   # "TP: open" runner leg
                     "broker_state": bstate or ("filled" if kind == "market" else "pending"),
                     "fill_price": float(fprice) if fprice is not None else None,
                     "account": account or "primary",

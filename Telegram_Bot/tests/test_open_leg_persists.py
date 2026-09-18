@@ -30,3 +30,38 @@ def test_close_reason_handles_runner_leg_without_tp():
     assert lt._infer_close_reason(4394.95, None, None, 4395.0) == "sl"
     assert lt._infer_close_reason(4380.0, None, None, 4395.0) == "tp"
     assert lt._infer_close_reason(None, None, None, 4395.0) == "tp"
+
+
+def test_hydration_accepts_a_runner_leg_with_null_tp(monkeypatch):
+    import contextlib
+    import db_persist as dbp
+
+    class _Cur:
+        def __init__(self):
+            self.calls = 0
+
+        def execute(self, sql, params=None):
+            self.calls += 1
+
+        def fetchall(self):
+            if self.calls == 1:   # signals
+                return [(6975, "XAUUSD", "sell", 4387.0, 4391.0, 4387.0, 4395.0,
+                         [4385.0, 4383.0, 4381.0, 4379.0], 8.0, 0.05, "submitted", "", False, None, None)]
+            return [(6975, "119216061", 5, "market", 0.01, 4387.48, 4387.0, None, "filled", 4387.48, "primary")]
+
+    cur = _Cur()
+
+    @contextlib.contextmanager
+    def _conn():
+        class _C:
+            def cursor(self_inner):
+                @contextlib.contextmanager
+                def _c():
+                    yield cur
+                return _c()
+        yield _C()
+    monkeypatch.setattr(dbp, "_connect", _conn)
+
+    pos = dbp.load_open_signals(channel="-1002776523643")
+    assert len(pos) == 1 and pos[0]["orders"][0]["tp"] is None, \
+        "a leg stored with tp NULL must hydrate, not abort the whole load"
