@@ -159,6 +159,35 @@ ROSTER = [
         "OOS months beat the 3 IS months. Category: trend "
         "(backtest_strategies/s94_sweep_reversal.py).",
     ),
+    # 2026-09-18 -- the two survivors of the pre-registered 24-month ICT screen
+    # (lab/REPORT_xau2y_2026-09-18.md): both pass TEST PF > 1 at 0.45 and 0.80
+    # cost, 100% positive TEST months, regime-independent, and hold up under
+    # 5-second bid/ask exit resolution. Deployed to the DEMO book by operator
+    # decision; the backtest enters at bar close with no slippage beyond cost,
+    # so live-vs-sim parity is the open question these rows exist to answer.
+    (
+        "Concept C03_FVG_FILL",
+        "C03_FVG_FILL",
+        "scalping",
+        "always_on",
+        {},
+        "5m FVG fill inside an impulse leg that broke prior structure, entry on "
+        "the reaction close back outside the gap, H1 EMA-slope bias, killzones "
+        "07-20 UTC, TP at the 20-bar extreme. 24-month screen 2024-09..2026-09: "
+        "TEST PF 1.57 @0.45 / 1.46 @0.80, ~4 trades/day, quote-exit haircut -8%. "
+        "Category: scalping (concept_strategies/c03_fvg_fill.py).",
+    ),
+    (
+        "Research OB_MIT_BIAS",
+        "OB_MIT_BIAS",
+        "trend",
+        "always_on",
+        {},
+        "5m order-block mitigation (S03) gated by 15m EMA21 bias, TP 2R, "
+        "07-16 UTC. The bias filter is the edge: S03 alone fails the same "
+        "screen. 24-month screen: TEST PF 1.67 @0.45 / 1.40 @0.80, ~8 trades/day, "
+        "quote-exit haircut -9%. Category: trend (backtest_strategies/s14_ob_mit_bias.py).",
+    ),
 ]
 
 # Strategies pulled from the roster: their UserStrategy is de-deployed and the
@@ -332,7 +361,7 @@ def _ensure_config(sess) -> ManagerConfig:
     return cfg
 
 
-def seed(sess) -> int:
+def seed(sess, only: "set[str] | None" = None) -> int:
     """Idempotent seeding pass on an open session. Caller owns commit/rollback.
     Returns 0 on success, 1 on a fatal precondition failure."""
     cp = sess.query(CurrencyPair).filter_by(symbol=SYMBOL).first()
@@ -353,7 +382,10 @@ def seed(sess) -> int:
     # never gates it again. Lookup by name (this file's canonical key), then
     # UserStrategy by strategy_id and ManagedStrategy by user_strategy_id --
     # exactly the query style of _ensure_user_strategy / _ensure_managed.
-    for name, variation in RETIRED_STRATEGIES:
+    if only is not None:
+        print(f"[ONLY] scope limited to {sorted(only)}: retire pass and "
+              f"'{CHALLENGE_STRATEGY_NAME}' pass skipped")
+    for name, variation in (RETIRED_STRATEGIES if only is None else []):
         strat = sess.query(Strategy).filter_by(name=name).first()
         if strat is None:
             print(f"[RETIRE] {variation}: Strategy '{name}' not found (ok)")
@@ -376,7 +408,14 @@ def seed(sess) -> int:
 
     # ── The two new children ──────────────────────────────────────────────────
     child_live_eligible = _live_eligible_override()
+    if only is not None:
+        unknown = only - {r[0] for r in ROSTER}
+        if unknown:
+            print(f"FATAL: --only names not in ROSTER: {sorted(unknown)}")
+            return 2
     for name, variation, slot, policy_key, policy_params, description in ROSTER:
+        if only is not None and name not in only:
+            continue
         strat = _ensure_strategy(sess, cp, name, variation, description)
         us = _ensure_user_strategy(sess, strat, user_broker)
         _ensure_managed(sess, us, slot, policy_key, policy_params,
@@ -387,6 +426,9 @@ def seed(sess) -> int:
     # existing one on any broker second (pre-2026-07-06 behaviour); create the
     # Strategy/UserStrategy pair on the resolved broker when nothing exists, so
     # a fresh-account rollout gets the full 3-strategy roster in one pass.
+    if only is not None:
+        _ensure_config(sess)
+        return 0
     ch_strat = (
         sess.query(Strategy)
         .filter_by(name=CHALLENGE_STRATEGY_NAME, currencypair_id=cp.id)
@@ -426,10 +468,10 @@ def seed(sess) -> int:
     return 0
 
 
-def main(commit: bool) -> int:
+def main(commit: bool, only: "set[str] | None" = None) -> int:
     sess = Session()
     try:
-        rc = seed(sess)
+        rc = seed(sess, only=only)
         if rc != 0:
             sess.rollback()
             return rc
@@ -449,4 +491,12 @@ def main(commit: bool) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(commit="--commit" in sys.argv))
+    # --only "Name A,Name B": ensure just those ROSTER entries and skip the retire
+    # and Challenge-XAU passes -- for adding strategies to a live book without the
+    # seeder touching anything else (2026-09-18: the full pass would have
+    # re-created the retired Challenge XAU row, armed LIVE).
+    _only = None
+    for _i, _a in enumerate(sys.argv):
+        if _a == "--only" and _i + 1 < len(sys.argv):
+            _only = {x.strip() for x in sys.argv[_i + 1].split(",") if x.strip()}
+    raise SystemExit(main(commit="--commit" in sys.argv, only=_only))
